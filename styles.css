@@ -1154,24 +1154,24 @@ select option {
     background: linear-gradient(135deg, rgba(20, 20, 25, 0.8) 0%, rgba(10, 10, 15, 0.8) 100%);
     border: 1px solid rgba(6, 182, 212, 0.2);
     border-radius: var(--border-radius-lg);
-    padding: 36px;
+    padding: 54px 44px;
     text-align: center;
     backdrop-filter: blur(12px);
     box-shadow: 0 10px 40px rgba(6, 182, 212, 0.03);
 }
 
 .security-card h4 {
-    font-size: 20px;
+    font-size: 24px;
     color: var(--color-cyan);
-    margin-bottom: 12px;
+    margin-bottom: 16px;
 }
 
 .security-card p {
-    font-size: 14px;
+    font-size: 17px;
     color: var(--text-secondary);
-    max-width: 800px;
+    max-width: 840px;
     margin: 0 auto;
-    line-height: 1.6;
+    line-height: 1.7;
 }
 
 /* --- Login View --- */

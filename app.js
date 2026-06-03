@@ -951,7 +951,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);
                 const totalPagesNeeded = leasePagesCount + estoppelPagesCount;
                 
-                if (pageCredits < totalPagesNeeded) {
+                if (connectionMode !== 'byok' && pageCredits < totalPagesNeeded) {
                     hideLoader();
                     alert(`🚫 Insufficient page credits! This audit requires ${totalPagesNeeded} pages, but you only have ${pageCredits} pages left. Please top up your credits.`);
                     creditsModal.classList.add('active');
@@ -984,8 +984,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Deduct credits and log audit to Database
                 try {
                     if (supabase) {
-                        const { error: deductErr } = await supabase.rpc('deduct_credits', { pages_to_deduct: totalPagesNeeded });
-                        if (deductErr) throw deductErr;
+                        if (connectionMode !== 'byok') {
+                            const { error: deductErr } = await supabase.rpc('deduct_credits', { pages_to_deduct: totalPagesNeeded });
+                            if (deductErr) throw deductErr;
+                        }
 
                         const { error: logErr } = await supabase.from('audits').insert({
                             tenant_name: auditData.metadata.tenantName,
@@ -1004,14 +1006,20 @@ document.addEventListener('DOMContentLoaded', () => {
                         await loadAuditHistory();
                     } else {
                         // Fallback mock mode
-                        pageCredits -= totalPagesNeeded;
-                        localStorage.setItem('ta_page_credits', pageCredits);
-                        creditsCountDisplay.textContent = pageCredits;
-                        updateCreditsPillColor(pageCredits);
+                        if (connectionMode !== 'byok') {
+                            pageCredits -= totalPagesNeeded;
+                            localStorage.setItem('ta_page_credits', pageCredits);
+                            creditsCountDisplay.textContent = pageCredits;
+                            updateCreditsPillColor(pageCredits);
+                        }
                     }
                     
                     hideLoader();
-                    alert(`🎉 Audit completed successfully! Deducted ${totalPagesNeeded} page credits.`);
+                    if (connectionMode === 'byok') {
+                        alert("🎉 Audit completed successfully using your custom API Key!");
+                    } else {
+                        alert(`🎉 Audit completed successfully! Deducted ${totalPagesNeeded} page credits.`);
+                    }
                 } catch (err) {
                     console.error("Deduction/Logging error:", err);
                     hideLoader();

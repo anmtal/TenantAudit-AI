@@ -173,10 +173,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function loadUserProfileAndCredits() {
-        if (!supabase) return;
+        if (!supabase) {
+            console.log("loadUserProfileAndCredits: Supabase client not initialized.");
+            return;
+        }
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            if (!user) {
+                console.log("loadUserProfileAndCredits: No user session found.");
+                return;
+            }
+            console.log("Fetching credits for user ID:", user.id, "email:", user.email);
             
             const { data, error } = await supabase
                 .from('profiles')
@@ -190,9 +197,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             if (data) {
+                console.log("Fetched profile credits from database:", data.credits);
                 pageCredits = data.credits;
                 creditsCountDisplay.textContent = pageCredits;
                 updateCreditsPillColor(pageCredits);
+            } else {
+                console.log("No profile data returned for user:", user.id);
             }
         } catch (e) {
             console.error("Failed to load user profile:", e);

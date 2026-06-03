@@ -409,14 +409,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 {
                     term: "Prepaid Rent",
                     leaseVal: "First month's rent of $12,500.00 paid in advance.",
-                    estoppelVal: "Not Found",
+                    estoppelVal: "Not Mentioned",
                     status: "warning",
                     leaseCite: "Section 4.3: 'Tenant shall prepay the first full month's rent upon execution.'",
-                    estoppelCite: "Paragraph 8: 'Prepaid rent: Not Found.'"
+                    estoppelCite: "Paragraph 8: 'Prepaid rent: Not Mentioned.'"
                 },
                 {
                     term: "Landlord Default Status",
-                    leaseVal: "Not Found",
+                    leaseVal: "Not Mentioned",
                     estoppelVal: "None. Landlord is in full compliance.",
                     status: "warning",
                     leaseCite: "Lease text does not reference active landlord defaults.",
@@ -527,8 +527,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let matchCount = 0;
 
         terms.forEach(t => {
-            const lease = leaseJson[t.key] || { value: "Not Found", quote: "No citation found." };
-            const estoppel = estoppelJson[t.key] || { value: "Not Found", quote: "No citation found." };
+            const lease = leaseJson[t.key] || { value: "Not Mentioned", quote: "No citation found." };
+            const estoppel = estoppelJson[t.key] || { value: "Not Mentioned", quote: "No citation found." };
             
             let status = "match";
             

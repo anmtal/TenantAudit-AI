@@ -55,17 +55,17 @@ You must output a JSON object containing the exact fields and the verbatim quote
 
 Return JSON in this EXACT structure:
 {
-  "tenantName": { "value": "Extracted string or 'Not Found'", "quote": "Verbatim quote from text showing this" },
-  "suiteNumber": { "value": "Extracted string or 'Not Found'", "quote": "Verbatim quote from text showing this" },
-  "premisesSf": { "value": "Extracted string (e.g. 5,000 SF) or 'Not Found'", "quote": "Verbatim quote showing this" },
-  "monthlyRent": { "value": "Extracted string (e.g. $10,000) or 'Not Found'", "quote": "Verbatim quote showing this" },
-  "expiryDate": { "value": "Extracted date or 'Not Found'", "quote": "Verbatim quote showing this" },
-  "securityDeposit": { "value": "Extracted string or 'Not Found'", "quote": "Verbatim quote showing this" },
-  "renewalOptions": { "value": "Extracted renewal options terms or 'Not Found'", "quote": "Verbatim quote showing this" },
-  "camShare": { "value": "Extracted CAM share and cost caps or 'Not Found'", "quote": "Verbatim quote showing this" },
-  "guarantorName": { "value": "Extracted corporate guarantor or 'Not Found'", "quote": "Verbatim quote showing this" },
-  "prepaidRent": { "value": "Extracted prepaid rent amount or 'Not Found'", "quote": "Verbatim quote showing this" },
-  "landlordDefault": { "value": "Extracted landlord defaults/breaches or 'Not Found'", "quote": "Verbatim quote showing this" }
+  "tenantName": { "value": "Extracted string or 'Not Mentioned'", "quote": "Verbatim quote from text showing this" },
+  "suiteNumber": { "value": "Extracted string or 'Not Mentioned'", "quote": "Verbatim quote from text showing this" },
+  "premisesSf": { "value": "Extracted string (e.g. 5,000 SF) or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
+  "monthlyRent": { "value": "Extracted string (e.g. $10,000) or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
+  "expiryDate": { "value": "Extracted date or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
+  "securityDeposit": { "value": "Extracted string or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
+  "renewalOptions": { "value": "Extracted renewal options terms or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
+  "camShare": { "value": "Extracted CAM share and cost caps or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
+  "guarantorName": { "value": "Extracted corporate guarantor or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
+  "prepaidRent": { "value": "Extracted prepaid rent amount or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
+  "landlordDefault": { "value": "Extracted landlord defaults/breaches or 'Not Mentioned'", "quote": "Verbatim quote showing this" }
 }`;
 
         const userPrompt = `Here is the raw text extracted from the commercial ${docType} document:

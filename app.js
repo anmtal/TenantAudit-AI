@@ -107,9 +107,10 @@ document.addEventListener('DOMContentLoaded', () => {
             { value: 'gpt-4o', label: 'GPT-4o (Deep Legal Audit)' }
         ],
         anthropic: [
-            { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
-            { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (Fast & Cheap)' },
-            { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' }
+            { value: 'claude-sonnet-4-6', label: 'Claude 4.6 Sonnet (Latest)' },
+            { value: 'claude-sonnet-4-5-20250929', label: 'Claude 4.5 Sonnet' },
+            { value: 'claude-haiku-4-5-20251001', label: 'Claude 4.5 Haiku (Fast & Cheap)' },
+            { value: 'claude-opus-4-6', label: 'Claude 4.6 Opus' }
         ],
         gemini: [
             { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },

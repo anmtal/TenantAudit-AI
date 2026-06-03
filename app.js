@@ -107,7 +107,9 @@ document.addEventListener('DOMContentLoaded', () => {
             { value: 'gpt-4o', label: 'GPT-4o (Deep Legal Audit)' }
         ],
         anthropic: [
-            { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' }
+            { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+            { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (Fast & Cheap)' },
+            { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' }
         ],
         gemini: [
             { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },

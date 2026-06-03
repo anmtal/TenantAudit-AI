@@ -1,12 +1,16 @@
 {
   "name": "tenantaudit-ai",
   "version": "1.0.0",
-  "description": "Zero-trust client-side AI commercial lease and estoppel audit platform.",
-  "main": "index.html",
+  "description": "Dual-mode client-side and hosted AI commercial lease and estoppel audit platform.",
+  "main": "server.js",
   "scripts": {
-    "start": "npx local-web-server"
+    "start": "node server.js"
   },
-  "dependencies": {},
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
+  },
   "author": "TenantAudit AI Inc.",
   "license": "MIT"
 }

@@ -222,31 +222,44 @@
         <div class="modal-card">
             <button class="modal-close-btn" id="close-settings-btn">&times;</button>
             <div class="modal-title-wrapper">
-                <h3>Configure AI API Connection</h3>
-                <p>Provide your own developer credentials. Settings are saved securely in your browser's local storage and are never uploaded to any remote server.</p>
+                <h3>Configure Connection Settings</h3>
+                <p>Choose whether to use our secure hosted backend server or supply your own developer key directly (BYOK Mode).</p>
             </div>
             
             <form id="settings-form" onsubmit="return false;">
-                <!-- AI Provider Selector -->
+                <!-- Connection Mode Selector -->
                 <div class="form-group">
-                    <label for="settings-provider">AI Provider</label>
+                    <label for="settings-mode">Connection Mode</label>
                     <div class="select-wrapper">
-                        <select id="settings-provider">
-                            <option value="openai" selected>OpenAI (GPT-4o / GPT-4o-mini)</option>
-                            <option value="anthropic">Anthropic (Claude 3.5 Sonnet)</option>
+                        <select id="settings-mode">
+                            <option value="hosted" selected>Hosted SaaS Mode (No Setup Required)</option>
+                            <option value="byok">Bring Your Own Key (BYOK Mode)</option>
                         </select>
                     </div>
                 </div>
 
-                <!-- API Key Input -->
-                <div class="form-group">
-                    <label for="settings-api-key">API Key</label>
-                    <input type="password" id="settings-api-key" placeholder="Paste your API key (sk-...)" class="text-input" required>
+                <div id="byok-settings-group" style="display: none;">
+                    <!-- AI Provider Selector -->
+                    <div class="form-group">
+                        <label for="settings-provider">AI Provider</label>
+                        <div class="select-wrapper">
+                            <select id="settings-provider">
+                                <option value="openai" selected>OpenAI (GPT-4o-mini / GPT-4o)</option>
+                                <option value="anthropic">Anthropic (Claude 3.5 Sonnet)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- API Key Input -->
+                    <div class="form-group">
+                        <label for="settings-api-key">API Key</label>
+                        <input type="password" id="settings-api-key" placeholder="Paste your API key (sk-...)" class="text-input">
+                    </div>
                 </div>
 
                 <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 10px;">
-                    <button type="button" class="btn btn-secondary" id="clear-settings-btn">Clear Key</button>
-                    <button type="submit" class="btn btn-primary" id="save-settings-btn">Save Configurations</button>
+                    <button type="button" class="btn btn-secondary" id="clear-settings-btn" style="display: none;">Clear Key</button>
+                    <button type="submit" class="btn btn-primary" id="save-settings-btn">Save Settings</button>
                 </div>
             </form>
         </div>

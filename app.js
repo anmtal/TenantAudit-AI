@@ -58,28 +58,58 @@ document.addEventListener('DOMContentLoaded', () => {
     const closeSettingsBtn = document.getElementById('close-settings-btn');
     const settingsModal = document.getElementById('settings-modal');
     const settingsForm = document.getElementById('settings-form');
+    const settingsMode = document.getElementById('settings-mode');
+    const byokSettingsGroup = document.getElementById('byok-settings-group');
     const settingsProvider = document.getElementById('settings-provider');
     const settingsApiKey = document.getElementById('settings-api-key');
     const clearSettingsBtn = document.getElementById('clear-settings-btn');
 
     // --- Load Saved Settings ---
     function loadSettings() {
+        const savedMode = localStorage.getItem('ta_connection_mode') || 'hosted';
         const savedProvider = localStorage.getItem('ta_api_provider') || 'openai';
         const savedKey = localStorage.getItem('ta_api_key') || '';
+        
+        settingsMode.value = savedMode;
         settingsProvider.value = savedProvider;
         settingsApiKey.value = savedKey;
         
-        if (savedKey) {
-            openSettingsBtn.textContent = '⚙️ Key Configured';
-            openSettingsBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
-            openSettingsBtn.style.color = '#34d399';
+        updateSettingsUI(savedMode, savedKey);
+    }
+
+    function updateSettingsUI(mode, apiKey) {
+        if (mode === 'hosted') {
+            byokSettingsGroup.style.display = 'none';
+            clearSettingsBtn.style.display = 'none';
+            
+            openSettingsBtn.textContent = '⚙️ Connection: Hosted SaaS';
+            openSettingsBtn.style.borderColor = 'rgba(139, 92, 246, 0.4)'; // Purple violet glow
+            openSettingsBtn.style.color = '#a78bfa';
         } else {
-            openSettingsBtn.textContent = '⚙️ Configure API Key';
-            openSettingsBtn.style.borderColor = '';
-            openSettingsBtn.style.color = '';
+            byokSettingsGroup.style.display = 'block';
+            clearSettingsBtn.style.display = apiKey ? 'inline-block' : 'none';
+            
+            if (apiKey) {
+                openSettingsBtn.textContent = '⚙️ Connection: BYOK Active';
+                openSettingsBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)'; // Emerald green
+                openSettingsBtn.style.color = '#34d399';
+            } else {
+                openSettingsBtn.textContent = '⚙️ Configure API Key';
+                openSettingsBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)'; // Red/Orange warning
+                openSettingsBtn.style.color = '#f87171';
+            }
         }
     }
+
     loadSettings();
+
+    // Toggle BYOK options when changing connection mode dropdown
+    if (settingsMode) {
+        settingsMode.addEventListener('change', (e) => {
+            const tempKey = settingsApiKey.value.trim();
+            updateSettingsUI(e.target.value, tempKey);
+        });
+    }
 
     // --- Modal Listeners ---
     if (openSettingsBtn) openSettingsBtn.addEventListener('click', () => settingsModal.classList.add('active'));
@@ -93,17 +123,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (settingsForm) {
         settingsForm.addEventListener('submit', (e) => {
             e.preventDefault();
+            localStorage.setItem('ta_connection_mode', settingsMode.value);
             localStorage.setItem('ta_api_provider', settingsProvider.value);
             localStorage.setItem('ta_api_key', settingsApiKey.value.trim());
             settingsModal.classList.remove('active');
             loadSettings();
-            alert('🎉 API configuration saved successfully in browser storage.');
+            alert('🎉 Connection configurations saved successfully.');
         });
     }
 
     if (clearSettingsBtn) {
         clearSettingsBtn.addEventListener('click', () => {
-            localStorage.removeItem('ta_api_provider');
             localStorage.removeItem('ta_api_key');
             settingsApiKey.value = '';
             settingsModal.classList.remove('active');
@@ -317,11 +347,13 @@ document.addEventListener('DOMContentLoaded', () => {
         renderAuditResults();
     }
 
-    // --- Action: Run Live AI Lease Audit (BYOK) ---
+    // --- Action: Run Live AI Lease Audit ---
     if (startAuditBtn) {
         startAuditBtn.addEventListener('click', async () => {
+            const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
             const apiKey = localStorage.getItem('ta_api_key');
-            if (!apiKey) {
+            
+            if (connectionMode === 'byok' && !apiKey) {
                 alert("⚙️ Please configure your OpenAI API Key first. Click 'Configure API Key' in the header.");
                 settingsModal.classList.add('active');
                 return;
@@ -343,10 +375,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const estoppelSliced = sliceOptimizedPages(estoppelPages);
 
                 showLoader("Analyzing Lease terms with AI...");
-                const leaseExtraction = await callOpenAIToExtract(leaseSliced, 'lease', apiKey);
+                const leaseExtraction = await callOpenAIToExtract(leaseSliced, 'lease', apiKey, connectionMode);
                 
                 showLoader("Analyzing Estoppel statements with AI...");
-                const estoppelExtraction = await callOpenAIToExtract(estoppelSliced, 'estoppel', apiKey);
+                const estoppelExtraction = await callOpenAIToExtract(estoppelSliced, 'estoppel', apiKey, connectionMode);
 
                 showLoader("Auditing discrepancies...");
                 performAILinkedAudit(leaseExtraction, estoppelExtraction);
@@ -355,13 +387,36 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (err) {
                 console.error(err);
                 hideLoader();
-                alert(`🚫 AI Extraction Error: ${err.message}\n\nPlease check your API key settings or network connection.`);
+                alert(`🚫 AI Extraction Error: ${err.message}\n\nPlease check your configuration, network, or server status.`);
             }
         });
     }
 
-    // --- API Calls wrapper to OpenAI (Direct client-side fetch) ---
-    async function callOpenAIToExtract(text, docType, apiKey) {
+    // --- API Calls Router (Hosted Backend vs Direct Client-Side BYOK) ---
+    async function callOpenAIToExtract(text, docType, apiKey, connectionMode) {
+        // Mode A: Hosted SaaS Backend Route (Keeps Key Hidden)
+        if (connectionMode === 'hosted') {
+            const response = await fetch("/api/audit", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    text: text,
+                    docType: docType,
+                    model: "gpt-4o-mini"
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `Server returned error status ${response.status}`);
+            }
+
+            return await response.json();
+        }
+
+        // Mode B: Client-side BYOK Route (Zero Server Costs)
         const systemPrompt = `You are an expert commercial real estate due-diligence legal auditor.
 Your job is to read the raw text of a commercial ${docType} contract and extract key terms with 100% precision.
 You must output a JSON object containing the exact fields and the verbatim quote proving the value.

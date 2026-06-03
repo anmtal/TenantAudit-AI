@@ -1375,3 +1375,326 @@ select option {
     }
 }
 
+/* ==========================================================================
+   Supabase Database Integration Styles (History Logs & Auth Toggles)
+   ========================================================================== */
+
+.history-list-wrapper {
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.history-empty-state {
+    color: var(--text-muted);
+    text-align: center;
+    font-size: 14px;
+    padding: 28px 0;
+    border: 1px dashed rgba(255, 255, 255, 0.05);
+    border-radius: var(--border-radius-lg);
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.history-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.history-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    transition: var(--transition-smooth);
+    position: relative;
+}
+
+.history-card:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(6, 182, 212, 0.25);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.history-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.history-tenant {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    max-width: 70%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-date {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.history-score-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 11px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+}
+
+.score-badge-high {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.score-badge-med {
+    background: rgba(168, 85, 247, 0.15);
+    color: #a855f7;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.score-badge-low {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.history-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.history-detail-item {
+    display: flex;
+    justify-content: space-between;
+}
+
+.history-detail-item span {
+    color: var(--text-muted);
+}
+
+.history-actions {
+    margin-top: 4px;
+    display: flex;
+    gap: 8px;
+}
+
+.btn-history-load {
+    background: rgba(6, 182, 212, 0.08);
+    color: var(--color-cyan);
+    border: 1px solid rgba(6, 182, 212, 0.2);
+    font-size: 11px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    width: 100%;
+    transition: var(--transition-smooth);
+    font-weight: 600;
+    text-align: center;
+}
+
+.btn-history-load:hover {
+    background: var(--color-cyan);
+    color: var(--bg-dark);
+}
+
+/* Authentication Toggles and Links */
+.auth-toggle-link {
+    text-align: center;
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.auth-toggle-link a {
+    color: var(--color-purple);
+    text-decoration: none;
+    font-weight: 600;
+    transition: var(--transition-smooth);
+}
+
+.auth-toggle-link a:hover {
+    color: #c084fc;
+    text-decoration: underline;
+}
+
+/* ==========================================================================
+   Landing Page Pricing Grid & Toggles Styles
+   ========================================================================== */
+
+.landing-pricing {
+    margin-top: 70px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+}
+
+.pricing-switcher-wrapper {
+    display: inline-flex;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 5px;
+    border-radius: 30px;
+    margin-bottom: 8px;
+    position: relative;
+    z-index: 2;
+}
+
+.pricing-switch-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 10px 24px;
+    border-radius: 24px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.pricing-switch-btn.active {
+    background: var(--color-purple);
+    color: #ffffff;
+    box-shadow: 0 0 14px rgba(168, 85, 247, 0.45);
+}
+
+.pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+    width: 100%;
+}
+
+.pricing-grid.subs-grid {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.pricing-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    backdrop-filter: blur(16px);
+    border-radius: var(--border-radius-lg);
+    padding: 36px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    transition: var(--transition-smooth);
+    position: relative;
+}
+
+.pricing-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+}
+
+.pricing-card:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+
+.pricing-card.featured-card {
+    border-color: var(--color-purple);
+    box-shadow: 0 0 24px rgba(168, 85, 247, 0.12);
+}
+
+.pricing-card.featured-card::after {
+    content: 'POPULAR';
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    background: var(--color-purple);
+    color: #ffffff;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 12px;
+    letter-spacing: 0.06em;
+}
+
+.pricing-tier {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
+.pricing-price-box {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-top: -6px;
+}
+
+.pricing-price {
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.pricing-period {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.pricing-features-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 10px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.pricing-features-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pricing-features-list li::before {
+    content: '✓';
+    color: var(--color-emerald);
+    font-weight: bold;
+}
+
+.pricing-cta-btn {
+    width: 100%;
+    margin-top: auto;
+    font-weight: 700;
+}
+
+@media (max-width: 900px) {
+    .pricing-grid, .pricing-grid.subs-grid {
+        grid-template-columns: 1fr !important;
+        max-width: 100%;
+    }
+}
+
+
+

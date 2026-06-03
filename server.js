@@ -15,6 +15,15 @@ app.use(express.json({ limit: '10mb' })); // Support larger text inputs
 // Serve static frontend files from current directory
 app.use(express.static(__dirname));
 
+// Route to serve public Supabase configuration parameters
+app.get('/api/config', (req, res) => {
+    res.json({
+        supabaseUrl: process.env.SUPABASE_URL || 'https://mcfrihcnqatynfhpijkh.supabase.co',
+        supabaseAnonKey: process.env.SUPABASE_ANON_KEY || ''
+    });
+});
+
+
 // Route to handle dynamic LLM provider extraction proxy
 app.post('/api/audit', async (req, res) => {
     try {

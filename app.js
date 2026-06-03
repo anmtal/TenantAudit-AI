@@ -19,6 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let isLoggedIn = false;
     let pageCredits = 150;
     let userEmail = '';
+    let supabase = null;
+    let isSignUpMode = false;
 
     // --- DOM Selectors ---
     const homeView = document.getElementById('home-view');
@@ -33,6 +35,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginErrorMsg = document.getElementById('login-error-msg');
     const loginToHomeLink = document.getElementById('login-to-home-link');
     const logoutBtn = document.getElementById('logout-btn');
+    
+    // Auth Toggle selectors
+    const authToggleLink = document.getElementById('auth-toggle-link');
+    const loginTitle = document.getElementById('login-title');
+    const loginSubtitle = document.getElementById('login-subtitle');
+    const loginSubmitBtn = document.getElementById('login-submit-btn');
+    const loginHintBox = document.getElementById('login-hint-box');
+    const authToggleContainer = document.getElementById('auth-toggle-container');
 
     const userEmailDisplay = document.getElementById('user-email-display');
     const creditsCountDisplay = document.getElementById('credits-count-display');
@@ -133,7 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function initializeAuth() {
+    function initializeAuthFallback() {
         const storedLogin = localStorage.getItem('ta_logged_in') === 'true';
         const storedEmail = localStorage.getItem('ta_user_email') || '';
         let storedCredits = localStorage.getItem('ta_page_credits');
@@ -160,6 +170,170 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function loadUserProfileAndCredits() {
+        if (!supabase) return;
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('credits')
+                .eq('id', user.id)
+                .single();
+                
+            if (error) {
+                console.error("Error loading profile credits:", error);
+                return;
+            }
+            
+            if (data) {
+                pageCredits = data.credits;
+                creditsCountDisplay.textContent = pageCredits;
+                updateCreditsPillColor(pageCredits);
+            }
+        } catch (e) {
+            console.error("Failed to load user profile:", e);
+        }
+    }
+
+    async function loadAuditHistory() {
+        if (!supabase) {
+            document.getElementById('history-panel').style.display = 'none';
+            return;
+        }
+        
+        const historyLoadingMsg = document.getElementById('history-loading-msg');
+        const historyEmptyMsg = document.getElementById('history-empty-msg');
+        const historyListContainer = document.getElementById('history-list-container');
+        
+        historyLoadingMsg.style.display = 'block';
+        historyEmptyMsg.style.display = 'none';
+        historyListContainer.style.display = 'none';
+        historyListContainer.innerHTML = '';
+        
+        try {
+            const { data, error } = await supabase
+                .from('audits')
+                .select('*')
+                .order('created_at', { ascending: false });
+                
+            historyLoadingMsg.style.display = 'none';
+            
+            if (error) {
+                console.error("Error loading audits:", error);
+                historyEmptyMsg.textContent = "Error loading audit history. Check database console.";
+                historyEmptyMsg.style.display = 'block';
+                return;
+            }
+            
+            if (!data || data.length === 0) {
+                historyEmptyMsg.style.display = 'block';
+                return;
+            }
+            
+            historyListContainer.style.display = 'grid';
+            data.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'history-card';
+                
+                const score = item.match_score;
+                let badgeClass = 'score-badge-high';
+                if (score < 50) badgeClass = 'score-badge-low';
+                else if (score < 90) badgeClass = 'score-badge-med';
+                
+                const formattedDate = new Date(item.created_at).toLocaleString();
+                
+                card.innerHTML = `
+                    <div class="history-card-header">
+                        <div class="history-tenant" title="${escapeHtml(item.tenant_name)}">${escapeHtml(item.tenant_name)}</div>
+                        <div class="history-score-badge ${badgeClass}">${score}%</div>
+                    </div>
+                    <div class="history-details">
+                        <div class="history-detail-item"><span>Lease File:</span> ${escapeHtml(item.lease_file)}</div>
+                        <div class="history-detail-item"><span>Estoppel:</span> ${escapeHtml(item.estoppel_file)}</div>
+                        <div class="history-detail-item"><span>Red Flags:</span> ${item.red_flags}</div>
+                        <div class="history-detail-item"><span>Rent:</span> ${escapeHtml(item.monthly_rent || 'N/A')}</div>
+                        <div class="history-detail-item"><span>Premises:</span> ${escapeHtml(item.premises_sf || 'N/A')}</div>
+                    </div>
+                    <div class="history-actions">
+                        <button class="btn-history-load" data-id="${item.id}">View Audit Results</button>
+                    </div>
+                `;
+                
+                card.querySelector('.btn-history-load').addEventListener('click', () => {
+                    loadSavedAuditIntoUI(item);
+                });
+                
+                historyListContainer.appendChild(card);
+            });
+            
+        } catch (e) {
+            console.error("History fetch error:", e);
+            historyLoadingMsg.style.display = 'none';
+            historyEmptyMsg.style.display = 'block';
+        }
+    }
+
+    function loadSavedAuditIntoUI(item) {
+        auditData = {
+            metadata: {
+                tenantName: item.tenant_name,
+                leaseFile: item.lease_file,
+                estoppelFile: item.estoppel_file,
+                auditModel: "Stored Database Audit"
+            },
+            summary: {
+                matchScore: item.match_score,
+                redFlags: item.red_flags,
+                monthlyRent: item.monthly_rent,
+                premisesSf: item.premises_sf,
+                expiryDate: item.expiry_date
+            },
+            records: item.records
+        };
+        
+        renderAuditResults();
+        alert(`📂 Loaded audit for ${item.tenant_name} (${item.match_score}% compliance).`);
+    }
+
+    // Initialize Supabase from Config
+    async function initSupabase() {
+        try {
+            const res = await fetch('/api/config');
+            const config = await res.json();
+            if (config.supabaseUrl && config.supabaseAnonKey && window.supabase) {
+                supabase = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+                console.log("Supabase Client initialized successfully.");
+                
+                // Set up auth state change listener
+                supabase.auth.onAuthStateChange(async (event, session) => {
+                    console.log("Supabase Auth Event:", event);
+                    if (session && session.user) {
+                        isLoggedIn = true;
+                        userEmail = session.user.email;
+                        userEmailDisplay.textContent = userEmail;
+                        showView('dashboard');
+                        
+                        // Load credits and past history from Supabase
+                        await loadUserProfileAndCredits();
+                        await loadAuditHistory();
+                    } else {
+                        isLoggedIn = false;
+                        userEmail = '';
+                        showView('home');
+                    }
+                });
+            } else {
+                console.warn("Supabase configs not loaded. Running in local fallback mode.");
+                initializeAuthFallback();
+            }
+        } catch (e) {
+            console.error("Failed to initialize Supabase:", e);
+            initializeAuthFallback();
+        }
+    }
+
     // Navigation triggers
     if (homeLoginBtn) homeLoginBtn.addEventListener('click', () => showView('login'));
     if (heroGetStartedBtn) heroGetStartedBtn.addEventListener('click', () => showView('login'));
@@ -168,33 +342,117 @@ document.addEventListener('DOMContentLoaded', () => {
         showView('home');
     });
 
+    // Pricing Switcher Tab Toggle Logic
+    const switchPaygBtn = document.getElementById('switch-payg');
+    const switchSubsBtn = document.getElementById('switch-subs');
+    const paygGrid = document.getElementById('payg-grid');
+    const subsGrid = document.getElementById('subs-grid');
+
+    if (switchPaygBtn && switchSubsBtn && paygGrid && subsGrid) {
+        switchPaygBtn.addEventListener('click', () => {
+            switchPaygBtn.classList.add('active');
+            switchSubsBtn.classList.remove('active');
+            paygGrid.style.display = 'grid';
+            subsGrid.style.display = 'none';
+        });
+
+        switchSubsBtn.addEventListener('click', () => {
+            switchSubsBtn.classList.add('active');
+            switchPaygBtn.classList.remove('active');
+            paygGrid.style.display = 'none';
+            subsGrid.style.display = 'grid';
+        });
+    }
+
+
+    // Helper toggle binding function for login/signup link switcher
+    function setupAuthToggleListener() {
+        const toggleBtn = document.getElementById('auth-toggle-link');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                isSignUpMode = !isSignUpMode;
+                if (isSignUpMode) {
+                    loginTitle.textContent = "Create an Account";
+                    loginSubtitle.textContent = "Sign up for TenantAudit AI to get 150 page credits automatically.";
+                    loginSubmitBtn.textContent = "Register Account";
+                    loginHintBox.style.display = 'none';
+                    authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
+                } else {
+                    loginTitle.textContent = "Sign In to TenantAudit AI";
+                    loginSubtitle.textContent = "Enter your credentials to access your transaction dashboard";
+                    loginSubmitBtn.textContent = "Sign In";
+                    loginHintBox.style.display = 'block';
+                    authToggleContainer.innerHTML = 'Don\'t have an account? <a href="#" id="auth-toggle-link">Sign Up</a>';
+                }
+                setupAuthToggleListener(); // Recursively re-bind click listener on the new link
+            });
+        }
+    }
+    
+    // Call initial binding
+    setupAuthToggleListener();
+
     if (loginForm) {
-        loginForm.addEventListener('submit', (e) => {
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = loginEmail.value.trim();
             const password = loginPassword.value;
 
-            if (email && password) {
-                localStorage.setItem('ta_logged_in', 'true');
-                localStorage.setItem('ta_user_email', email);
-                isLoggedIn = true;
-                userEmail = email;
-                userEmailDisplay.textContent = userEmail;
-                loginErrorMsg.style.display = 'none';
-                showView('dashboard');
-            } else {
+            if (!email || !password) return;
+
+            loginErrorMsg.style.display = 'none';
+            loginSubmitBtn.disabled = true;
+            const originalText = loginSubmitBtn.textContent;
+            loginSubmitBtn.textContent = isSignUpMode ? "Registering..." : "Signing In...";
+
+            try {
+                if (supabase) {
+                    if (isSignUpMode) {
+                        const { data, error } = await supabase.auth.signUp({
+                            email: email,
+                            password: password
+                        });
+                        if (error) throw error;
+                        alert("🎉 Account created successfully! Logged in with 150 page credits.");
+                    } else {
+                        const { data, error } = await supabase.auth.signInWithPassword({
+                            email: email,
+                            password: password
+                        });
+                        if (error) throw error;
+                    }
+                } else {
+                    localStorage.setItem('ta_logged_in', 'true');
+                    localStorage.setItem('ta_user_email', email);
+                    isLoggedIn = true;
+                    userEmail = email;
+                    userEmailDisplay.textContent = userEmail;
+                    loginErrorMsg.style.display = 'none';
+                    showView('dashboard');
+                }
+            } catch (err) {
+                console.error("Auth error:", err);
+                loginErrorMsg.textContent = `🚫 ${err.message || 'Authentication failed. Please check your credentials.'}`;
                 loginErrorMsg.style.display = 'block';
+            } finally {
+                loginSubmitBtn.disabled = false;
+                loginSubmitBtn.textContent = originalText;
             }
         });
     }
 
     if (logoutBtn) {
-        logoutBtn.addEventListener('click', () => {
-            localStorage.setItem('ta_logged_in', 'false');
-            localStorage.removeItem('ta_user_email');
-            isLoggedIn = false;
-            userEmail = '';
-            showView('home');
+        logoutBtn.addEventListener('click', async () => {
+            if (supabase) {
+                await supabase.auth.signOut();
+            } else {
+                localStorage.setItem('ta_logged_in', 'false');
+                localStorage.removeItem('ta_user_email');
+                isLoggedIn = false;
+                userEmail = '';
+                showView('home');
+            }
         });
     }
 
@@ -218,16 +476,49 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (creditsForm) {
-        creditsForm.addEventListener('submit', (e) => {
+        creditsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const amount = parseInt(creditsAmount.value, 10);
-            if (!isNaN(amount) && amount > 0) {
-                pageCredits += amount;
-                localStorage.setItem('ta_page_credits', pageCredits);
-                creditsCountDisplay.textContent = pageCredits;
-                updateCreditsPillColor(pageCredits);
+            if (isNaN(amount) || amount <= 0) return;
+
+            try {
+                if (supabase) {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) throw new Error("No authenticated user found.");
+
+                    // Fetch current balance from profiles
+                    const { data: profile, error: selectErr } = await supabase
+                        .from('profiles')
+                        .select('credits')
+                        .eq('id', user.id)
+                        .single();
+
+                    if (selectErr) throw selectErr;
+
+                    const newCredits = (profile.credits || 0) + amount;
+
+                    const { error: updateErr } = await supabase
+                        .from('profiles')
+                        .update({ credits: newCredits })
+                        .eq('id', user.id);
+
+                    if (updateErr) throw updateErr;
+
+                    pageCredits = newCredits;
+                    creditsCountDisplay.textContent = pageCredits;
+                    updateCreditsPillColor(pageCredits);
+                } else {
+                    pageCredits += amount;
+                    localStorage.setItem('ta_page_credits', pageCredits);
+                    creditsCountDisplay.textContent = pageCredits;
+                    updateCreditsPillColor(pageCredits);
+                }
+                
                 creditsModal.classList.remove('active');
                 alert(`🎉 Successfully added +${amount} page credits to your account!`);
+            } catch (err) {
+                console.error("Top up error:", err);
+                alert(`🚫 Credit update failed: ${err.message}`);
             }
         });
     }
@@ -291,7 +582,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     loadSettings();
-    initializeAuth();
+    initSupabase();
 
     // Toggle BYOK options when changing connection mode dropdown
     if (settingsMode) {
@@ -469,8 +760,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Mock Demo Mode Dataset (Try with Sample Data) ---
     if (demoBtn) {
-        demoBtn.addEventListener('click', () => {
-            if (pageCredits < 5) {
+        demoBtn.addEventListener('click', async () => {
+            const pagesNeeded = 5;
+            if (pageCredits < pagesNeeded) {
                 alert(`🚫 Insufficient page credits! The simulation requires 5 pages, but you only have ${pageCredits} pages left. Please top up your credits.`);
                 creditsModal.classList.add('active');
                 return;
@@ -482,17 +774,47 @@ document.addEventListener('DOMContentLoaded', () => {
                 showLoader("Abstracting Starbucks tenancy terms...");
                 setTimeout(() => {
                     showLoader("Cross-checking lease against estoppel...");
-                    setTimeout(() => {
+                    
+                    async function completeDemo() {
                         hideLoader();
                         loadDemoAuditData();
                         
-                        // Deduct credits for the demo simulation
-                        pageCredits -= 5;
-                        localStorage.setItem('ta_page_credits', pageCredits);
-                        creditsCountDisplay.textContent = pageCredits;
-                        updateCreditsPillColor(pageCredits);
-                        alert("🚀 Simulated audit completed: Deducted 5 page credits.");
-                    }, 800);
+                        try {
+                            if (supabase) {
+                                // Call RPC to deduct credits
+                                const { error: deductErr } = await supabase.rpc('deduct_credits', { pages_to_deduct: pagesNeeded });
+                                if (deductErr) throw deductErr;
+
+                                // Log audit record to audits table
+                                const { error: logErr } = await supabase.from('audits').insert({
+                                    tenant_name: auditData.metadata.tenantName,
+                                    lease_file: auditData.metadata.leaseFile,
+                                    estoppel_file: auditData.metadata.estoppelFile,
+                                    match_score: auditData.summary.matchScore,
+                                    red_flags: auditData.summary.redFlags,
+                                    monthly_rent: auditData.summary.monthlyRent,
+                                    premises_sf: auditData.summary.premisesSf,
+                                    expiry_date: auditData.summary.expiryDate,
+                                    records: auditData.records
+                                });
+                                if (logErr) throw logErr;
+
+                                await loadUserProfileAndCredits();
+                                await loadAuditHistory();
+                            } else {
+                                pageCredits -= pagesNeeded;
+                                localStorage.setItem('ta_page_credits', pageCredits);
+                                creditsCountDisplay.textContent = pageCredits;
+                                updateCreditsPillColor(pageCredits);
+                            }
+                            alert("🚀 Simulated audit completed: Deducted 5 page credits.");
+                        } catch (err) {
+                            console.error("Demo logging/deduction error:", err);
+                            alert(`🚫 Failed to log simulation: ${err.message}`);
+                        }
+                    }
+                    
+                    setTimeout(completeDemo, 800);
                 }, 800);
             }, 600);
         });
@@ -659,14 +981,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 showLoader("Auditing discrepancies...");
                 performAILinkedAudit(leaseExtraction, estoppelExtraction);
                 
-                // Deduct credits on successful audit completion
-                pageCredits -= totalPagesNeeded;
-                localStorage.setItem('ta_page_credits', pageCredits);
-                creditsCountDisplay.textContent = pageCredits;
-                updateCreditsPillColor(pageCredits);
+                // Deduct credits and log audit to Database
+                try {
+                    if (supabase) {
+                        const { error: deductErr } = await supabase.rpc('deduct_credits', { pages_to_deduct: totalPagesNeeded });
+                        if (deductErr) throw deductErr;
 
-                hideLoader();
-                alert(`🎉 Audit completed successfully! Deducted ${totalPagesNeeded} page credits.`);
+                        const { error: logErr } = await supabase.from('audits').insert({
+                            tenant_name: auditData.metadata.tenantName,
+                            lease_file: auditData.metadata.leaseFile,
+                            estoppel_file: auditData.metadata.estoppelFile,
+                            match_score: auditData.summary.matchScore,
+                            red_flags: auditData.summary.redFlags,
+                            monthly_rent: auditData.summary.monthlyRent,
+                            premises_sf: auditData.summary.premisesSf,
+                            expiry_date: auditData.summary.expiryDate,
+                            records: auditData.records
+                        });
+                        if (logErr) throw logErr;
+
+                        await loadUserProfileAndCredits();
+                        await loadAuditHistory();
+                    } else {
+                        // Fallback mock mode
+                        pageCredits -= totalPagesNeeded;
+                        localStorage.setItem('ta_page_credits', pageCredits);
+                        creditsCountDisplay.textContent = pageCredits;
+                        updateCreditsPillColor(pageCredits);
+                    }
+                    
+                    hideLoader();
+                    alert(`🎉 Audit completed successfully! Deducted ${totalPagesNeeded} page credits.`);
+                } catch (err) {
+                    console.error("Deduction/Logging error:", err);
+                    hideLoader();
+                    alert(`🚫 Audit finished, but database update failed: ${err.message}`);
+                }
                 
             } catch (err) {
                 console.error(err);

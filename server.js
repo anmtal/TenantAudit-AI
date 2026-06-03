@@ -62,6 +62,8 @@ app.post('/api/audit', async (req, res) => {
 Your job is to read the raw text of a commercial ${docType} contract and extract key terms with 100% precision.
 You must output a JSON object containing the exact fields and the verbatim quote proving the value.
 
+CRITICAL: You must output ONLY a valid JSON object. Do not include any conversational intro or outro text. If any extracted value or verbatim quote contains double quotes (") or newlines, you MUST escape them as \\" and \\n respectively so that the output remains a syntactically valid JSON string.
+
 Return JSON in this EXACT structure:
 {
   "tenantName": { "value": "Extracted string or 'Not Mentioned'", "quote": "Verbatim quote from text showing this" },
@@ -141,9 +143,39 @@ Please extract the required fields and return the JSON.`;
 
             const data = await response.json();
             const rawContent = data.content[0].text;
-            // Clean markdown wrapper blocks if Claude outputs them
-            const cleanContent = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
-            const extractedData = JSON.parse(cleanContent);
+            
+            // Extract the JSON object substring between the first '{' and last '}'
+            const jsonStart = rawContent.indexOf('{');
+            const jsonEnd = rawContent.lastIndexOf('}');
+            
+            if (jsonStart === -1 || jsonEnd === -1) {
+                return res.status(500).json({ 
+                    error: `LLM response did not contain a valid JSON block. Raw output: ${rawContent.slice(0, 200)}...` 
+                });
+            }
+            
+            const cleanContent = rawContent.slice(jsonStart, jsonEnd + 1).trim();
+            
+            let extractedData;
+            try {
+                extractedData = JSON.parse(cleanContent);
+            } catch (err) {
+                console.error("[JSON Parse Error] Raw text:", cleanContent);
+                // Attempt simple automatic JSON fix-ups:
+                try {
+                    // Try to escape any unescaped double quotes inside quote fields:
+                    // Looks for quotes not preceded by backslash, colon, comma, curly brace or square bracket
+                    const rescuedContent = cleanContent
+                        .replace(/(?<![:{\[,])"(?![:}\],])/g, '\\"');
+                    extractedData = JSON.parse(rescuedContent);
+                    console.log("[JSON Parse Rescued] Successfully parsed after escape correction.");
+                } catch (retryErr) {
+                    return res.status(500).json({ 
+                        error: `Claude output could not be parsed as valid JSON: ${err.message}. Raw output: ${cleanContent.slice(0, 300)}...` 
+                    });
+                }
+            }
+            
             return res.json(extractedData);
         } 
         

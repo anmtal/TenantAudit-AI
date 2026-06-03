@@ -93,8 +93,13 @@ document.addEventListener('DOMContentLoaded', () => {
             opt.textContent = m.label;
             settingsLlmModel.appendChild(opt);
         });
-        if (selectedValue) {
+        
+        // Enforce a valid selected value to prevent a blank dropdown state
+        const hasSelectedValue = models.some(m => m.value === selectedValue);
+        if (selectedValue && hasSelectedValue) {
             settingsLlmModel.value = selectedValue;
+        } else if (models.length > 0) {
+            settingsLlmModel.value = models[0].value;
         }
     }
 

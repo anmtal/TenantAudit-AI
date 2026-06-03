@@ -937,3 +937,26 @@ select:focus {
     border-color: var(--color-purple);
     box-shadow: 0 0 10px rgba(168, 85, 247, 0.25);
 }
+
+/* Style select options for universal browser readability */
+select option {
+    background-color: #141419;
+    color: #f4f4f6;
+    padding: 12px;
+    font-family: var(--font-body);
+    font-size: 14px;
+}
+
+/* Settings Form and BYOK Spacings */
+#settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+#byok-settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 4px;
+}

@@ -1,0 +1,12 @@
+{
+  "name": "tenantaudit-ai",
+  "version": "1.0.0",
+  "description": "Zero-trust client-side AI commercial lease and estoppel audit platform.",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx local-web-server"
+  },
+  "dependencies": {},
+  "author": "TenantAudit AI Inc.",
+  "license": "MIT"
+}

@@ -244,8 +244,20 @@
                         <label for="settings-provider">AI Provider</label>
                         <div class="select-wrapper">
                             <select id="settings-provider">
-                                <option value="openai" selected>OpenAI (GPT-4o-mini / GPT-4o)</option>
-                                <option value="anthropic">Anthropic (Claude 3.5 Sonnet)</option>
+                                <option value="openai" selected>OpenAI</option>
+                                <option value="anthropic">Anthropic (Claude)</option>
+                                <option value="gemini">Google Gemini</option>
+                                <option value="deepseek">DeepSeek</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Model Selector -->
+                    <div class="form-group">
+                        <label for="settings-llm-model">Model Target</label>
+                        <div class="select-wrapper">
+                            <select id="settings-llm-model">
+                                <!-- Populated dynamically by app.js -->
                             </select>
                         </div>
                     </div>
@@ -253,7 +265,7 @@
                     <!-- API Key Input -->
                     <div class="form-group">
                         <label for="settings-api-key">API Key</label>
-                        <input type="password" id="settings-api-key" placeholder="Paste your API key (sk-...)" class="text-input">
+                        <input type="password" id="settings-api-key" placeholder="Paste your API key" class="text-input">
                     </div>
                 </div>
 

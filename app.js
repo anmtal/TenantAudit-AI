@@ -61,19 +61,55 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsMode = document.getElementById('settings-mode');
     const byokSettingsGroup = document.getElementById('byok-settings-group');
     const settingsProvider = document.getElementById('settings-provider');
+    const settingsLlmModel = document.getElementById('settings-llm-model');
     const settingsApiKey = document.getElementById('settings-api-key');
     const clearSettingsBtn = document.getElementById('clear-settings-btn');
+
+    // Supported Models by Provider
+    const providerModels = {
+        openai: [
+            { value: 'gpt-4o-mini', label: 'GPT-4o-Mini (Fast, Cheap)' },
+            { value: 'gpt-4o', label: 'GPT-4o (Deep Legal Audit)' }
+        ],
+        anthropic: [
+            { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' }
+        ],
+        gemini: [
+            { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+            { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' }
+        ],
+        deepseek: [
+            { value: 'deepseek-chat', label: 'DeepSeek Chat (V3 / R1)' }
+        ]
+    };
+
+    function updateModelDropdown(provider, selectedValue) {
+        if (!settingsLlmModel) return;
+        settingsLlmModel.innerHTML = '';
+        const models = providerModels[provider] || [];
+        models.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.value;
+            opt.textContent = m.label;
+            settingsLlmModel.appendChild(opt);
+        });
+        if (selectedValue) {
+            settingsLlmModel.value = selectedValue;
+        }
+    }
 
     // --- Load Saved Settings ---
     function loadSettings() {
         const savedMode = localStorage.getItem('ta_connection_mode') || 'hosted';
         const savedProvider = localStorage.getItem('ta_api_provider') || 'openai';
+        const savedModel = localStorage.getItem('ta_llm_model') || 'gpt-4o-mini';
         const savedKey = localStorage.getItem('ta_api_key') || '';
         
         settingsMode.value = savedMode;
         settingsProvider.value = savedProvider;
         settingsApiKey.value = savedKey;
         
+        updateModelDropdown(savedProvider, savedModel);
         updateSettingsUI(savedMode, savedKey);
     }
 
@@ -111,6 +147,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Dynamic model loading when changing provider dropdown
+    if (settingsProvider) {
+        settingsProvider.addEventListener('change', (e) => {
+            updateModelDropdown(e.target.value);
+        });
+    }
+
     // --- Modal Listeners ---
     if (openSettingsBtn) openSettingsBtn.addEventListener('click', () => settingsModal.classList.add('active'));
     if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
@@ -125,6 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             localStorage.setItem('ta_connection_mode', settingsMode.value);
             localStorage.setItem('ta_api_provider', settingsProvider.value);
+            localStorage.setItem('ta_llm_model', settingsLlmModel.value);
             localStorage.setItem('ta_api_key', settingsApiKey.value.trim());
             settingsModal.classList.remove('active');
             loadSettings();
@@ -351,10 +395,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (startAuditBtn) {
         startAuditBtn.addEventListener('click', async () => {
             const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+            const apiProvider = localStorage.getItem('ta_api_provider') || 'openai';
+            const llmModel = localStorage.getItem('ta_llm_model') || 'gpt-4o-mini';
             const apiKey = localStorage.getItem('ta_api_key');
             
             if (connectionMode === 'byok' && !apiKey) {
-                alert("⚙️ Please configure your OpenAI API Key first. Click 'Configure API Key' in the header.");
+                alert("⚙️ Please configure your connection API Key first. Click 'Configure Connection Settings' in the header.");
                 settingsModal.classList.add('active');
                 return;
             }
@@ -375,10 +421,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const estoppelSliced = sliceOptimizedPages(estoppelPages);
 
                 showLoader("Analyzing Lease terms with AI...");
-                const leaseExtraction = await callOpenAIToExtract(leaseSliced, 'lease', apiKey, connectionMode);
+                const leaseExtraction = await callOpenAIToExtract(leaseSliced, 'lease', connectionMode, apiProvider, llmModel, apiKey);
                 
                 showLoader("Analyzing Estoppel statements with AI...");
-                const estoppelExtraction = await callOpenAIToExtract(estoppelSliced, 'estoppel', apiKey, connectionMode);
+                const estoppelExtraction = await callOpenAIToExtract(estoppelSliced, 'estoppel', connectionMode, apiProvider, llmModel, apiKey);
 
                 showLoader("Auditing discrepancies...");
                 performAILinkedAudit(leaseExtraction, estoppelExtraction);
@@ -392,77 +438,36 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- API Calls Router (Hosted Backend vs Direct Client-Side BYOK) ---
-    async function callOpenAIToExtract(text, docType, apiKey, connectionMode) {
-        // Mode A: Hosted SaaS Backend Route (Keeps Key Hidden)
-        if (connectionMode === 'hosted') {
-            const response = await fetch("/api/audit", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    text: text,
-                    docType: docType,
-                    model: "gpt-4o-mini"
-                })
-            });
+    // --- API Calls Router (Secure CORS Proxy via Backend) ---
+    async function callOpenAIToExtract(text, docType, connectionMode, provider, model, apiKey) {
+        // Build payload based on mode. 
+        // In Hosted SaaS mode, we run OpenAI's high-tier 'gpt-4o' under our server key.
+        const payload = {
+            text: text,
+            docType: docType,
+            connectionMode: connectionMode,
+            provider: connectionMode === 'hosted' ? 'openai' : provider,
+            model: connectionMode === 'hosted' ? 'gpt-4o' : model,
+            apiKey: connectionMode === 'hosted' ? null : apiKey
+        };
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `Server returned error status ${response.status}`);
-            }
-
-            return await response.json();
-        }
-
-        // Mode B: Client-side BYOK Route (Zero Server Costs)
-        const systemPrompt = `You are an expert commercial real estate due-diligence legal auditor.
-Your job is to read the raw text of a commercial ${docType} contract and extract key terms with 100% precision.
-You must output a JSON object containing the exact fields and the verbatim quote proving the value.
-
-Return JSON in this EXACT structure:
-{
-  "tenantName": { "value": "Extracted string or 'Not Mentioned'", "quote": "Verbatim quote from text showing this" },
-  "premisesSf": { "value": "Extracted string (e.g. 5,000 SF) or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
-  "monthlyRent": { "value": "Extracted string (e.g. $10,000) or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
-  "expiryDate": { "value": "Extracted date or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
-  "securityDeposit": { "value": "Extracted string or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
-  "renewalOptions": { "value": "Extracted renewal options terms or 'Not Mentioned'", "quote": "Verbatim quote showing this" },
-  "camShare": { "value": "Extracted CAM share and cost caps or 'Not Mentioned'", "quote": "Verbatim quote showing this" }
-}`;
-
-        const userPrompt = `Here is the raw text extracted from the commercial ${docType} document:
-======================================================================
-${text}
-======================================================================
-Please extract the required fields and return the JSON.`;
-
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        const response = await fetch("/api/audit", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${apiKey}`
+                "Content-Type": "application/json"
             },
-            body: JSON.stringify({
-                model: "gpt-4o-mini",
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userPrompt }
-                ],
-                response_format: { type: "json_object" },
-                temperature: 0.1
-            })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error ? errorData.error.message : "Failed to connect to OpenAI.");
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Server returned error status ${response.status}`);
         }
 
-        const data = await response.json();
-        return JSON.parse(data.choices[0].message.content);
+        return await response.json();
     }
+
+
 
     // --- Comparison Auditor Engine (Lease vs Estoppel) ---
     function performAILinkedAudit(leaseJson, estoppelJson) {

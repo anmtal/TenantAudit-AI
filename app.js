@@ -327,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 auditModel: "Simulation (Deterministic Caches)"
             },
             summary: {
-                matchScore: 43, // 3 Match, 1 Warning, 3 Mismatch (3/7 = 43%)
+                matchScore: 54, // 6 Match, 2 Warning, 3 Mismatch (6/11 = 54%)
                 redFlags: 3,
                 monthlyRent: "$12,000.00",
                 premisesSf: "2,200 SF",
@@ -341,6 +341,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     status: "match",
                     leaseCite: "Page 1, Preamble: 'This Lease made by and between Starbucks Corporation...'",
                     estoppelCite: "Paragraph 1: 'The undersigned tenant is Starbucks Corp.'"
+                },
+                {
+                    term: "Suite / Unit Number",
+                    leaseVal: "Suite 101-A",
+                    estoppelVal: "Suite 101-A",
+                    status: "match",
+                    leaseCite: "Section 1.1: 'Premises is designated as Suite 101-A, as shown on Exhibit A.'",
+                    estoppelCite: "Paragraph 3: 'The premises occupied is designated as Suite 101-A.'"
                 },
                 {
                     term: "Premises Size",
@@ -389,6 +397,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     status: "warning",
                     leaseCite: "Section 6.2: 'Tenant's pro-rata share of operating costs is 8.5%. Increases shall be capped at 3% annually.'",
                     estoppelCite: "Paragraph 5: 'Tenant is responsible for 8.5% share of common area expenses.'"
+                },
+                {
+                    term: "Lease Guarantor",
+                    leaseVal: "Starbucks Corporation (Parent Guarantee)",
+                    estoppelVal: "Starbucks Corporation (Parent)",
+                    status: "match",
+                    leaseCite: "Section 18.4: 'Guarantor of Tenant's obligations hereunder is Starbucks Corporation, a Washington corp.'",
+                    estoppelCite: "Paragraph 9: 'Lease obligations are guaranteed by Starbucks Corporation.'"
+                },
+                {
+                    term: "Prepaid Rent",
+                    leaseVal: "First month's rent of $12,500.00 paid in advance.",
+                    estoppelVal: "Not Found",
+                    status: "warning",
+                    leaseCite: "Section 4.3: 'Tenant shall prepay the first full month's rent upon execution.'",
+                    estoppelCite: "Paragraph 8: 'Prepaid rent: Not Found.'"
+                },
+                {
+                    term: "Landlord Default Status",
+                    leaseVal: "Not Found",
+                    estoppelVal: "None. Landlord is in full compliance.",
+                    status: "warning",
+                    leaseCite: "Lease text does not reference active landlord defaults.",
+                    estoppelCite: "Paragraph 10: 'To Tenant's knowledge, Landlord is not in default under any lease covenants.'"
                 }
             ]
         };
@@ -478,12 +510,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function performAILinkedAudit(leaseJson, estoppelJson) {
         const terms = [
             { key: "tenantName", label: "Tenant Name" },
+            { key: "suiteNumber", label: "Suite / Unit Number" },
             { key: "premisesSf", label: "Premises Size" },
             { key: "monthlyRent", label: "Current Monthly Rent" },
             { key: "expiryDate", label: "Lease Expiration Date" },
             { key: "securityDeposit", label: "Security Deposit" },
             { key: "renewalOptions", label: "Renewal Options" },
-            { key: "camShare", label: "CAM & Operating Caps" }
+            { key: "camShare", label: "CAM & Operating Caps" },
+            { key: "guarantorName", label: "Lease Guarantor" },
+            { key: "prepaidRent", label: "Prepaid Rent" },
+            { key: "landlordDefault", label: "Landlord Default Status" }
         ];
 
         let records = [];
@@ -491,17 +527,20 @@ document.addEventListener('DOMContentLoaded', () => {
         let matchCount = 0;
 
         terms.forEach(t => {
-            const lease = leaseJson[t.key] || { value: "Not Mentioned", quote: "No citation found." };
-            const estoppel = estoppelJson[t.key] || { value: "Not Mentioned", quote: "No citation found." };
+            const lease = leaseJson[t.key] || { value: "Not Found", quote: "No citation found." };
+            const estoppel = estoppelJson[t.key] || { value: "Not Found", quote: "No citation found." };
             
             let status = "match";
             
-            // Normalize values for comparison
+            // Normalize values for comparison (handles variations, spaces, and defaults)
             const lVal = lease.value.toLowerCase().replace(/[^a-z0-9]/g, '');
             const eVal = estoppel.value.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-            if (lVal === 'notmentioned' || eVal === 'notmentioned') {
-                status = "warning";
+            const isLMissing = lVal === 'notfound' || lVal === 'notmentioned' || lVal === '';
+            const isEMissing = eVal === 'notfound' || eVal === 'notmentioned' || eVal === '';
+
+            if (isLMissing || isEMissing) {
+                status = "warning"; // Warning status if not found in one of the files
             } else if (lVal === eVal || lVal.includes(eVal) || eVal.includes(lVal)) {
                 status = "match";
                 matchCount++;
@@ -523,12 +562,17 @@ document.addEventListener('DOMContentLoaded', () => {
         // Calculate score
         const score = Math.round((matchCount / terms.length) * 100);
 
+        const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+        const apiProvider = localStorage.getItem('ta_api_provider') || 'openai';
+        const llmModel = localStorage.getItem('ta_llm_model') || 'gpt-4o-mini';
+        const activeModelName = connectionMode === 'hosted' ? 'GPT-4o (Hosted)' : `${llmModel} (${apiProvider.toUpperCase()})`;
+
         auditData = {
             metadata: {
                 tenantName: leaseJson.tenantName.value || "Unknown Tenant",
                 leaseFile: filesState.lease.name,
                 estoppelFile: filesState.estoppel.name,
-                auditModel: "GPT-4o-mini (BYOK)"
+                auditModel: activeModelName
             },
             summary: {
                 matchScore: score,

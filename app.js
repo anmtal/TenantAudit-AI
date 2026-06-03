@@ -16,8 +16,33 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     let auditData = null;
+    let isLoggedIn = false;
+    let pageCredits = 150;
+    let userEmail = '';
 
     // --- DOM Selectors ---
+    const homeView = document.getElementById('home-view');
+    const loginView = document.getElementById('login-view');
+    const dashboardView = document.getElementById('dashboard-view');
+
+    const homeLoginBtn = document.getElementById('home-login-btn');
+    const heroGetStartedBtn = document.getElementById('hero-get-started-btn');
+    const loginForm = document.getElementById('login-form');
+    const loginEmail = document.getElementById('login-email');
+    const loginPassword = document.getElementById('login-password');
+    const loginErrorMsg = document.getElementById('login-error-msg');
+    const loginToHomeLink = document.getElementById('login-to-home-link');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    const userEmailDisplay = document.getElementById('user-email-display');
+    const creditsCountDisplay = document.getElementById('credits-count-display');
+    const creditsTopupTrigger = document.getElementById('credits-topup-trigger');
+    const creditsModal = document.getElementById('credits-modal');
+    const closeCreditsBtn = document.getElementById('close-credits-btn');
+    const saveCreditsBtn = document.getElementById('save-credits-btn');
+    const creditsForm = document.getElementById('credits-form');
+    const creditsAmount = document.getElementById('credits-amount');
+
     const leaseDropZone = document.getElementById('lease-drop-zone');
     const estoppelDropZone = document.getElementById('estoppel-drop-zone');
     const leaseFileInput = document.getElementById('lease-file-input');
@@ -83,6 +108,130 @@ document.addEventListener('DOMContentLoaded', () => {
         ]
     };
 
+    // --- Session Router & Multi-View Display Control ---
+    function showView(viewId) {
+        homeView.style.display = 'none';
+        loginView.style.display = 'none';
+        dashboardView.style.display = 'none';
+
+        if (viewId === 'home') {
+            homeView.style.display = 'block';
+        } else if (viewId === 'login') {
+            loginView.style.display = 'block';
+        } else if (viewId === 'dashboard') {
+            dashboardView.style.display = 'block';
+        }
+    }
+
+    function updateCreditsPillColor(credits) {
+        if (!creditsTopupTrigger) return;
+        creditsTopupTrigger.classList.remove('credits-low', 'credits-empty');
+        if (credits === 0) {
+            creditsTopupTrigger.classList.add('credits-empty');
+        } else if (credits <= 15) {
+            creditsTopupTrigger.classList.add('credits-low');
+        }
+    }
+
+    function initializeAuth() {
+        const storedLogin = localStorage.getItem('ta_logged_in') === 'true';
+        const storedEmail = localStorage.getItem('ta_user_email') || '';
+        let storedCredits = localStorage.getItem('ta_page_credits');
+        
+        if (storedCredits === null) {
+            storedCredits = 150;
+            localStorage.setItem('ta_page_credits', storedCredits);
+        } else {
+            storedCredits = parseInt(storedCredits, 10);
+        }
+        
+        pageCredits = storedCredits;
+        creditsCountDisplay.textContent = pageCredits;
+        updateCreditsPillColor(pageCredits);
+
+        if (storedLogin && storedEmail) {
+            isLoggedIn = true;
+            userEmail = storedEmail;
+            userEmailDisplay.textContent = userEmail;
+            showView('dashboard');
+        } else {
+            isLoggedIn = false;
+            showView('home');
+        }
+    }
+
+    // Navigation triggers
+    if (homeLoginBtn) homeLoginBtn.addEventListener('click', () => showView('login'));
+    if (heroGetStartedBtn) heroGetStartedBtn.addEventListener('click', () => showView('login'));
+    if (loginToHomeLink) loginToHomeLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        showView('home');
+    });
+
+    if (loginForm) {
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = loginEmail.value.trim();
+            const password = loginPassword.value;
+
+            if (email && password) {
+                localStorage.setItem('ta_logged_in', 'true');
+                localStorage.setItem('ta_user_email', email);
+                isLoggedIn = true;
+                userEmail = email;
+                userEmailDisplay.textContent = userEmail;
+                loginErrorMsg.style.display = 'none';
+                showView('dashboard');
+            } else {
+                loginErrorMsg.style.display = 'block';
+            }
+        });
+    }
+
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            localStorage.setItem('ta_logged_in', 'false');
+            localStorage.removeItem('ta_user_email');
+            isLoggedIn = false;
+            userEmail = '';
+            showView('home');
+        });
+    }
+
+    // Credits Modal Handlers
+    if (creditsTopupTrigger) {
+        creditsTopupTrigger.addEventListener('click', () => {
+            creditsModal.classList.add('active');
+        });
+    }
+    
+    if (closeCreditsBtn) {
+        closeCreditsBtn.addEventListener('click', () => {
+            creditsModal.classList.remove('active');
+        });
+    }
+    
+    if (creditsModal) {
+        creditsModal.addEventListener('click', (e) => {
+            if (e.target === creditsModal) creditsModal.classList.remove('active');
+        });
+    }
+
+    if (creditsForm) {
+        creditsForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const amount = parseInt(creditsAmount.value, 10);
+            if (!isNaN(amount) && amount > 0) {
+                pageCredits += amount;
+                localStorage.setItem('ta_page_credits', pageCredits);
+                creditsCountDisplay.textContent = pageCredits;
+                updateCreditsPillColor(pageCredits);
+                creditsModal.classList.remove('active');
+                alert(`🎉 Successfully added +${amount} page credits to your account!`);
+            }
+        });
+    }
+
     function updateModelDropdown(provider, selectedValue) {
         if (!settingsLlmModel) return;
         settingsLlmModel.innerHTML = '';
@@ -94,7 +243,6 @@ document.addEventListener('DOMContentLoaded', () => {
             settingsLlmModel.appendChild(opt);
         });
         
-        // Enforce a valid selected value to prevent a blank dropdown state
         const hasSelectedValue = models.some(m => m.value === selectedValue);
         if (selectedValue && hasSelectedValue) {
             settingsLlmModel.value = selectedValue;
@@ -124,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
             clearSettingsBtn.style.display = 'none';
             
             openSettingsBtn.textContent = '⚙️ Connection: Hosted SaaS';
-            openSettingsBtn.style.borderColor = 'rgba(139, 92, 246, 0.4)'; // Purple violet glow
+            openSettingsBtn.style.borderColor = 'rgba(139, 92, 246, 0.4)';
             openSettingsBtn.style.color = '#a78bfa';
         } else {
             byokSettingsGroup.style.display = 'block';
@@ -132,17 +280,18 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (apiKey) {
                 openSettingsBtn.textContent = '⚙️ Connection: BYOK Active';
-                openSettingsBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)'; // Emerald green
+                openSettingsBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
                 openSettingsBtn.style.color = '#34d399';
             } else {
                 openSettingsBtn.textContent = '⚙️ Configure API Key';
-                openSettingsBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)'; // Red/Orange warning
+                openSettingsBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
                 openSettingsBtn.style.color = '#f87171';
             }
         }
     }
 
     loadSettings();
+    initializeAuth();
 
     // Toggle BYOK options when changing connection mode dropdown
     if (settingsMode) {
@@ -280,6 +429,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- Client-Side Lightweight PDF Page Counting ---
+    async function getPDFPageCount(file) {
+        const fileReader = new FileReader();
+        return new Promise((resolve, reject) => {
+            fileReader.onload = async function() {
+                try {
+                    const typedarray = new Uint8Array(this.result);
+                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                    resolve(pdf.numPages);
+                } catch (e) {
+                    reject(e);
+                }
+            };
+            fileReader.onerror = () => reject(new Error("File page count reading failed"));
+            fileReader.readAsArrayBuffer(file);
+        });
+    }
+
     // --- Smart Text Slicing keyword index filter (Mitigates Technical Risk A) ---
     function sliceOptimizedPages(pagesArray) {
         // Target audit categories keywords
@@ -303,6 +470,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Mock Demo Mode Dataset (Try with Sample Data) ---
     if (demoBtn) {
         demoBtn.addEventListener('click', () => {
+            if (pageCredits < 5) {
+                alert(`🚫 Insufficient page credits! The simulation requires 5 pages, but you only have ${pageCredits} pages left. Please top up your credits.`);
+                creditsModal.classList.add('active');
+                return;
+            }
+
             showLoader("Processing mock lease PDF pages...");
             
             setTimeout(() => {
@@ -312,6 +485,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     setTimeout(() => {
                         hideLoader();
                         loadDemoAuditData();
+                        
+                        // Deduct credits for the demo simulation
+                        pageCredits -= 5;
+                        localStorage.setItem('ta_page_credits', pageCredits);
+                        creditsCountDisplay.textContent = pageCredits;
+                        updateCreditsPillColor(pageCredits);
+                        alert("🚀 Simulated audit completed: Deducted 5 page credits.");
                     }, 800);
                 }, 800);
             }, 600);
@@ -437,12 +617,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const apiKey = localStorage.getItem('ta_api_key');
             
             if (connectionMode === 'byok' && !apiKey) {
-                alert("⚙️ Please configure your connection API Key first. Click 'Configure Connection Settings' in the header.");
+                alert("⚙️ Please configure your connection API Key first. Click 'API Settings' in the header.");
                 settingsModal.classList.add('active');
                 return;
             }
 
             try {
+                showLoader("Assessing page count credits...");
+                
+                const leasePagesCount = await getPDFPageCount(filesState.lease);
+                const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);
+                const totalPagesNeeded = leasePagesCount + estoppelPagesCount;
+                
+                if (pageCredits < totalPagesNeeded) {
+                    hideLoader();
+                    alert(`🚫 Insufficient page credits! This audit requires ${totalPagesNeeded} pages, but you only have ${pageCredits} pages left. Please top up your credits.`);
+                    creditsModal.classList.add('active');
+                    return;
+                }
+
                 showLoader("Reading Lease PDF pages...");
                 const leasePages = await extractTextFromPDF(filesState.lease, (curr, total) => {
                     showLoader(`Extracting Lease text: Page ${curr}/${total}`);
@@ -465,7 +658,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 showLoader("Auditing discrepancies...");
                 performAILinkedAudit(leaseExtraction, estoppelExtraction);
+                
+                // Deduct credits on successful audit completion
+                pageCredits -= totalPagesNeeded;
+                localStorage.setItem('ta_page_credits', pageCredits);
+                creditsCountDisplay.textContent = pageCredits;
+                updateCreditsPillColor(pageCredits);
+
                 hideLoader();
+                alert(`🎉 Audit completed successfully! Deducted ${totalPagesNeeded} page credits.`);
                 
             } catch (err) {
                 console.error(err);

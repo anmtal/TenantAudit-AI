@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let auditData = null;
     let isLoggedIn = false;
-    let pageCredits = 150;
+    let pageCredits = 0;
     let userEmail = '';
     let supabase = null;
     let isSignUpMode = false;
@@ -149,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let storedCredits = localStorage.getItem('ta_page_credits');
         
         if (storedCredits === null) {
-            storedCredits = 150;
+            storedCredits = 0;
             localStorage.setItem('ta_page_credits', storedCredits);
         } else {
             storedCredits = parseInt(storedCredits, 10);
@@ -374,7 +374,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 isSignUpMode = !isSignUpMode;
                 if (isSignUpMode) {
                     loginTitle.textContent = "Create an Account";
-                    loginSubtitle.textContent = "Sign up for TenantAudit AI to get 150 page credits automatically.";
+                    loginSubtitle.textContent = "Sign up for TenantAudit AI to start auditing commercial leases.";
                     loginSubmitBtn.textContent = "Register Account";
                     loginHintBox.style.display = 'none';
                     authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
@@ -414,7 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             password: password
                         });
                         if (error) throw error;
-                        alert("🎉 Account created successfully! Logged in with 150 page credits.");
+                        alert("🎉 Account created successfully! Please top up your page credits to begin auditing.");
                     } else {
                         const { data, error } = await supabase.auth.signInWithPassword({
                             email: email,

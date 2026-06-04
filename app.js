@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let userEmail = '';
     let supabase = null;
     let isSignUpMode = false;
+    let activePlanType = 'hosted'; // 'hosted' or 'byok'
 
     // --- DOM Selectors ---
     const homeView = document.getElementById('home-view');
@@ -52,6 +53,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveCreditsBtn = document.getElementById('save-credits-btn');
     const creditsForm = document.getElementById('credits-form');
     const creditsAmount = document.getElementById('credits-amount');
+    const buyPlanHosted = document.getElementById('buy-plan-hosted');
+    const buyPlanByok = document.getElementById('buy-plan-byok');
+    let selectedTopupPlan = 'hosted';
 
     const leaseDropZone = document.getElementById('lease-drop-zone');
     const estoppelDropZone = document.getElementById('estoppel-drop-zone');
@@ -169,6 +173,9 @@ document.addEventListener('DOMContentLoaded', () => {
         creditsCountDisplay.textContent = pageCredits;
         updateCreditsPillColor(pageCredits);
 
+        activePlanType = localStorage.getItem('ta_user_plan_type') || 'hosted';
+        applyPlanRestrictions(activePlanType);
+
         if (storedLogin && storedEmail) {
             isLoggedIn = true;
             userEmail = storedEmail;
@@ -192,6 +199,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             console.log("Fetching credits for user ID:", user.id, "email:", user.email);
+
+            // Load plan type from metadata
+            const planType = user.user_metadata?.plan_type || 'hosted';
+            activePlanType = planType;
+            console.log("User plan type loaded from metadata:", activePlanType);
+            applyPlanRestrictions(activePlanType);
             
             const { data, error } = await supabase
                 .from('profiles')
@@ -480,6 +493,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (creditsTopupTrigger) {
         creditsTopupTrigger.addEventListener('click', () => {
             creditsModal.classList.add('active');
+            // Sync with user's current plan type
+            if (activePlanType === 'hosted') {
+                if (buyPlanHosted) buyPlanHosted.click();
+            } else {
+                if (buyPlanByok) buyPlanByok.click();
+            }
         });
     }
     
@@ -492,6 +511,30 @@ document.addEventListener('DOMContentLoaded', () => {
     if (creditsModal) {
         creditsModal.addEventListener('click', (e) => {
             if (e.target === creditsModal) creditsModal.classList.remove('active');
+        });
+    }
+
+    if (buyPlanHosted && buyPlanByok && creditsAmount) {
+        buyPlanHosted.addEventListener('click', () => {
+            buyPlanHosted.classList.add('active');
+            buyPlanByok.classList.remove('active');
+            selectedTopupPlan = 'hosted';
+            creditsAmount.innerHTML = `
+                <option value="50" selected>+50 Pages ($25.00)</option>
+                <option value="100">+100 Pages ($45.00)</option>
+                <option value="500">+500 Pages ($180.00)</option>
+            `;
+        });
+
+        buyPlanByok.addEventListener('click', () => {
+            buyPlanByok.classList.add('active');
+            buyPlanHosted.classList.remove('active');
+            selectedTopupPlan = 'byok';
+            creditsAmount.innerHTML = `
+                <option value="62" selected>+62 Pages ($25.00)</option>
+                <option value="125">+125 Pages ($45.00)</option>
+                <option value="625">+625 Pages ($180.00)</option>
+            `;
         });
     }
 
@@ -524,18 +567,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (updateErr) throw updateErr;
 
+                    // Update plan type in user metadata
+                    const { error: metadataErr } = await supabase.auth.updateUser({
+                        data: { plan_type: selectedTopupPlan }
+                    });
+                    if (metadataErr) throw metadataErr;
+
                     pageCredits = newCredits;
                     creditsCountDisplay.textContent = pageCredits;
                     updateCreditsPillColor(pageCredits);
+
+                    activePlanType = selectedTopupPlan;
+                    applyPlanRestrictions(activePlanType);
                 } else {
                     pageCredits += amount;
                     localStorage.setItem('ta_page_credits', pageCredits);
+                    localStorage.setItem('ta_user_plan_type', selectedTopupPlan);
                     creditsCountDisplay.textContent = pageCredits;
                     updateCreditsPillColor(pageCredits);
+
+                    activePlanType = selectedTopupPlan;
+                    applyPlanRestrictions(activePlanType);
                 }
                 
                 creditsModal.classList.remove('active');
-                alert(`🎉 Successfully added +${amount} page credits to your account!`);
+                alert(`🎉 Successfully added +${amount} page credits and activated your ${activePlanType === 'byok' ? 'BYOK' : 'Hosted'} Plan!`);
             } catch (err) {
                 console.error("Top up error:", err);
                 alert(`🚫 Credit update failed: ${err.message}`);
@@ -562,8 +618,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Plan-Based Settings Restrictions Gating ---
+    function applyPlanRestrictions(planType) {
+        console.log(`[Plan Restrictions] Applying restrictions for plan type: ${planType}`);
+        const settingsModeDropdown = document.getElementById('settings-mode');
+        if (!settingsModeDropdown) return;
+        
+        const hostedOption = settingsModeDropdown.querySelector('option[value="hosted"]');
+        const byokOption = settingsModeDropdown.querySelector('option[value="byok"]');
+        
+        if (planType === 'hosted') {
+            if (byokOption) byokOption.disabled = true;
+            if (hostedOption) hostedOption.disabled = false;
+            settingsModeDropdown.value = 'hosted';
+            localStorage.setItem('ta_connection_mode', 'hosted');
+            updateSettingsUI('hosted', '');
+        } else if (planType === 'byok') {
+            if (hostedOption) hostedOption.disabled = true;
+            if (byokOption) byokOption.disabled = false;
+            settingsModeDropdown.value = 'byok';
+            localStorage.setItem('ta_connection_mode', 'byok');
+            const savedApiKey = localStorage.getItem('ta_api_key') || '';
+            updateSettingsUI('byok', savedApiKey);
+        }
+    }
+
     // --- Load Saved Settings ---
     function loadSettings() {
+        applyPlanRestrictions(activePlanType);
+
         const savedMode = localStorage.getItem('ta_connection_mode') || 'hosted';
         const savedProvider = localStorage.getItem('ta_api_provider') || 'openai';
         const savedModel = localStorage.getItem('ta_llm_model') || 'gpt-4o-mini';
@@ -1150,7 +1233,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);
             const totalPagesNeeded = leasePagesCount + estoppelPagesCount;
             
-            if (connectionMode !== 'byok' && pageCredits < totalPagesNeeded) {
+            if (pageCredits < totalPagesNeeded) {
                 hideLoader();
                 alert(`🚫 Insufficient page credits! This audit requires ${totalPagesNeeded} pages, but you only have ${pageCredits} pages left. Please top up your credits.`);
                 creditsModal.classList.add('active');
@@ -1240,10 +1323,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             // Deduct credits and log audit to Database
             try {
                 if (supabase) {
-                    if (connectionMode !== 'byok') {
-                        const { error: deductErr } = await supabase.rpc('deduct_credits', { pages_to_deduct: totalPagesNeeded });
-                        if (deductErr) throw deductErr;
-                    }
+                    const { error: deductErr } = await supabase.rpc('deduct_credits', { pages_to_deduct: totalPagesNeeded });
+                    if (deductErr) throw deductErr;
 
                     const { error: logErr } = await supabase.from('audits').insert({
                         tenant_name: auditData.metadata.tenantName,
@@ -1262,17 +1343,15 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     await loadAuditHistory();
                 } else {
                     // Fallback mock mode
-                    if (connectionMode !== 'byok') {
-                        pageCredits -= totalPagesNeeded;
-                        localStorage.setItem('ta_page_credits', pageCredits);
-                        creditsCountDisplay.textContent = pageCredits;
-                        updateCreditsPillColor(pageCredits);
-                    }
+                    pageCredits -= totalPagesNeeded;
+                    localStorage.setItem('ta_page_credits', pageCredits);
+                    creditsCountDisplay.textContent = pageCredits;
+                    updateCreditsPillColor(pageCredits);
                 }
                 
                 hideLoader();
                 if (connectionMode === 'byok') {
-                    alert("🎉 Audit completed successfully using your custom API Key!");
+                    alert(`🎉 Audit completed successfully using your custom API Key! Deducted ${totalPagesNeeded} page credits.`);
                 } else {
                     alert(`🎉 Audit completed successfully! Deducted ${totalPagesNeeded} page credits.`);
                 }

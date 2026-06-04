@@ -544,6 +544,14 @@
             
             <form id="credits-form" onsubmit="return false;">
                 <div class="form-group">
+                    <label>Select Plan Type</label>
+                    <div class="pricing-switcher-wrapper" style="display: flex; width: 100%; margin-top: 4px; margin-bottom: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); padding: 4px; border-radius: 30px;">
+                        <button type="button" class="pricing-switch-btn active" id="buy-plan-hosted" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">Hosted API Plan</button>
+                        <button type="button" class="pricing-switch-btn" id="buy-plan-byok" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">BYOK Plan (+25% Pages)</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
                     <label for="credits-amount">Select Page Package</label>
                     <div class="select-wrapper">
                         <select id="credits-amount">

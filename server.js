@@ -226,16 +226,26 @@ app.post('/api/audit', async (req, res) => {
                     return res.status(401).json({ error: "Unauthorized: Invalid or expired session token." });
                 }
                 
-                // Query user's credit balance
+                // Query user's credit balance and active session ID
                 const { data: profile, error: profileErr } = await supabaseAdmin
                     .from('profiles')
-                    .select('credits')
+                    .select('credits, active_session_id')
                     .eq('id', user.id)
                     .single();
                     
                 if (profileErr) {
                     console.error("[DB Failure] Failed to query profile credits:", profileErr.message);
                     return res.status(500).json({ error: "Internal Server Error: Failed to retrieve page credits balance." });
+                }
+
+                // Verify active session for single-seat restriction
+                const clientSessionId = req.headers['x-session-id'];
+                if (profile && profile.active_session_id && profile.active_session_id !== clientSessionId) {
+                    console.warn(`[Blocked] Session mismatch for user ${user.email}. Database: ${profile.active_session_id}, Header: ${clientSessionId}`);
+                    return res.status(403).json({
+                        error: "session_mismatch",
+                        message: "Your account is logged in on another device. This subscription is limited to 1 active seat."
+                    });
                 }
                 
                 if (!profile || typeof profile.credits === 'undefined' || profile.credits <= 0) {
@@ -526,16 +536,26 @@ app.post('/api/compare', async (req, res) => {
                     return res.status(401).json({ error: "Unauthorized: Invalid or expired session token." });
                 }
                 
-                // Query user's credit balance
+                // Query user's credit balance and active session ID
                 const { data: profile, error: profileErr } = await supabaseAdmin
                     .from('profiles')
-                    .select('credits')
+                    .select('credits, active_session_id')
                     .eq('id', user.id)
                     .single();
                     
                 if (profileErr) {
                     console.error("[DB Failure] Failed to query profile credits on comparison:", profileErr.message);
                     return res.status(500).json({ error: "Internal Server Error: Failed to retrieve page credits balance." });
+                }
+
+                // Verify active session for single-seat restriction
+                const clientSessionId = req.headers['x-session-id'];
+                if (profile && profile.active_session_id && profile.active_session_id !== clientSessionId) {
+                    console.warn(`[Blocked] Session mismatch for user ${user.email} on comparison. Database: ${profile.active_session_id}, Header: ${clientSessionId}`);
+                    return res.status(403).json({
+                        error: "session_mismatch",
+                        message: "Your account is logged in on another device. This subscription is limited to 1 active seat."
+                    });
                 }
                 
                 if (!profile || typeof profile.credits === 'undefined' || profile.credits <= 0) {

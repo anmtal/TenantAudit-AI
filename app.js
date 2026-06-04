@@ -55,6 +55,18 @@ function initializeApp() {
         };
     })();
 
+    // Helper to generate or retrieve a unique session ID for single-seat login enforcement
+    function getOrGenerateSessionId() {
+        let sid = localStorage.getItem('ta_session_id');
+        if (!sid) {
+            sid = (window.crypto && crypto.randomUUID) 
+                ? crypto.randomUUID() 
+                : 'sid_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
+            localStorage.setItem('ta_session_id', sid);
+        }
+        return sid;
+    }
+
     // --- State Variables ---
     let filesState = {
         lease: null,
@@ -487,6 +499,22 @@ function initializeApp() {
                         // Load credits and past history from Supabase
                         await loadUserProfileAndCredits();
                         await loadAuditHistory();
+
+                        // Sync active session ID to profiles table for single-seat enforcement
+                        const sessionId = getOrGenerateSessionId();
+                        try {
+                            const { error: syncErr } = await supabase
+                                .from('profiles')
+                                .update({ active_session_id: sessionId })
+                                .eq('id', session.user.id);
+                            if (syncErr) {
+                                console.warn("[Session Sync Warning] Failed to update active_session_id:", syncErr.message);
+                            } else {
+                                console.log("[Session Sync] Successfully updated active_session_id in DB:", sessionId);
+                            }
+                        } catch (e) {
+                            console.error("[Session Sync Error] Exception during update:", e);
+                        }
                         
                         // Check if there was a pending package selection before login
                         if (window.pendingPurchase) {
@@ -1934,7 +1962,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         };
 
         const headers = {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "X-Session-ID": getOrGenerateSessionId()
         };
 
         if (supabase) {
@@ -1952,6 +1981,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
+            if (errorData.error === 'session_mismatch') {
+                alert(`🚫 ${errorData.message || "Multiple active sessions detected. Account is restricted to 1 active seat."}`);
+                await handleLogout();
+                throw new Error(errorData.message);
+            }
             throw new Error(errorData.error || `Server returned error status ${response.status}`);
         }
 
@@ -2112,7 +2146,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 };
                 
                 const headers = {
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "X-Session-ID": getOrGenerateSessionId()
                 };
 
                 if (supabase) {
@@ -2167,6 +2202,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     console.log("[AI Verification] Compliance audit successfully verified & refined semantically.");
                 } else {
                     const errData = await response.json().catch(() => ({}));
+                    if (errData.error === 'session_mismatch') {
+                        alert(`🚫 ${errData.message || "Multiple active sessions detected. Account is restricted to 1 active seat."}`);
+                        await handleLogout();
+                        return;
+                    }
                     console.error("[AI Verification Failed] Backend returned status error:", errData.error || response.status);
                 }
             } catch (e) {

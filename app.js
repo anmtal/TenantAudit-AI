@@ -362,6 +362,28 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Load credits and past history from Supabase
                         await loadUserProfileAndCredits();
                         await loadAuditHistory();
+                        
+                        // Check if there was a pending package selection before login
+                        if (window.pendingPurchase) {
+                            const { plan, amount } = window.pendingPurchase;
+                            window.pendingPurchase = null; // Clear state
+                            
+                            // Show credits modal
+                            creditsModal.classList.add('active');
+                            
+                            // Select plan and amount
+                            if (plan === 'hosted') {
+                                if (buyPlanHosted) {
+                                    buyPlanHosted.click();
+                                    creditsAmount.value = amount;
+                                }
+                            } else if (plan === 'byok') {
+                                if (buyPlanByok) {
+                                    buyPlanByok.click();
+                                    creditsAmount.value = amount;
+                                }
+                            }
+                        }
 
                         // --- Check for Stripe Redirect Success ---
                         const urlParams = new URLSearchParams(window.location.search);
@@ -504,12 +526,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const pricingCtaBtns = document.querySelectorAll('.pricing-cta-btn');
     pricingCtaBtns.forEach(btn => {
         btn.addEventListener('click', () => {
+            const plan = btn.getAttribute('data-plan');
+            const amount = btn.getAttribute('data-amount');
+            
             if (!isLoggedIn) {
+                window.pendingPurchase = { plan, amount };
                 showView('login');
             } else {
-                const plan = btn.getAttribute('data-plan');
-                const amount = btn.getAttribute('data-amount');
-                
                 // Show credits modal
                 creditsModal.classList.add('active');
                 
@@ -596,6 +619,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     loginErrorMsg.style.display = 'none';
                     showView('dashboard');
                     updateNavUI();
+                    
+                    // Check if there was a pending package selection before login
+                    if (window.pendingPurchase) {
+                        const { plan, amount } = window.pendingPurchase;
+                        window.pendingPurchase = null; // Clear state
+                        
+                        creditsModal.classList.add('active');
+                        if (plan === 'hosted') {
+                            if (buyPlanHosted) {
+                                buyPlanHosted.click();
+                                creditsAmount.value = amount;
+                            }
+                        } else if (plan === 'byok') {
+                            if (buyPlanByok) {
+                                buyPlanByok.click();
+                                creditsAmount.value = amount;
+                            }
+                        }
+                    }
                 }
             } catch (err) {
                 console.error("Auth error:", err);

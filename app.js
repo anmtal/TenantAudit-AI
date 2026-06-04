@@ -925,23 +925,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const hostedOption = settingsModeDropdown.querySelector('option[value="hosted"]');
         const byokOption = settingsModeDropdown.querySelector('option[value="byok"]');
         
-        // If user has credits in a mode, unlock it. If they have 0 in both, unlock both so they can explore.
-        const canUseHosted = hostedCredits > 0 || (hostedCredits === 0 && byokCredits === 0);
-        const canUseByok = byokCredits > 0 || (hostedCredits === 0 && byokCredits === 0);
+        const targetMode = localStorage.getItem('ta_connection_mode') || 'hosted';
         
-        if (hostedOption) hostedOption.disabled = !canUseHosted;
-        if (byokOption) byokOption.disabled = !canUseByok;
-        
-        // Determine active mode: use saved mode if unlocked, otherwise fallback to the unlocked one
-        let targetMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-        if (targetMode === 'hosted' && !canUseHosted) {
-            targetMode = 'byok';
-        } else if (targetMode === 'byok' && !canUseByok) {
-            targetMode = 'hosted';
-        }
+        if (hostedOption) hostedOption.disabled = (targetMode === 'byok');
+        if (byokOption) byokOption.disabled = (targetMode === 'hosted');
         
         settingsModeDropdown.value = targetMode;
-        localStorage.setItem('ta_connection_mode', targetMode);
         
         const savedApiKey = localStorage.getItem('ta_api_key') || '';
         updateSettingsUI(targetMode, targetMode === 'byok' ? savedApiKey : '');
@@ -1040,7 +1029,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Modal Listeners ---
-    if (openSettingsBtn) openSettingsBtn.addEventListener('click', () => settingsModal.classList.add('active'));
+    if (openSettingsBtn) {
+        openSettingsBtn.addEventListener('click', () => {
+            applyPlanRestrictions(activePlanType);
+            settingsModal.classList.add('active');
+        });
+    }
     if (closeSettingsBtn) {
         closeSettingsBtn.addEventListener('click', () => {
             settingsModal.classList.remove('active');
@@ -1101,6 +1095,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Update credits pill text and count display
                 updateCreditsDisplay();
+
+                // Sync disabled dropdown options
+                applyPlanRestrictions(activePlanType);
             });
         });
     }

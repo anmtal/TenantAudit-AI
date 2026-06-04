@@ -25,7 +25,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- Stylesheet -->
-    <link rel="stylesheet" href="styles.css?v=1.0.7">
+    <link rel="stylesheet" href="styles.css?v=1.0.8">
 </head>
 <body>
     <!-- Premium Glow Effects in Background -->
@@ -108,7 +108,7 @@
                 
                 <div class="pricing-switcher-wrapper">
                     <button class="pricing-switch-btn active" id="switch-hosted">Hosted SaaS Plan</button>
-                    <button class="pricing-switch-btn" id="switch-byok">BYOB Plan (+25% Pages)</button>
+                    <button class="pricing-switch-btn" id="switch-byok">BYOB Plan (Unlimited Pages)</button>
                 </div>
 
                 <!-- Plan Comparison Grid (Hosted SaaS vs BYOB) -->
@@ -117,7 +117,7 @@
                     <div class="glass-card" style="flex: 1; min-width: 280px; padding: 20px 24px; border-color: rgba(168, 85, 247, 0.15); display: flex; flex-direction: column; justify-content: space-between;">
                         <div>
                             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-                                <div class="feature-icon" style="width: 32px; height: 32px; font-size: 14px; margin: 0; background: rgba(168, 85, 247, 0.1); color: var(--color-purple);"><i data-lucide="cloud"></i></div>
+                                <div class="feature-icon" style="font-size: 14px; margin: 0; background: transparent; color: var(--color-purple);"><i data-lucide="cloud"></i></div>
                                 <h4 style="font-size: 15px; font-weight: 700; color: var(--text-primary);">Hosted SaaS Mode</h4>
                             </div>
                             <p style="color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">Run audits instantly using our secure hosted server keys. Requires **zero setup**, developer accounts, or technical expertise.</p>
@@ -129,12 +129,12 @@
                     <div class="glass-card" style="flex: 1; min-width: 280px; padding: 20px 24px; border-color: rgba(6, 182, 212, 0.15); display: flex; flex-direction: column; justify-content: space-between;">
                         <div>
                             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-                                <div class="feature-icon" style="width: 32px; height: 32px; font-size: 14px; margin: 0; background: rgba(6, 182, 212, 0.1); color: var(--color-cyan);"><i data-lucide="key-round"></i></div>
+                                <div class="feature-icon" style="font-size: 14px; margin: 0; background: transparent; color: var(--color-cyan);"><i data-lucide="key-round"></i></div>
                                 <h4 style="font-size: 15px; font-weight: 700; color: var(--text-primary);">BYOB Mode (Bring Your Own Bot)</h4>
                             </div>
-                            <p style="color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">Supply your own API key (OpenAI, Anthropic, Gemini, DeepSeek). Pay for your own LLM usage directly and get **+25% bonus pages**.</p>
+                            <p style="color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">Supply your own API key (OpenAI, Anthropic, Gemini, DeepSeek). Pay for your own LLM usage directly and run **unlimited audits**.</p>
                         </div>
-                        <span style="font-size: 12px; font-weight: 600; color: var(--color-cyan); display: flex; align-items: center; gap: 4px;"><i data-lucide="gift" style="width: 14px; height: 14px;"></i> +25% extra credits included</span>
+                        <span style="font-size: 12px; font-weight: 600; color: var(--color-cyan); display: flex; align-items: center; gap: 4px;"><i data-lucide="infinity" style="width: 14px; height: 14px;"></i> Unlimited pages included</span>
                     </div>
                 </div>
  
@@ -236,101 +236,45 @@
                     </div>
                 </div>
  
-                <!-- BYOK Plans (5 Tiers, +25% Pages) -->
-                <div class="pricing-grid" id="byok-grid" style="display: none;">
-                    <!-- Pack 1 -->
-                    <div class="pricing-card">
-                        <span class="pricing-tier">Starter Package</span>
-                        <div class="pricing-price-box">
-                            <span class="pricing-price">$49</span>
-                            <span class="pricing-period">/ transaction</span>
-                        </div>
-                        <p style="font-size: 13px; color: var(--text-muted);">Perfect for single-asset transactions or light due diligence.</p>
-                        <ul class="pricing-features-list">
-                            <li style="color: var(--color-emerald); font-weight: 600;">125 Page Credits (+25% Bonus)</li>
-                            <li>PDF Text Layer Parsing</li>
-                            <li>Full Discrepancy Matrix</li>
-                            <li>Verbatim Quote Verification</li>
-                            <li>CSV Report Downloads</li>
-                            <li>Credits carry forward for next use</li>
-                        </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="byok" data-amount="125">Get Package</button>
-                    </div>
- 
-                    <!-- Pack 2 -->
-                    <div class="pricing-card">
-                        <span class="pricing-tier">Strip Center Package</span>
+                <!-- BYOK Plans (2 Tiers, Unlimited Pages) -->
+                <div class="pricing-grid" id="byok-grid" style="display: none; justify-content: center; gap: 30px; max-width: 900px; margin: 0 auto;">
+                    <!-- BYOB Monthly Plan -->
+                    <div class="pricing-card" style="max-width: 380px; width: 100%;">
+                        <span class="pricing-tier">BYOB Monthly Plan</span>
                         <div class="pricing-price-box">
                             <span class="pricing-price">$149</span>
-                            <span class="pricing-period">/ transaction</span>
+                            <span class="pricing-period">/ month</span>
                         </div>
-                        <p style="font-size: 13px; color: var(--text-muted);">Ideal for multi-tenant retail hubs and commercial strips.</p>
+                        <p style="font-size: 13px; color: var(--text-muted);">Unlimited audits using your own custom API keys.</p>
                         <ul class="pricing-features-list">
-                            <li style="color: var(--color-emerald); font-weight: 600;">625 Page Credits (+25% Bonus)</li>
+                            <li style="color: var(--color-emerald); font-weight: 600;">Unlimited Page Credits</li>
+                            <li>Use OpenAI, Anthropic, Gemini, DeepSeek</li>
                             <li>PDF Text Layer Parsing</li>
                             <li>Full Discrepancy Matrix</li>
                             <li>Verbatim Quote Verification</li>
                             <li>CSV Report Downloads</li>
-                            <li>Credits carry forward for next use</li>
                         </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="byok" data-amount="625">Get Package</button>
-                    </div>
- 
-                    <!-- Pack 3 -->
-                    <div class="pricing-card">
-                        <span class="pricing-tier">Neighborhood Center Package</span>
-                        <div class="pricing-price-box">
-                            <span class="pricing-price">$399</span>
-                            <span class="pricing-period">/ transaction</span>
-                        </div>
-                        <p style="font-size: 13px; color: var(--text-muted);">For large commercial portfolios and institutional centers.</p>
-                        <ul class="pricing-features-list">
-                            <li style="color: var(--color-emerald); font-weight: 600;">1,875 Page Credits (+25% Bonus)</li>
-                            <li>PDF Text Layer Parsing</li>
-                            <li>Full Discrepancy Matrix</li>
-                            <li>Verbatim Quote Verification</li>
-                            <li>CSV Report Downloads</li>
-                            <li>Credits carry forward for next use</li>
-                        </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="byok" data-amount="1875">Get Package</button>
+                        <button class="btn btn-secondary pricing-cta-btn" data-plan="byok" data-amount="149">Get Monthly Plan</button>
                     </div>
 
-                    <!-- Pack 4 (Annual Package BYOK) -->
-                    <div class="pricing-card featured-card">
-                        <span class="pricing-tier" style="color: var(--color-purple);">Annual Package</span>
+                    <!-- BYOB Annual Plan -->
+                    <div class="pricing-card featured-card" style="max-width: 380px; width: 100%;">
+                        <span class="pricing-tier" style="color: var(--color-purple);">BYOB Annual Plan</span>
                         <div class="pricing-price-box">
-                            <span class="pricing-price">$999</span>
+                            <span class="pricing-price">$1,299</span>
                             <span class="pricing-period">/ year</span>
                         </div>
-                        <p style="font-size: 13px; color: var(--text-muted);">Lock-in high volume due diligence capabilities across deal flows.</p>
+                        <p style="font-size: 13px; color: var(--text-muted);">Lock-in unlimited due diligence for a full year.</p>
                         <ul class="pricing-features-list">
-                            <li style="color: var(--color-emerald); font-weight: 600;">10,000 Page Credits (+25% Bonus)</li>
+                            <li style="color: var(--color-emerald); font-weight: 600;">Unlimited Page Credits</li>
+                            <li>Use OpenAI, Anthropic, Gemini, DeepSeek</li>
                             <li>PDF Text Layer Parsing</li>
                             <li>Full Discrepancy Matrix</li>
                             <li>Verbatim Quote Verification</li>
                             <li>CSV Report Downloads</li>
-                            <li>24/7 Dedicated Support</li>
+                            <li>Priority Support & Updates</li>
                         </ul>
-                        <button class="btn btn-primary pricing-cta-btn" data-plan="byok" data-amount="10000">Get Package</button>
-                    </div>
-
-                    <!-- Pack 5 (Enterprise Package BYOK) -->
-                    <div class="pricing-card">
-                        <span class="pricing-tier">Enterprise Package</span>
-                        <div class="pricing-price-box">
-                            <span class="pricing-price">$2,499</span>
-                            <span class="pricing-period">/ year</span>
-                        </div>
-                        <p style="font-size: 13px; color: var(--text-muted);">Unrestricted access for large private equity and asset firms.</p>
-                        <ul class="pricing-features-list">
-                            <li style="color: var(--color-emerald); font-weight: 600;">25,000 Page Credits (+25% Bonus)</li>
-                            <li>PDF Text Layer Parsing</li>
-                            <li>Full Discrepancy Matrix</li>
-                            <li>Verbatim Quote Verification</li>
-                            <li>CSV Report Downloads</li>
-                            <li>24/7 Dedicated Support</li>
-                        </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="byok" data-amount="25000">Get Package</button>
+                        <button class="btn btn-primary pricing-cta-btn" data-plan="byok" data-amount="1299">Get Annual Plan</button>
                     </div>
                 </div>
             </section>
@@ -707,7 +651,7 @@
                     <label>Select Plan Type</label>
                     <div class="pricing-switcher-wrapper" style="display: flex; width: 100%; margin-top: 4px; margin-bottom: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); padding: 4px; border-radius: 30px;">
                         <button type="button" class="pricing-switch-btn active" id="buy-plan-hosted" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">Hosted SaaS Plan</button>
-                        <button type="button" class="pricing-switch-btn" id="buy-plan-byok" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">BYOB Plan (+25% Pages)</button>
+                        <button type="button" class="pricing-switch-btn" id="buy-plan-byok" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">BYOB Plan (Unlimited Pages)</button>
                     </div>
                     <div id="topup-current-balance-display" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 15px; text-align: center; background: rgba(255,255,255,0.02); padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.04);">
                         Current Balance: <strong style="color: var(--color-purple);" id="topup-balance-value">0 Hosted SaaS Pages</strong>
@@ -761,6 +705,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=1.0.7"></script>
+    <script src="app.js?v=1.0.8"></script>
 </body>
 </html>

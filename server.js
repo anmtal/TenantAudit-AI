@@ -68,9 +68,7 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                         let updateFields = {};
                         
                         if (planType === 'byok') {
-                            const isAnnual = (amt === 10000 || amt === 25000);
-                            const baseCredits = isAnnual ? 0 : (profile.byok_credits || 0);
-                            updateFields = { byok_credits: baseCredits + amt };
+                            updateFields = { byok_credits: amt };
                         } else {
                             const isAnnual = (amt === 8000 || amt === 20000);
                             const baseCredits = isAnnual ? 0 : (profile.credits || 0);
@@ -461,7 +459,9 @@ app.post('/api/create-checkout-session', async (req, res) => {
         // Dynamically compute absolute URL based on request headers (Vercel-safe)
         const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
         
-        const isSubscription = (price === 999.00 || price === 2499.00);
+        const isSubscription = (planType === 'byok') || (price === 999.00 || price === 2499.00);
+        const subscriptionInterval = (planType === 'byok' && price === 149.00) ? 'month' : 'year';
+        const displayAmount = (parseInt(amount, 10) >= 900000) ? 'Unlimited' : amount;
         
         const sessionParams = {
             payment_method_types: ['card'],
@@ -470,7 +470,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
                     currency: 'usd',
                     product_data: {
                         name: `${packageName} - LeaseAlign AI`,
-                        description: `Purchase of ${amount} page credits for ${planType === 'hosted' ? 'Hosted SaaS Plan' : 'BYOB Plan'}`,
+                        description: displayAmount === 'Unlimited' ? 'Unlimited pages subscription for BYOB connection mode' : `Purchase of ${amount} page credits for Hosted SaaS connection mode`,
                     },
                     unit_amount: priceInCents,
                 },
@@ -487,7 +487,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
         };
 
         if (isSubscription) {
-            sessionParams.line_items[0].price_data.recurring = { interval: 'year' };
+            sessionParams.line_items[0].price_data.recurring = { interval: subscriptionInterval };
             sessionParams.subscription_data = {
                 metadata: {
                     userId: userId,

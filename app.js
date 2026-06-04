@@ -236,9 +236,11 @@ function initializeApp() {
         } else {
             pageCredits = hostedCredits;
         }
-        creditsCountDisplay.textContent = pageCredits;
+        
+        const displayVal = pageCredits >= 900000 ? "Unlimited" : pageCredits;
+        creditsCountDisplay.textContent = displayVal;
         if (homeCreditsCount) {
-            homeCreditsCount.textContent = pageCredits;
+            homeCreditsCount.textContent = displayVal;
         }
         updateCreditsPillColor(pageCredits);
 
@@ -260,10 +262,12 @@ function initializeApp() {
         const topupBalanceValue = document.getElementById('topup-balance-value');
         if (topupBalanceValue) {
             if (selectedTopupPlan === 'byok') {
-                topupBalanceValue.textContent = `${byokCredits} BYOB Pages`;
+                const displayBal = byokCredits >= 900000 ? "Unlimited" : byokCredits;
+                topupBalanceValue.textContent = `${displayBal} BYOB Pages`;
                 topupBalanceValue.style.color = 'var(--color-emerald)';
             } else {
-                topupBalanceValue.textContent = `${hostedCredits} Hosted SaaS Pages`;
+                const displayBal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
+                topupBalanceValue.textContent = `${displayBal} Hosted SaaS Pages`;
                 topupBalanceValue.style.color = 'var(--color-purple)';
             }
         }
@@ -527,11 +531,8 @@ function initializeApp() {
                                     let updateFields = {};
                                     const amt = parseInt(amount, 10);
                                     if (planType === 'byok') {
-                                        const isAnnual = (amt === 10000 || amt === 25000);
-                                        const baseCredits = isAnnual ? 0 : (profile.byok_credits || 0);
-                                        const newByokCredits = baseCredits + amt;
-                                        updateFields = { byok_credits: newByokCredits };
-                                        byokCredits = newByokCredits;
+                                        updateFields = { byok_credits: amt };
+                                        byokCredits = amt;
                                     } else {
                                         const isAnnual = (amt === 8000 || amt === 20000);
                                         const baseCredits = isAnnual ? 0 : (profile.credits || 0);
@@ -565,7 +566,8 @@ function initializeApp() {
                                     // Clear URL parameters
                                     window.history.replaceState({}, document.title, window.location.pathname);
                                     
-                                    alert(`🎉 Payment Verified! Successfully added +${amount} credits to your account. Active plan set to ${planType.toUpperCase()}.`);
+                                    const displayAmt = amt >= 900000 ? "Unlimited" : `+${amount}`;
+                                    alert(`🎉 Payment Verified! Successfully activated your ${planType.toUpperCase()} plan with ${displayAmt} credits.`);
                                 } else {
                                     alert("Stripe Checkout verification failed: " + (data.error || "Unknown error"));
                                 }
@@ -881,11 +883,8 @@ function initializeApp() {
             buyPlanHosted.classList.remove('active');
             selectedTopupPlan = 'byok';
             creditsAmount.innerHTML = `
-                <option value="125" selected>Starter: 125 Pages ($49.00)</option>
-                <option value="625">Strip Center: 625 Pages ($149.00)</option>
-                <option value="1875">Neighborhood Center: 1875 Pages ($399.00)</option>
-                <option value="10000">Annual Package: 10,000 Pages ($999.00)</option>
-                <option value="25000">Enterprise Package: 25,000 Pages ($2,499.00)</option>
+                <option value="149" selected>BYOB Monthly: Unlimited Pages ($149.00/mo)</option>
+                <option value="1299">BYOB Annual: Unlimited Pages ($1,299.00/yr)</option>
             `;
             updateCreditsDisplay();
         });
@@ -905,19 +904,18 @@ function initializeApp() {
                     // Determine price and package name based on amount and plan type
                     let price = 49.00;
                     let packageName = "Starter Package";
+                    let checkoutAmount = 999999;
                     
                     if (selectedTopupPlan === 'hosted') {
+                        checkoutAmount = amount;
                         if (amount === 100) { price = 49.00; packageName = "Starter Package"; }
                         else if (amount === 500) { price = 149.00; packageName = "Strip Center Package"; }
                         else if (amount === 1500) { price = 399.00; packageName = "Neighborhood Center Package"; }
                         else if (amount === 8000) { price = 999.00; packageName = "Annual Package"; }
                         else if (amount === 20000) { price = 2499.00; packageName = "Enterprise Package"; }
                     } else {
-                        if (amount === 125) { price = 49.00; packageName = "Starter Package"; }
-                        else if (amount === 625) { price = 149.00; packageName = "Strip Center Package"; }
-                        else if (amount === 1875) { price = 399.00; packageName = "Neighborhood Center Package"; }
-                        else if (amount === 10000) { price = 999.00; packageName = "Annual Package"; }
-                        else if (amount === 25000) { price = 2499.00; packageName = "Enterprise Package"; }
+                        if (amount === 149) { price = 149.00; packageName = "BYOB Monthly Plan"; }
+                        else if (amount === 1299) { price = 1299.00; packageName = "BYOB Annual Plan"; }
                     }
 
                     creditsModal.classList.remove('active');
@@ -927,7 +925,7 @@ function initializeApp() {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            amount,
+                            amount: checkoutAmount,
                             planType: selectedTopupPlan,
                             userId: user.id,
                             price,
@@ -948,8 +946,7 @@ function initializeApp() {
                     }
                 } else {
                     if (selectedTopupPlan === 'byok') {
-                        const isAnnual = (amount === 10000 || amount === 25000);
-                        byokCredits = (isAnnual ? 0 : byokCredits) + amount;
+                        byokCredits = 999999;
                     } else {
                         const isAnnual = (amount === 8000 || amount === 20000);
                         hostedCredits = (isAnnual ? 0 : hostedCredits) + amount;
@@ -963,7 +960,8 @@ function initializeApp() {
                     updateCreditsDisplay();
                     
                     creditsModal.classList.remove('active');
-                    alert(`🎉 Offline Demo Mode: Successfully added +${amount} page credits and activated your ${selectedTopupPlan.toUpperCase()} Package!`);
+                    const displayAmt = selectedTopupPlan === 'byok' ? "Unlimited" : `+${amount}`;
+                    alert(`🎉 Offline Demo Mode: Successfully activated your ${selectedTopupPlan.toUpperCase()} plan with ${displayAmt} credits!`);
                 }
             } catch (err) {
                 console.error("Top up error:", err);
@@ -1530,13 +1528,16 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         
                         try {
                             if (supabase) {
-                                // Call RPC to deduct credits
+                                // Call RPC to deduct credits only if not unlimited
                                 const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                                const { error: deductErr } = await supabase.rpc('deduct_credits', { 
-                                    pages_to_deduct: pagesNeeded,
-                                    plan_mode: connectionMode 
-                                });
-                                if (deductErr) throw deductErr;
+                                const isUnlimited = (connectionMode === 'byok' && byokCredits >= 900000) || (connectionMode === 'hosted' && hostedCredits >= 900000);
+                                if (!isUnlimited) {
+                                    const { error: deductErr } = await supabase.rpc('deduct_credits', { 
+                                        pages_to_deduct: pagesNeeded,
+                                        plan_mode: connectionMode 
+                                    });
+                                    if (deductErr) throw deductErr;
+                                }
 
                                 // Log audit record to audits table
                                 const { error: logErr } = await supabase.from('audits').insert({
@@ -1799,11 +1800,14 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             try {
                 if (supabase) {
                     const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                    const { error: deductErr } = await supabase.rpc('deduct_credits', { 
-                        pages_to_deduct: totalPagesNeeded,
-                        plan_mode: connectionMode 
-                    });
-                    if (deductErr) throw deductErr;
+                    const isUnlimited = (connectionMode === 'byok' && byokCredits >= 900000) || (connectionMode === 'hosted' && hostedCredits >= 900000);
+                    if (!isUnlimited) {
+                        const { error: deductErr } = await supabase.rpc('deduct_credits', { 
+                            pages_to_deduct: totalPagesNeeded,
+                            plan_mode: connectionMode 
+                        });
+                        if (deductErr) throw deductErr;
+                    }
 
                     const { error: logErr } = await supabase.from('audits').insert({
                         tenant_name: auditData.metadata.tenantName,
@@ -1824,20 +1828,27 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     // Fallback mock mode
                     const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
                     if (connectionMode === 'byok') {
-                        byokCredits -= totalPagesNeeded;
-                        localStorage.setItem('ta_byok_credits', byokCredits);
+                        if (byokCredits < 900000) {
+                            byokCredits -= totalPagesNeeded;
+                            localStorage.setItem('ta_byok_credits', byokCredits);
+                        }
                     } else {
-                        hostedCredits -= totalPagesNeeded;
-                        localStorage.setItem('ta_hosted_credits', hostedCredits);
+                        if (hostedCredits < 900000) {
+                            hostedCredits -= totalPagesNeeded;
+                            localStorage.setItem('ta_hosted_credits', hostedCredits);
+                        }
                     }
                     updateCreditsDisplay();
                 }
                 
                 hideLoader();
+                const isUnlimited = (connectionMode === 'byok' && byokCredits >= 900000) || (connectionMode === 'hosted' && hostedCredits >= 900000);
                 if (connectionMode === 'byok') {
-                    alert(`🎉 Audit completed successfully using your custom API Key! Deducted ${totalPagesNeeded} page credits.`);
+                    const deductMsg = isUnlimited ? "" : ` Deducted ${totalPagesNeeded} page credits.`;
+                    alert(`🎉 Audit completed successfully using your custom API Key!${deductMsg}`);
                 } else {
-                    alert(`🎉 Audit completed successfully! Deducted ${totalPagesNeeded} page credits.`);
+                    const deductMsg = isUnlimited ? "" : ` Deducted ${totalPagesNeeded} page credits.`;
+                    alert(`🎉 Audit completed successfully!${deductMsg}`);
                 }
             } catch (err) {
                 console.error("Deduction/Logging error:", err);

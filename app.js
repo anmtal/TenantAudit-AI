@@ -408,17 +408,17 @@ function initializeApp() {
                 .single();
                 
             if (error) {
-                console.warn("Could not fetch profile fields, trying fallback select for credits only. Error:", error);
+                console.warn("Could not fetch profile fields, trying fallback select for credits and byok_credits. Error:", error);
                 const { data: fallbackData, error: fallbackError } = await supabase
                     .from('profiles')
-                    .select('credits')
+                    .select('credits, byok_credits')
                     .eq('id', user.id)
                     .single();
                 if (fallbackError) {
                     console.error("Error loading profile credits fallback:", fallbackError);
                     return;
                 }
-                profileData = { ...fallbackData, byok_credits: 0, active_session_id: null };
+                profileData = { ...fallbackData, active_session_id: null };
             } else {
                 profileData = data;
             }

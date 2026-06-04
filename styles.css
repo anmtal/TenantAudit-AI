@@ -119,6 +119,7 @@ h1, h2, h3, h4, h5, h6 {
     width: 32px;
     height: 32px;
     filter: drop-shadow(0 0 10px rgba(168, 85, 247, 0.45));
+    mix-blend-mode: screen;
 }
 
 .brand-text h1 {
@@ -1248,6 +1249,7 @@ select option {
     width: 48px;
     height: 48px;
     filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.5));
+    mix-blend-mode: screen;
 }
 
 .login-card h2 {

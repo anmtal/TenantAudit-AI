@@ -1857,16 +1857,10 @@ select option {
     transition: var(--transition-smooth);
 }
 
-.mode-toggle-btn.active[data-mode="hosted"] {
+.mode-toggle-btn.active {
     background: var(--color-purple);
     color: #ffffff;
     box-shadow: 0 0 10px rgba(168, 85, 247, 0.35);
-}
-
-.mode-toggle-btn.active[data-mode="byok"] {
-    background: var(--color-emerald);
-    color: #ffffff;
-    box-shadow: 0 0 10px rgba(16, 185, 129, 0.35);
 }
 
 

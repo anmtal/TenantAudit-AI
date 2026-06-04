@@ -64,6 +64,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const demoBtn = document.getElementById('demo-btn');
     const auditLoader = document.getElementById('audit-loader');
     const loaderStatusText = document.getElementById('loader-status-text');
+
+    // Disclaimer Modal Elements
+    const disclaimerModal = document.getElementById('disclaimer-modal');
+    const closeDisclaimerBtn = document.getElementById('close-disclaimer-btn');
+    const disclaimerAgreeCheckbox = document.getElementById('disclaimer-agree-checkbox');
+    const disclaimerCancelBtn = document.getElementById('disclaimer-cancel-btn');
+    const disclaimerProceedBtn = document.getElementById('disclaimer-proceed-btn');
     
     const resultsPanel = document.getElementById('results-panel');
     const uploadPanel = document.getElementById('upload-panel');
@@ -644,6 +651,32 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- Disclaimer Modal Event Listeners ---
+    if (closeDisclaimerBtn) {
+        closeDisclaimerBtn.addEventListener('click', () => {
+            disclaimerModal.classList.remove('active');
+        });
+    }
+    if (disclaimerCancelBtn) {
+        disclaimerCancelBtn.addEventListener('click', () => {
+            disclaimerModal.classList.remove('active');
+        });
+    }
+    if (disclaimerModal) {
+        disclaimerModal.addEventListener('click', (e) => {
+            if (e.target === disclaimerModal) {
+                disclaimerModal.classList.remove('active');
+            }
+        });
+    }
+    if (disclaimerAgreeCheckbox) {
+        disclaimerAgreeCheckbox.addEventListener('change', (e) => {
+            if (disclaimerProceedBtn) {
+                disclaimerProceedBtn.disabled = !e.target.checked;
+            }
+        });
+    }
+
     // --- Drag & Drop Upload Zone Configuration ---
     setupDragDropZone(leaseDropZone, leaseFileInput, 'lease');
     setupDragDropZone(estoppelDropZone, estoppelFileInput, 'estoppel');
@@ -749,6 +782,160 @@ document.addEventListener('DOMContentLoaded', () => {
             fileReader.onerror = () => reject(new Error("File page count reading failed"));
             fileReader.readAsArrayBuffer(file);
         });
+    }
+
+    // --- Scanned PDF (OCR) and Multi-Pass Parsing Utilities ---
+    function isScannedPDF(pages) {
+        if (!pages || pages.length === 0) return true;
+        const totalTextLen = pages.reduce((sum, p) => sum + (p.text ? p.text.trim().length : 0), 0);
+        const avgTextLen = totalTextLen / pages.length;
+        console.log(`[OCR Check] Average characters per page: ${avgTextLen.toFixed(1)}`);
+        return avgTextLen < 50;
+    }
+
+    async function loadPDFDocument(file) {
+        const fileReader = new FileReader();
+        return new Promise((resolve, reject) => {
+            fileReader.onload = async function() {
+                try {
+                    const typedarray = new Uint8Array(this.result);
+                    const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                    resolve(pdf);
+                } catch (e) {
+                    reject(e);
+                }
+            };
+            fileReader.onerror = () => reject(new Error("File loading failed"));
+            fileReader.readAsArrayBuffer(file);
+        });
+    }
+
+    async function renderPDFPageToImage(pdfDoc, pageNum) {
+        const page = await pdfDoc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        
+        await page.render({
+            canvasContext: context,
+            viewport: viewport
+        }).promise;
+        
+        return canvas.toDataURL('image/jpeg', 0.85);
+    }
+
+    async function extractDocumentFeatures(file, docType, connectionMode, apiProvider, llmModel, apiKey, onProgress) {
+        onProgress(0, 0, `Loading ${docType} document...`);
+        const pdfDoc = await loadPDFDocument(file);
+        const numPages = pdfDoc.numPages;
+        
+        // Step 1: Extract raw text first to determine if scanned
+        let pagesText = [];
+        for (let i = 1; i <= numPages; i++) {
+            onProgress(i, numPages, `Extracting raw text: Page ${i}/${numPages}`);
+            const page = await pdfDoc.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map(item => item.str).join(' ');
+            pagesText.push({ pageNum: i, text: pageText });
+        }
+        
+        const isScanned = isScannedPDF(pagesText);
+        console.log(`[OCR Check] ${docType} document isScanned: ${isScanned}`);
+        
+        if (!isScanned) {
+            // Text-extractable document: Pass 1 + Pass 2
+            let relevantPageNums = [];
+            if (numPages <= 5) {
+                // Small document, use all pages
+                relevantPageNums = Array.from({ length: numPages }, (_, i) => i + 1);
+            } else {
+                onProgress(0, 0, `Analyzing ${docType} layout & indices...`);
+                // Create lightweight snippets of all pages
+                const snippets = pagesText.map(p => `[Page ${p.pageNum}]\n${p.text.slice(0, 450)}`).join('\n\n');
+                const systemPromptOverride = `You are a document routing assistant. Given a list of page snippets from a commercial ${docType} document, you must identify the page numbers (1-indexed) that contain terms regarding: basic tenancy terms, rent schedules/base rent, renewal options, security deposit, guarantor, or landlord defaults.
+Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. Do not include any conversational intro or outro text.`;
+                const userPromptOverride = `Here are the snippets of each page in the document:\n\n${snippets}\n\nPlease identify the relevant page numbers.`;
+                
+                try {
+                    const routeRes = await callOpenAIToExtract("", docType, connectionMode, apiProvider, llmModel, apiKey, null, systemPromptOverride, userPromptOverride);
+                    console.log(`[Pass 1 Routing] ${docType} relevant pages returned:`, routeRes);
+                    if (routeRes && Array.isArray(routeRes.pageNumbers)) {
+                        relevantPageNums = routeRes.pageNumbers;
+                    } else if (Array.isArray(routeRes)) {
+                        relevantPageNums = routeRes;
+                    } else if (routeRes && typeof routeRes === 'object') {
+                        const arrKey = Object.keys(routeRes).find(k => Array.isArray(routeRes[k]));
+                        if (arrKey) relevantPageNums = routeRes[arrKey];
+                    }
+                } catch (e) {
+                    console.error(`[Pass 1 Routing Error] Failed to route ${docType}:`, e);
+                }
+                
+                // Fallback
+                if (!relevantPageNums || relevantPageNums.length === 0) {
+                    console.log(`[Pass 1 Fallback] Defaulting to first 5 pages for ${docType}`);
+                    relevantPageNums = Array.from({ length: Math.min(5, numPages) }, (_, i) => i + 1);
+                }
+            }
+            
+            // Pass 2: Extract text from only those relevant pages
+            const filtered = pagesText.filter(p => relevantPageNums.includes(p.pageNum));
+            const optimizedText = filtered.map(p => `--- PAGE ${p.pageNum} ---\n${p.text}`).join('\n\n');
+            return { isScanned: false, text: optimizedText, pagesUsed: relevantPageNums };
+        } else {
+            // Scanned document: Pass 1 + Pass 2 (Vision)
+            let relevantPageNums = [];
+            
+            // Pass 1: Render first 3 pages and send to vision route to locate Table of Contents / relevant pages
+            const numRoutingPages = Math.min(3, numPages);
+            const imageList = [];
+            for (let i = 1; i <= numRoutingPages; i++) {
+                onProgress(i, numRoutingPages, `Rendering preview page ${i}/${numRoutingPages} for OCR routing...`);
+                const base64Img = await renderPDFPageToImage(pdfDoc, i);
+                imageList.push(base64Img);
+            }
+            
+            const systemPromptOverride = `You are a document routing assistant for scanned PDF audits. Look at the images of pages 1-3. Identify if there is a Table of Contents (TOC) or Index. Based on the TOC or the content, identify the page numbers (1-indexed) in the document that likely contain: basic tenancy terms (premises size, tenant name, start/expiry date), rent schedule, renewal options, security deposit, guarantor, or landlord defaults.
+Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. Do not include any conversational intro or outro text. If no TOC is visible, return a default list of [1, 2, 3, 4, 5].`;
+            const userPromptOverride = `Identify relevant page numbers based on the Table of Contents or general structure.`;
+            
+            try {
+                const routeRes = await callOpenAIToExtract("", docType, connectionMode, apiProvider, llmModel, apiKey, imageList, systemPromptOverride, userPromptOverride);
+                console.log(`[Pass 1 Vision Routing] ${docType} relevant pages returned:`, routeRes);
+                if (routeRes && Array.isArray(routeRes.pageNumbers)) {
+                    relevantPageNums = routeRes.pageNumbers;
+                } else if (Array.isArray(routeRes)) {
+                    relevantPageNums = routeRes;
+                } else if (routeRes && typeof routeRes === 'object') {
+                    const arrKey = Object.keys(routeRes).find(k => Array.isArray(routeRes[k]));
+                    if (arrKey) relevantPageNums = routeRes[arrKey];
+                }
+            } catch (e) {
+                console.error(`[Pass 1 Vision Routing Error] Failed to route scanned ${docType}:`, e);
+            }
+            
+            if (!relevantPageNums || relevantPageNums.length === 0) {
+                console.log(`[Pass 1 Vision Fallback] Defaulting to first 5 pages for scanned ${docType}`);
+                relevantPageNums = Array.from({ length: Math.min(5, numPages) }, (_, i) => i + 1);
+            }
+            
+            // Pass 2: Render selected pages to base64 images
+            const finalImages = [];
+            const validPageNums = relevantPageNums.filter(num => num > 0 && num <= numPages);
+            // Limit to max 8 pages to protect user vision tokens limits
+            const limitedPageNums = validPageNums.slice(0, 8);
+            
+            for (let idx = 0; idx < limitedPageNums.length; idx++) {
+                const pageNum = limitedPageNums[idx];
+                onProgress(idx + 1, limitedPageNums.length, `Rendering page ${pageNum} for visual OCR audit...`);
+                const base64Img = await renderPDFPageToImage(pdfDoc, pageNum);
+                finalImages.push(base64Img);
+            }
+            
+            return { isScanned: true, images: finalImages, pagesUsed: limitedPageNums };
+        }
     }
 
     // --- Smart Text Slicing keyword index filter (Mitigates Technical Risk A) ---
@@ -944,11 +1131,167 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Action: Run Live AI Lease Audit ---
+    async function runLiveAudit() {
+        const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+        const apiProvider = localStorage.getItem('ta_api_provider') || 'openai';
+        const llmModel = localStorage.getItem('ta_llm_model') || 'gpt-4o-mini';
+        const apiKey = localStorage.getItem('ta_api_key');
+        
+        if (connectionMode === 'byok' && !apiKey) {
+            alert("⚙️ Please configure your connection API Key first. Click 'API Settings' in the header.");
+            settingsModal.classList.add('active');
+            return;
+        }
+
+        try {
+            showLoader("Assessing page count credits...");
+            
+            const leasePagesCount = await getPDFPageCount(filesState.lease);
+            const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);
+            const totalPagesNeeded = leasePagesCount + estoppelPagesCount;
+            
+            if (connectionMode !== 'byok' && pageCredits < totalPagesNeeded) {
+                hideLoader();
+                alert(`🚫 Insufficient page credits! This audit requires ${totalPagesNeeded} pages, but you only have ${pageCredits} pages left. Please top up your credits.`);
+                creditsModal.classList.add('active');
+                return;
+            }
+
+            // Step 1: Feature extract lease (determines if text or scanned, handles multi-pass OCR/routing)
+            const leaseResult = await extractDocumentFeatures(
+                filesState.lease,
+                'lease',
+                connectionMode,
+                apiProvider,
+                llmModel,
+                apiKey,
+                (curr, total, phase) => {
+                    if (phase.includes('Loading')) {
+                        showLoader(phase);
+                    } else if (phase.includes('raw text')) {
+                        showLoader(`Reading Lease PDF: Page ${curr}/${total}`);
+                    } else if (phase.includes('layout')) {
+                        showLoader("Routing relevant Lease pages...");
+                    } else if (phase.includes('scanned')) {
+                        showLoader("Routing scanned Lease layout (OCR)...");
+                    } else if (phase.includes('preview')) {
+                        showLoader(`Rendering Lease routing preview: Page ${curr}/${total}`);
+                    } else if (phase.includes('visual OCR')) {
+                        showLoader(`Rendering Lease for OCR extraction: Page ${curr}/${total}`);
+                    } else {
+                        showLoader(phase);
+                    }
+                }
+            );
+
+            // Step 2: Feature extract estoppel
+            const estoppelResult = await extractDocumentFeatures(
+                filesState.estoppel,
+                'estoppel',
+                connectionMode,
+                apiProvider,
+                llmModel,
+                apiKey,
+                (curr, total, phase) => {
+                    if (phase.includes('Loading')) {
+                        showLoader(phase);
+                    } else if (phase.includes('raw text')) {
+                        showLoader(`Reading Estoppel PDF: Page ${curr}/${total}`);
+                    } else if (phase.includes('layout')) {
+                        showLoader("Routing relevant Estoppel pages...");
+                    } else if (phase.includes('scanned')) {
+                        showLoader("Routing scanned Estoppel layout (OCR)...");
+                    } else if (phase.includes('preview')) {
+                        showLoader(`Rendering Estoppel routing preview: Page ${curr}/${total}`);
+                    } else if (phase.includes('visual OCR')) {
+                        showLoader(`Rendering Estoppel for OCR extraction: Page ${curr}/${total}`);
+                    } else {
+                        showLoader(phase);
+                    }
+                }
+            );
+
+            // Step 3: Run final analyses
+            showLoader("Analyzing Lease terms with AI...");
+            const leaseExtraction = await callOpenAIToExtract(
+                leaseResult.text || "",
+                'lease',
+                connectionMode,
+                apiProvider,
+                llmModel,
+                apiKey,
+                leaseResult.images || null
+            );
+            
+            showLoader("Analyzing Estoppel statements with AI...");
+            const estoppelExtraction = await callOpenAIToExtract(
+                estoppelResult.text || "",
+                'estoppel',
+                connectionMode,
+                apiProvider,
+                llmModel,
+                apiKey,
+                estoppelResult.images || null
+            );
+
+            showLoader("Auditing discrepancies...");
+            performAILinkedAudit(leaseExtraction, estoppelExtraction);
+            
+            // Deduct credits and log audit to Database
+            try {
+                if (supabase) {
+                    if (connectionMode !== 'byok') {
+                        const { error: deductErr } = await supabase.rpc('deduct_credits', { pages_to_deduct: totalPagesNeeded });
+                        if (deductErr) throw deductErr;
+                    }
+
+                    const { error: logErr } = await supabase.from('audits').insert({
+                        tenant_name: auditData.metadata.tenantName,
+                        lease_file: auditData.metadata.leaseFile,
+                        estoppel_file: auditData.metadata.estoppelFile,
+                        match_score: auditData.summary.matchScore,
+                        red_flags: auditData.summary.redFlags,
+                        monthly_rent: auditData.summary.monthlyRent,
+                        premises_sf: auditData.summary.premisesSf,
+                        expiry_date: auditData.summary.expiryDate,
+                        records: auditData.records
+                    });
+                    if (logErr) throw logErr;
+
+                    await loadUserProfileAndCredits();
+                    await loadAuditHistory();
+                } else {
+                    // Fallback mock mode
+                    if (connectionMode !== 'byok') {
+                        pageCredits -= totalPagesNeeded;
+                        localStorage.setItem('ta_page_credits', pageCredits);
+                        creditsCountDisplay.textContent = pageCredits;
+                        updateCreditsPillColor(pageCredits);
+                    }
+                }
+                
+                hideLoader();
+                if (connectionMode === 'byok') {
+                    alert("🎉 Audit completed successfully using your custom API Key!");
+                } else {
+                    alert(`🎉 Audit completed successfully! Deducted ${totalPagesNeeded} page credits.`);
+                }
+            } catch (err) {
+                console.error("Deduction/Logging error:", err);
+                hideLoader();
+                alert(`🚫 Audit finished, but database update failed: ${err.message}`);
+            }
+            
+        } catch (err) {
+            console.error(err);
+            hideLoader();
+            alert(`🚫 AI Extraction Error: ${err.message}\n\nPlease check your configuration, network, or server status.`);
+        }
+    }
+
     if (startAuditBtn) {
-        startAuditBtn.addEventListener('click', async () => {
+        startAuditBtn.addEventListener('click', () => {
             const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-            const apiProvider = localStorage.getItem('ta_api_provider') || 'openai';
-            const llmModel = localStorage.getItem('ta_llm_model') || 'gpt-4o-mini';
             const apiKey = localStorage.getItem('ta_api_key');
             
             if (connectionMode === 'byok' && !apiKey) {
@@ -957,107 +1300,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            try {
-                showLoader("Assessing page count credits...");
-                
-                const leasePagesCount = await getPDFPageCount(filesState.lease);
-                const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);
-                const totalPagesNeeded = leasePagesCount + estoppelPagesCount;
-                
-                if (connectionMode !== 'byok' && pageCredits < totalPagesNeeded) {
-                    hideLoader();
-                    alert(`🚫 Insufficient page credits! This audit requires ${totalPagesNeeded} pages, but you only have ${pageCredits} pages left. Please top up your credits.`);
-                    creditsModal.classList.add('active');
-                    return;
-                }
+            // Open disclaimer modal
+            if (disclaimerAgreeCheckbox) disclaimerAgreeCheckbox.checked = false;
+            if (disclaimerProceedBtn) disclaimerProceedBtn.disabled = true;
+            if (disclaimerModal) disclaimerModal.classList.add('active');
+        });
+    }
 
-                showLoader("Reading Lease PDF pages...");
-                const leasePages = await extractTextFromPDF(filesState.lease, (curr, total) => {
-                    showLoader(`Extracting Lease text: Page ${curr}/${total}`);
-                });
-                
-                showLoader("Reading Estoppel PDF pages...");
-                const estoppelPages = await extractTextFromPDF(filesState.estoppel, (curr, total) => {
-                    showLoader(`Extracting Estoppel text: Page ${curr}/${total}`);
-                });
-
-                showLoader("Optimizing prompt context length...");
-                const leaseSliced = sliceOptimizedPages(leasePages);
-                const estoppelSliced = sliceOptimizedPages(estoppelPages);
-
-                showLoader("Analyzing Lease terms with AI...");
-                const leaseExtraction = await callOpenAIToExtract(leaseSliced, 'lease', connectionMode, apiProvider, llmModel, apiKey);
-                
-                showLoader("Analyzing Estoppel statements with AI...");
-                const estoppelExtraction = await callOpenAIToExtract(estoppelSliced, 'estoppel', connectionMode, apiProvider, llmModel, apiKey);
-
-                showLoader("Auditing discrepancies...");
-                performAILinkedAudit(leaseExtraction, estoppelExtraction);
-                
-                // Deduct credits and log audit to Database
-                try {
-                    if (supabase) {
-                        if (connectionMode !== 'byok') {
-                            const { error: deductErr } = await supabase.rpc('deduct_credits', { pages_to_deduct: totalPagesNeeded });
-                            if (deductErr) throw deductErr;
-                        }
-
-                        const { error: logErr } = await supabase.from('audits').insert({
-                            tenant_name: auditData.metadata.tenantName,
-                            lease_file: auditData.metadata.leaseFile,
-                            estoppel_file: auditData.metadata.estoppelFile,
-                            match_score: auditData.summary.matchScore,
-                            red_flags: auditData.summary.redFlags,
-                            monthly_rent: auditData.summary.monthlyRent,
-                            premises_sf: auditData.summary.premisesSf,
-                            expiry_date: auditData.summary.expiryDate,
-                            records: auditData.records
-                        });
-                        if (logErr) throw logErr;
-
-                        await loadUserProfileAndCredits();
-                        await loadAuditHistory();
-                    } else {
-                        // Fallback mock mode
-                        if (connectionMode !== 'byok') {
-                            pageCredits -= totalPagesNeeded;
-                            localStorage.setItem('ta_page_credits', pageCredits);
-                            creditsCountDisplay.textContent = pageCredits;
-                            updateCreditsPillColor(pageCredits);
-                        }
-                    }
-                    
-                    hideLoader();
-                    if (connectionMode === 'byok') {
-                        alert("🎉 Audit completed successfully using your custom API Key!");
-                    } else {
-                        alert(`🎉 Audit completed successfully! Deducted ${totalPagesNeeded} page credits.`);
-                    }
-                } catch (err) {
-                    console.error("Deduction/Logging error:", err);
-                    hideLoader();
-                    alert(`🚫 Audit finished, but database update failed: ${err.message}`);
-                }
-                
-            } catch (err) {
-                console.error(err);
-                hideLoader();
-                alert(`🚫 AI Extraction Error: ${err.message}\n\nPlease check your configuration, network, or server status.`);
-            }
+    if (disclaimerProceedBtn) {
+        disclaimerProceedBtn.addEventListener('click', () => {
+            if (disclaimerModal) disclaimerModal.classList.remove('active');
+            runLiveAudit();
         });
     }
 
     // --- API Calls Router (Secure CORS Proxy via Backend) ---
-    async function callOpenAIToExtract(text, docType, connectionMode, provider, model, apiKey) {
+    async function callOpenAIToExtract(text, docType, connectionMode, provider, model, apiKey, images = null, systemPromptOverride = null, userPromptOverride = null) {
         // Build payload based on mode. 
         // In Hosted SaaS mode, we run OpenAI's high-tier 'gpt-4o' under our server key.
         const payload = {
             text: text,
+            images: images,
             docType: docType,
             connectionMode: connectionMode,
             provider: connectionMode === 'hosted' ? 'openai' : provider,
             model: connectionMode === 'hosted' ? 'gpt-4o' : model,
-            apiKey: connectionMode === 'hosted' ? null : apiKey
+            apiKey: connectionMode === 'hosted' ? null : apiKey,
+            systemPromptOverride: systemPromptOverride,
+            userPromptOverride: userPromptOverride
         };
 
         const response = await fetch("/api/audit", {

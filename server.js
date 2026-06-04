@@ -27,10 +27,10 @@ app.get('/api/config', (req, res) => {
 // Route to handle dynamic LLM provider extraction proxy
 app.post('/api/audit', async (req, res) => {
     try {
-        const { text, docType, connectionMode, provider, model, apiKey: userKey } = req.body;
+        const { text, images, docType, connectionMode, provider, model, apiKey: userKey, systemPromptOverride, userPromptOverride } = req.body;
         
-        if (!text || !docType) {
-            return res.status(400).json({ error: "Missing required fields: text, docType" });
+        if ((!text && !images) || !docType) {
+            return res.status(400).json({ error: "Missing required fields: text or images, and docType" });
         }
 
         // Determine which API key to use
@@ -58,8 +58,8 @@ app.post('/api/audit', async (req, res) => {
         }
 
         // System prompt for all LLM providers
-        const systemPrompt = `You are an expert commercial real estate due-diligence legal auditor.
-Your job is to read the raw text of a commercial ${docType} contract and extract key terms with 100% precision.
+        const systemPrompt = systemPromptOverride || `You are an expert commercial real estate due-diligence legal auditor.
+Your job is to read the raw text or images of a commercial ${docType} contract and extract key terms with 100% precision.
 You must output a JSON object containing the exact fields and the verbatim quote proving the value.
 
 CRITICAL: You must output ONLY a valid JSON object. Do not include any conversational intro or outro text. If any extracted value or verbatim quote contains double quotes (") or newlines, you MUST escape them as \\" and \\n respectively so that the output remains a syntactically valid JSON string.
@@ -79,16 +79,42 @@ Return JSON in this EXACT structure:
   "landlordDefault": { "value": "Extracted landlord defaults/breaches or 'Not Mentioned'", "quote": "Verbatim quote showing this" }
 }`;
 
-        const userPrompt = `Here is the raw text extracted from the commercial ${docType} document:
+        let userPrompt;
+        const hasImages = images && Array.isArray(images) && images.length > 0;
+        
+        if (userPromptOverride) {
+            userPrompt = userPromptOverride;
+        } else if (hasImages) {
+            userPrompt = `Here are the rendered image pages from the commercial ${docType} document. Please visually run OCR/transcribe on these pages and extract the required fields to return the JSON. Make sure to find verbatim text snippets as quotes.`;
+        } else {
+            userPrompt = `Here is the raw text extracted from the commercial ${docType} document:
 ======================================================================
 ${text}
 ======================================================================
 Please extract the required fields and return the JSON.`;
+        }
 
-        console.log(`[Audit Proxy] Running ${docType} audit via connection: ${connectionMode}, provider: ${activeProvider}, model: ${activeModel}`);
+        console.log(`[Audit Proxy] Running ${docType} audit via connection: ${connectionMode}, provider: ${activeProvider}, model: ${activeModel}, inputMode: ${hasImages ? "VISION" : "TEXT"}`);
 
         // Route calls to corresponding LLM provider
         if (activeProvider === 'openai') {
+            let messagesContent;
+            if (hasImages) {
+                messagesContent = [
+                    { type: "text", text: userPrompt }
+                ];
+                for (const img of images) {
+                    messagesContent.push({
+                        type: "image_url",
+                        image_url: {
+                            url: img
+                        }
+                    });
+                }
+            } else {
+                messagesContent = userPrompt;
+            }
+
             const response = await fetch("https://api.openai.com/v1/chat/completions", {
                 method: "POST",
                 headers: {
@@ -99,7 +125,7 @@ Please extract the required fields and return the JSON.`;
                     model: activeModel,
                     messages: [
                         { role: "system", content: systemPrompt },
-                        { role: "user", content: userPrompt }
+                        { role: "user", content: messagesContent }
                     ],
                     response_format: { type: "json_object" },
                     temperature: 0.1
@@ -117,6 +143,30 @@ Please extract the required fields and return the JSON.`;
         } 
         
         else if (activeProvider === 'anthropic') {
+            let messagesContent;
+            if (hasImages) {
+                messagesContent = [
+                    { type: "text", text: userPrompt }
+                ];
+                for (const img of images) {
+                    const match = img.match(/^data:(image\/\w+);base64,(.+)$/);
+                    if (match) {
+                        const mediaType = match[1];
+                        const base64Data = match[2];
+                        messagesContent.push({
+                            type: "image",
+                            source: {
+                                type: "base64",
+                                media_type: mediaType,
+                                data: base64Data
+                            }
+                        });
+                    }
+                }
+            } else {
+                messagesContent = [{ type: "text", text: userPrompt }];
+            }
+
             // Anthropic Claude Messages API
             const response = await fetch("https://api.anthropic.com/v1/messages", {
                 method: "POST",
@@ -130,7 +180,7 @@ Please extract the required fields and return the JSON.`;
                     max_tokens: 4000,
                     system: systemPrompt,
                     messages: [
-                        { role: "user", content: userPrompt }
+                        { role: "user", content: messagesContent }
                     ],
                     temperature: 0.1
                 })
@@ -164,7 +214,6 @@ Please extract the required fields and return the JSON.`;
                 // Attempt simple automatic JSON fix-ups:
                 try {
                     // Try to escape any unescaped double quotes inside quote fields:
-                    // Looks for quotes not preceded by backslash, colon, comma, curly brace or square bracket
                     const rescuedContent = cleanContent
                         .replace(/(?<![:{\[,])"(?![:}\],])/g, '\\"');
                     extractedData = JSON.parse(rescuedContent);
@@ -180,6 +229,23 @@ Please extract the required fields and return the JSON.`;
         } 
         
         else if (activeProvider === 'gemini') {
+            let parts = [{ text: userPrompt }];
+            if (hasImages) {
+                for (const img of images) {
+                    const match = img.match(/^data:(image\/\w+);base64,(.+)$/);
+                    if (match) {
+                        const mimeType = match[1];
+                        const base64Data = match[2];
+                        parts.push({
+                            inlineData: {
+                                mimeType: mimeType,
+                                data: base64Data
+                            }
+                        });
+                    }
+                }
+            }
+
             // Google Gemini generateContent API (supports json output mime type)
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${activeKey}`;
             const response = await fetch(url, {
@@ -189,7 +255,7 @@ Please extract the required fields and return the JSON.`;
                 },
                 body: JSON.stringify({
                     contents: [
-                        { parts: [{ text: userPrompt }] }
+                        { parts: parts }
                     ],
                     systemInstruction: {
                         parts: [{ text: systemPrompt }]
@@ -213,6 +279,9 @@ Please extract the required fields and return the JSON.`;
         } 
         
         else if (activeProvider === 'deepseek') {
+            if (hasImages) {
+                return res.status(400).json({ error: "DeepSeek does not support vision/OCR audits. Please select OpenAI, Anthropic, or Gemini in settings." });
+            }
             // DeepSeek OpenAI-compatible API proxy
             const response = await fetch("https://api.deepseek.com/chat/completions", {
                 method: "POST",

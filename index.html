@@ -560,6 +560,33 @@
             </form>
         </div>
     </div>
+    
+    <!-- 6. AUDIT LEGAL DISCLAIMER MODAL -->
+    <div class="modal-overlay" id="disclaimer-modal">
+        <div class="modal-card disclaimer-card">
+            <button class="modal-close-btn" id="close-disclaimer-btn">&times;</button>
+            <div class="modal-title-wrapper">
+                <h3>⚖️ Legal Disclaimer & Terms of Use</h3>
+                <p>Please review and confirm our terms before running the automated audit:</p>
+            </div>
+            <div class="disclaimer-body">
+                <p>TenantAudit AI is an AI-assisted document parsing assistant. By clicking "Accept & Start Audit", you agree that:</p>
+                <ul>
+                    <li>This analysis is performed automatically by artificial intelligence and does not constitute professional legal, accounting, or real estate advisory services.</li>
+                    <li>LLMs can hallucinate; you are solely responsible for verifying the accuracy of all extracted terms against original document pages.</li>
+                    <li>Our total liability is limited strictly to the fees paid by you in the preceding 12 months.</li>
+                </ul>
+            </div>
+            <div class="form-group checkbox-group">
+                <input type="checkbox" id="disclaimer-agree-checkbox">
+                <label for="disclaimer-agree-checkbox">I understand and confirm I will verify all AI comparison results against original document pages.</label>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" id="disclaimer-cancel-btn">Cancel</button>
+                <button type="button" class="btn btn-primary" id="disclaimer-proceed-btn" disabled>Accept & Start Audit</button>
+            </div>
+        </div>
+    </div>
 
     <script src="app.js?v=1.0.4"></script>
 </body>

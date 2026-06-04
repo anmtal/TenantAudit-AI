@@ -12,6 +12,83 @@ const PORT = process.env.PORT || 8000;
 
 // Middleware
 app.use(cors());
+
+// Stripe Webhook Endpoint (MUST be defined before express.json() to capture raw body Buffer)
+app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    let event;
+
+    try {
+        if (!stripe) throw new Error("Stripe is not configured");
+        const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+        if (webhookSecret && sig) {
+            event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+        } else {
+            // Fallback for local development
+            event = JSON.parse(req.body);
+        }
+    } catch (err) {
+        console.error("Webhook signature verification failed:", err.message);
+        return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    if (event.type === 'invoice.payment_succeeded') {
+        const invoice = event.data.object;
+        if (invoice.subscription) {
+            try {
+                const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+                const { userId, planType, amount } = subscription.metadata;
+                
+                if (userId && planType && amount) {
+                    console.log(`Processing subscription renewal for user ${userId}: plan ${planType}, amount ${amount}`);
+                    
+                    const { createClient } = require('@supabase/supabase-js');
+                    const supabaseUrl = process.env.SUPABASE_URL;
+                    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+                    
+                    if (supabaseUrl && supabaseServiceKey) {
+                        const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+                        const { data: profile, error: fetchErr } = await supabaseAdmin
+                            .from('profiles')
+                            .select('credits, byok_credits')
+                            .eq('id', userId)
+                            .single();
+                            
+                        if (fetchErr) throw fetchErr;
+                        
+                        const amt = parseInt(amount, 10);
+                        let updateFields = {};
+                        
+                        if (planType === 'byok') {
+                            const isAnnual = (amt === 10000 || amt === 25000);
+                            const baseCredits = isAnnual ? 0 : (profile.byok_credits || 0);
+                            updateFields = { byok_credits: baseCredits + amt };
+                        } else {
+                            const isAnnual = (amt === 8000 || amt === 20000);
+                            const baseCredits = isAnnual ? 0 : (profile.credits || 0);
+                            updateFields = { credits: baseCredits + amt };
+                        }
+                        
+                        const { error: updateErr } = await supabaseAdmin
+                            .from('profiles')
+                            .update(updateFields)
+                            .eq('id', userId);
+                            
+                        if (updateErr) throw updateErr;
+                        console.log(`Successfully credited ${amt} pages to user ${userId} via webhook.`);
+                    } else {
+                        console.warn("Supabase Service Role Key or URL not configured on backend. Webhook renewal skipped.");
+                    }
+                }
+            } catch (err) {
+                console.error("Error processing invoice payment success webhook:", err);
+            }
+        }
+    }
+
+    res.json({ received: true });
+});
+
 app.use(express.json({ limit: '10mb' })); // Support larger text inputs
 
 // Serve static frontend files from current directory
@@ -340,7 +417,9 @@ app.post('/api/create-checkout-session', async (req, res) => {
         // Dynamically compute absolute URL based on request headers (Vercel-safe)
         const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
         
-        const session = await stripe.checkout.sessions.create({
+        const isSubscription = (price === 999.00 || price === 2499.00);
+        
+        const sessionParams = {
             payment_method_types: ['card'],
             line_items: [{
                 price_data: {
@@ -353,7 +432,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
                 },
                 quantity: 1,
             }],
-            mode: 'payment',
+            mode: isSubscription ? 'subscription' : 'payment',
             metadata: {
                 userId: userId,
                 planType: planType,
@@ -361,7 +440,20 @@ app.post('/api/create-checkout-session', async (req, res) => {
             },
             success_url: `${origin}/?checkout_success=true&session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${origin}/?checkout_cancel=true`,
-        });
+        };
+
+        if (isSubscription) {
+            sessionParams.line_items[0].price_data.recurring = { interval: 'year' };
+            sessionParams.subscription_data = {
+                metadata: {
+                    userId: userId,
+                    planType: planType,
+                    amount: amount.toString()
+                }
+            };
+        }
+
+        const session = await stripe.checkout.sessions.create(sessionParams);
         
         res.json({ id: session.id, url: session.url, mode: 'stripe' });
     } catch (err) {

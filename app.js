@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginErrorMsg = document.getElementById('login-error-msg');
     const loginToHomeLink = document.getElementById('login-to-home-link');
     const logoutBtn = document.getElementById('logout-btn');
+    const homeLogoutBtn = document.getElementById('home-logout-btn');
     
     // Auth Toggle selectors
     const authToggleLink = document.getElementById('auth-toggle-link');
@@ -155,6 +156,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (heroGetStartedBtn) {
             heroGetStartedBtn.textContent = isLoggedIn ? 'Go to Dashboard' : 'Launch Platform Free';
+        }
+        if (homeLogoutBtn) {
+            homeLogoutBtn.style.display = isLoggedIn ? 'flex' : 'none';
         }
     }
 
@@ -746,19 +750,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const handleLogout = async () => {
+        if (supabase) {
+            await supabase.auth.signOut();
+        } else {
+            localStorage.setItem('ta_logged_in', 'false');
+            localStorage.removeItem('ta_user_email');
+            isLoggedIn = false;
+            userEmail = '';
+            showView('home');
+            updateNavUI();
+        }
+    };
+
     if (logoutBtn) {
-        logoutBtn.addEventListener('click', async () => {
-            if (supabase) {
-                await supabase.auth.signOut();
-            } else {
-                localStorage.setItem('ta_logged_in', 'false');
-                localStorage.removeItem('ta_user_email');
-                isLoggedIn = false;
-                userEmail = '';
-                showView('home');
-                updateNavUI();
-            }
-        });
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+
+    if (homeLogoutBtn) {
+        homeLogoutBtn.addEventListener('click', handleLogout);
     }
 
     // Credits Modal Handlers

@@ -590,6 +590,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <option value="100" selected>Starter: 100 Pages ($49.00)</option>
                 <option value="500">Strip Center: 500 Pages ($149.00)</option>
                 <option value="1500">Neighborhood Center: 1500 Pages ($399.00)</option>
+                <option value="8000">Annual Retainer: 8,000 Pages ($999.00)</option>
+                <option value="20000">Enterprise Retainer: 20,000 Pages ($2,499.00)</option>
             `;
         });
 
@@ -601,6 +603,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <option value="125" selected>Starter: 125 Pages ($49.00)</option>
                 <option value="625">Strip Center: 625 Pages ($149.00)</option>
                 <option value="1875">Neighborhood Center: 1875 Pages ($399.00)</option>
+                <option value="10000">Annual Retainer: 10,000 Pages ($999.00)</option>
+                <option value="25000">Enterprise Retainer: 25,000 Pages ($2,499.00)</option>
             `;
         });
     }

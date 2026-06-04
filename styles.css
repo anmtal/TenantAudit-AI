@@ -1151,28 +1151,72 @@ select option {
 }
 
 .security-card {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 32px;
+    align-items: center;
     background: linear-gradient(135deg, rgba(20, 20, 25, 0.8) 0%, rgba(10, 10, 15, 0.8) 100%);
     border: 1px solid rgba(6, 182, 212, 0.2);
     border-radius: var(--border-radius-lg);
-    padding: 54px 44px;
-    text-align: center;
+    padding: 48px;
+    text-align: left;
     backdrop-filter: blur(12px);
     box-shadow: 0 10px 40px rgba(6, 182, 212, 0.03);
 }
 
-.security-card h4 {
-    font-size: 24px;
+.security-icon-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(6, 182, 212, 0.1);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    box-shadow: 0 0 20px rgba(6, 182, 212, 0.15);
     color: var(--color-cyan);
-    margin-bottom: 16px;
+}
+
+.security-icon-wrapper svg,
+.security-icon-wrapper i {
+    width: 36px;
+    height: 36px;
+    stroke-width: 2px;
+}
+
+.security-info {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.security-card h4 {
+    font-size: 28px;
+    color: var(--color-cyan);
+    margin: 0;
+    font-weight: 700;
 }
 
 .security-card p {
-    font-size: 17px;
+    font-size: 19px;
     color: var(--text-secondary);
-    max-width: 840px;
-    margin: 0 auto;
     line-height: 1.7;
+    margin: 0;
 }
+
+/* Mobile responsive fallback */
+@media (max-width: 768px) {
+    .security-card {
+        grid-template-columns: 1fr;
+        text-align: center;
+        gap: 24px;
+        padding: 36px 24px;
+    }
+    .security-icon-wrapper {
+        margin: 0 auto;
+    }
+}
+
 
 /* --- Login View --- */
 .login-container {

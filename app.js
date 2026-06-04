@@ -412,26 +412,55 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Pricing Switcher Tab Toggle Logic
-    const switchPaygBtn = document.getElementById('switch-payg');
-    const switchSubsBtn = document.getElementById('switch-subs');
-    const paygGrid = document.getElementById('payg-grid');
-    const subsGrid = document.getElementById('subs-grid');
+    const switchHostedBtn = document.getElementById('switch-hosted');
+    const switchByokBtn = document.getElementById('switch-byok');
+    const hostedGrid = document.getElementById('hosted-grid');
+    const byokGrid = document.getElementById('byok-grid');
 
-    if (switchPaygBtn && switchSubsBtn && paygGrid && subsGrid) {
-        switchPaygBtn.addEventListener('click', () => {
-            switchPaygBtn.classList.add('active');
-            switchSubsBtn.classList.remove('active');
-            paygGrid.style.display = 'grid';
-            subsGrid.style.display = 'none';
+    if (switchHostedBtn && switchByokBtn && hostedGrid && byokGrid) {
+        switchHostedBtn.addEventListener('click', () => {
+            switchHostedBtn.classList.add('active');
+            switchByokBtn.classList.remove('active');
+            hostedGrid.style.display = 'grid';
+            byokGrid.style.display = 'none';
         });
 
-        switchSubsBtn.addEventListener('click', () => {
-            switchSubsBtn.classList.add('active');
-            switchPaygBtn.classList.remove('active');
-            paygGrid.style.display = 'none';
-            subsGrid.style.display = 'grid';
+        switchByokBtn.addEventListener('click', () => {
+            switchByokBtn.classList.add('active');
+            switchHostedBtn.classList.remove('active');
+            hostedGrid.style.display = 'none';
+            byokGrid.style.display = 'grid';
         });
     }
+
+    // Dynamic Pricing CTA Button Listeners
+    const pricingCtaBtns = document.querySelectorAll('.pricing-cta-btn');
+    pricingCtaBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!isLoggedIn) {
+                showView('login');
+            } else {
+                const plan = btn.getAttribute('data-plan');
+                const amount = btn.getAttribute('data-amount');
+                
+                // Show credits modal
+                creditsModal.classList.add('active');
+                
+                // Trigger plan switch and dropdown option selection
+                if (plan === 'hosted') {
+                    if (buyPlanHosted) {
+                        buyPlanHosted.click();
+                        creditsAmount.value = amount;
+                    }
+                } else if (plan === 'byok') {
+                    if (buyPlanByok) {
+                        buyPlanByok.click();
+                        creditsAmount.value = amount;
+                    }
+                }
+            }
+        });
+    });
 
 
     // Helper toggle binding function for login/signup link switcher
@@ -558,9 +587,9 @@ document.addEventListener('DOMContentLoaded', () => {
             buyPlanByok.classList.remove('active');
             selectedTopupPlan = 'hosted';
             creditsAmount.innerHTML = `
-                <option value="50" selected>+50 Pages ($25.00)</option>
-                <option value="100">+100 Pages ($45.00)</option>
-                <option value="500">+500 Pages ($180.00)</option>
+                <option value="100" selected>Starter: 100 Pages ($49.00)</option>
+                <option value="500">Strip Center: 500 Pages ($149.00)</option>
+                <option value="1500">Neighborhood Center: 1500 Pages ($399.00)</option>
             `;
         });
 
@@ -569,9 +598,9 @@ document.addEventListener('DOMContentLoaded', () => {
             buyPlanHosted.classList.remove('active');
             selectedTopupPlan = 'byok';
             creditsAmount.innerHTML = `
-                <option value="62" selected>+62 Pages ($25.00)</option>
-                <option value="125">+125 Pages ($45.00)</option>
-                <option value="625">+625 Pages ($180.00)</option>
+                <option value="125" selected>Starter: 125 Pages ($49.00)</option>
+                <option value="625">Strip Center: 625 Pages ($149.00)</option>
+                <option value="1875">Neighborhood Center: 1875 Pages ($399.00)</option>
             `;
         });
     }

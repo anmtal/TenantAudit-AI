@@ -1495,6 +1495,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             function normalizeVal(val) {
                 if (!val) return '';
                 let norm = val.toLowerCase();
+                // Strip parentheticals and brackets first, e.g. "(a Delaware corporation)"
+                norm = norm.replace(/\(.*?\)/g, '');
+                norm = norm.replace(/\[.*?\]/g, '');
                 // Remove apostrophes first so "int'l" -> "intl"
                 norm = norm.replace(/'/g, '');
                 // Replace remaining non-alphanumeric chars with spaces to preserve word boundaries
@@ -1536,6 +1539,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 status = "mismatch";
                 redFlags++;
             }
+
+            console.log(`[Audit Comparison] term: "${t.label}" | lease: "${lease.value}" (normalized: "${lVal}") | estoppel: "${estoppel.value}" (normalized: "${eVal}") | status: "${status}"`);
 
             records.push({
                 term: t.label,

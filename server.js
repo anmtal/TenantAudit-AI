@@ -13,6 +13,14 @@ const PORT = process.env.PORT || 8000;
 // Middleware
 app.use(cors());
 
+// Disable caching for all responses to ensure frontend/API are never cached
+app.use((req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+});
+
 // Stripe Webhook Endpoint (MUST be defined before express.json() to capture raw body Buffer)
 app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     const sig = req.headers['stripe-signature'];

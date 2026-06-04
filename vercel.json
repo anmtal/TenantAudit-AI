@@ -25,10 +25,12 @@
   "routes": [
     {
       "src": "/api/(.*)",
+      "headers": { "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate" },
       "dest": "server.js"
     },
     {
       "src": "/(.*)",
+      "headers": { "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate" },
       "dest": "/$1"
     }
   ]

@@ -403,7 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize Supabase from Config
     async function initSupabase() {
         try {
-            const res = await fetch('/api/config');
+            const res = await fetch('/api/config?t=' + Date.now());
             const config = await res.json();
             if (config.supabaseUrl && config.supabaseAnonKey && window.supabase) {
                 supabase = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
@@ -451,7 +451,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const sessionId = urlParams.get('session_id');
                             showLoader("Verifying Stripe payment...");
                             try {
-                                const response = await fetch(`/api/verify-checkout-session?session_id=${sessionId}`);
+                                const response = await fetch(`/api/verify-checkout-session?session_id=${sessionId}&t=` + Date.now());
                                 const data = await response.json();
                                 if (data.success) {
                                     const { amount, planType } = data.metadata;

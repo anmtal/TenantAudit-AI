@@ -320,6 +320,18 @@
                 </div>
 
                 <form id="login-form">
+                    <div class="form-group register-only" style="display: none;">
+                        <label for="register-first-name">First Name</label>
+                        <input type="text" id="register-first-name" class="text-input" placeholder="First Name">
+                    </div>
+                    <div class="form-group register-only" style="display: none;">
+                        <label for="register-last-name">Last Name</label>
+                        <input type="text" id="register-last-name" class="text-input" placeholder="Last Name">
+                    </div>
+                    <div class="form-group register-only" style="display: none;">
+                        <label for="register-company">Company</label>
+                        <input type="text" id="register-company" class="text-input" placeholder="Company Name">
+                    </div>
                     <div class="form-group">
                         <label for="login-email">Email Address</label>
                         <input type="email" id="login-email" class="text-input" placeholder="name@company.com" required value="contact@leasealign.io">
@@ -337,10 +349,6 @@
                     
                     <div class="auth-toggle-link" id="auth-toggle-container">
                         Don't have an account? <a href="#" id="auth-toggle-link">Sign Up</a>
-                    </div>
-                    
-                    <div class="login-hint" id="login-hint-box">
-                        <i data-lucide="lightbulb" class="inline-icon"></i> <strong>Quick Test:</strong> Click Sign In with prefilled demo credentials.
                     </div>
                 </form>
 
@@ -415,6 +423,9 @@
                             <p>Drag & drop or click to upload Lease PDF</p>
                         </div>
                         <div class="file-info" id="lease-file-info" style="display: none;">No file selected</div>
+                        <button type="button" class="btn btn-secondary remove-file-btn" id="remove-lease-file-btn">
+                            <i data-lucide="trash-2"></i> Remove File
+                        </button>
                         <input type="file" id="lease-file-input" class="file-input" accept=".pdf">
                     </div>
                     
@@ -426,6 +437,9 @@
                             <p>Drag & drop or click to upload Estoppel PDF</p>
                         </div>
                         <div class="file-info" id="estoppel-file-info" style="display: none;">No file selected</div>
+                        <button type="button" class="btn btn-secondary remove-file-btn" id="remove-estoppel-file-btn">
+                            <i data-lucide="trash-2"></i> Remove File
+                        </button>
                         <input type="file" id="estoppel-file-input" class="file-input" accept=".pdf">
                     </div>
                 </div>

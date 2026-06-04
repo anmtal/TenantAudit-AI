@@ -251,9 +251,29 @@ h1, h2, h3, h4, h5, h6 {
     position: relative;
 }
 
-.upload-zone:hover, .upload-zone.dragover {
-    border-color: var(--color-purple);
-    background: rgba(168, 85, 247, 0.04);
+.upload-zone, .upload-zone * {
+    cursor: pointer !important;
+}
+
+.remove-file-btn {
+    display: none;
+    padding: 6px 12px !important;
+    font-size: 11px !important;
+    margin-top: 8px;
+    border-color: rgba(239, 68, 68, 0.25) !important;
+    color: #fca5a5 !important;
+    background: rgba(239, 68, 68, 0.05) !important;
+    border-radius: 6px !important;
+    transition: var(--transition-smooth);
+    z-index: 10;
+    align-items: center;
+    gap: 6px;
+}
+
+.remove-file-btn:hover {
+    background: rgba(239, 68, 68, 0.15) !important;
+    border-color: rgba(239, 68, 68, 0.4) !important;
+    color: #f87171 !important;
 }
 
 .upload-zone.file-selected {

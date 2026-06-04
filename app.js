@@ -98,8 +98,10 @@ function initializeApp() {
     const loginTitle = document.getElementById('login-title');
     const loginSubtitle = document.getElementById('login-subtitle');
     const loginSubmitBtn = document.getElementById('login-submit-btn');
-    const loginHintBox = document.getElementById('login-hint-box');
     const authToggleContainer = document.getElementById('auth-toggle-container');
+    const registerFirstName = document.getElementById('register-first-name');
+    const registerLastName = document.getElementById('register-last-name');
+    const registerCompany = document.getElementById('register-company');
 
     const userEmailDisplay = document.getElementById('user-email-display');
     const creditsCountDisplay = document.getElementById('credits-count-display');
@@ -725,13 +727,23 @@ function initializeApp() {
                     loginTitle.textContent = "Create an Account";
                     loginSubtitle.textContent = "Sign up for LeaseAlign AI to start auditing commercial leases.";
                     loginSubmitBtn.textContent = "Register Account";
-                    loginHintBox.style.display = 'none';
+                    
+                    document.querySelectorAll('.register-only').forEach(el => el.style.display = 'block');
+                    if (registerFirstName) registerFirstName.required = true;
+                    if (registerLastName) registerLastName.required = true;
+                    if (registerCompany) registerCompany.required = true;
+                    
                     authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
                 } else {
                     loginTitle.textContent = "Sign In to LeaseAlign AI";
                     loginSubtitle.textContent = "Enter your credentials to access your transaction dashboard";
                     loginSubmitBtn.textContent = "Sign In";
-                    loginHintBox.style.display = 'block';
+                    
+                    document.querySelectorAll('.register-only').forEach(el => el.style.display = 'none');
+                    if (registerFirstName) registerFirstName.required = false;
+                    if (registerLastName) registerLastName.required = false;
+                    if (registerCompany) registerCompany.required = false;
+                    
                     authToggleContainer.innerHTML = 'Don\'t have an account? <a href="#" id="auth-toggle-link">Sign Up</a>';
                 }
                 setupAuthToggleListener(); // Recursively re-bind click listener on the new link
@@ -758,9 +770,20 @@ function initializeApp() {
             try {
                 if (supabase) {
                     if (isSignUpMode) {
+                        const firstName = registerFirstName ? registerFirstName.value.trim() : '';
+                        const lastName = registerLastName ? registerLastName.value.trim() : '';
+                        const company = registerCompany ? registerCompany.value.trim() : '';
+
                         const { data, error } = await supabase.auth.signUp({
                             email: email,
-                            password: password
+                            password: password,
+                            options: {
+                                data: {
+                                    first_name: firstName,
+                                    last_name: lastName,
+                                    company_name: company
+                                }
+                            }
                         });
                         if (error) throw error;
                         alert("🎉 Account created successfully! Please top up your page credits to begin auditing.");
@@ -1231,7 +1254,19 @@ function initializeApp() {
     function setupDragDropZone(zoneEl, inputEl, fileKey) {
         if (!zoneEl || !inputEl) return;
 
-        zoneEl.addEventListener('click', () => inputEl.click());
+        zoneEl.addEventListener('click', (e) => {
+            if (e.target.closest('.remove-file-btn')) return;
+            inputEl.click();
+        });
+
+        const removeBtn = document.getElementById(`remove-${fileKey}-file-btn`);
+        if (removeBtn) {
+            removeBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                clearFileSelection(fileKey, zoneEl, inputEl);
+            });
+        }
 
         zoneEl.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -1257,6 +1292,27 @@ function initializeApp() {
         });
     }
 
+    function clearFileSelection(fileKey, zoneEl, inputEl) {
+        filesState[fileKey] = null;
+        inputEl.value = '';
+        zoneEl.classList.remove('file-selected');
+        
+        const fileInfoEl = document.getElementById(`${fileKey}-file-info`);
+        if (fileInfoEl) {
+            fileInfoEl.textContent = 'No file selected';
+            fileInfoEl.style.display = 'none';
+        }
+        
+        const removeBtn = document.getElementById(`remove-${fileKey}-file-btn`);
+        if (removeBtn) {
+            removeBtn.style.display = 'none';
+        }
+        
+        if (startAuditBtn) {
+            startAuditBtn.disabled = true;
+        }
+    }
+
     function handleFileSelection(file, zoneEl, fileKey) {
         if (file.type !== 'application/pdf') {
             alert('🚫 Only text-based PDF files are supported.');
@@ -1269,6 +1325,11 @@ function initializeApp() {
         const fileInfoEl = document.getElementById(`${fileKey}-file-info`);
         fileInfoEl.textContent = `${file.name} (${formatBytes(file.size)})`;
         fileInfoEl.style.display = 'block';
+
+        const removeBtn = document.getElementById(`remove-${fileKey}-file-btn`);
+        if (removeBtn) {
+            removeBtn.style.display = 'inline-flex';
+        }
 
         // Check if both files are uploaded to enable the audit button
         if (filesState.lease && filesState.estoppel) {

@@ -116,9 +116,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .brand-logo img {
-    width: 44px;
-    height: 44px;
-    filter: drop-shadow(0 0 12px rgba(168, 85, 247, 0.45));
+    width: 64px;
+    height: 64px;
+    filter: drop-shadow(0 0 16px rgba(168, 85, 247, 0.45));
 }
 
 .brand-text h1 {
@@ -1245,9 +1245,9 @@ select option {
 }
 
 .login-logo {
-    width: 64px;
-    height: 64px;
-    filter: drop-shadow(0 0 16px rgba(168, 85, 247, 0.5));
+    width: 96px;
+    height: 96px;
+    filter: drop-shadow(0 0 24px rgba(168, 85, 247, 0.5));
 }
 
 .login-card h2 {

@@ -147,6 +147,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function updateNavUI() {
+        if (homeLoginBtn) {
+            homeLoginBtn.textContent = isLoggedIn ? 'Dashboard' : 'Log In';
+        }
+        if (heroGetStartedBtn) {
+            heroGetStartedBtn.textContent = isLoggedIn ? 'Go to Dashboard' : 'Launch Platform Free';
+        }
+    }
+
     function updateCreditsPillColor(credits) {
         if (!creditsTopupTrigger) return;
         creditsTopupTrigger.classList.remove('credits-low', 'credits-empty');
@@ -185,6 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
             isLoggedIn = false;
             showView('home');
         }
+        updateNavUI();
     }
 
     async function loadUserProfileAndCredits() {
@@ -347,6 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         userEmail = session.user.email;
                         userEmailDisplay.textContent = userEmail;
                         showView('dashboard');
+                        updateNavUI();
                         
                         // Load credits and past history from Supabase
                         await loadUserProfileAndCredits();
@@ -355,6 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         isLoggedIn = false;
                         userEmail = '';
                         showView('home');
+                        updateNavUI();
                     }
                 });
             } else {
@@ -368,12 +380,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Navigation triggers
-    if (homeLoginBtn) homeLoginBtn.addEventListener('click', () => showView('login'));
-    if (heroGetStartedBtn) heroGetStartedBtn.addEventListener('click', () => showView('login'));
-    if (loginToHomeLink) loginToHomeLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        showView('home');
-    });
+    if (homeLoginBtn) {
+        homeLoginBtn.addEventListener('click', () => {
+            if (isLoggedIn) {
+                showView('dashboard');
+            } else {
+                showView('login');
+            }
+        });
+    }
+    if (heroGetStartedBtn) {
+        heroGetStartedBtn.addEventListener('click', () => {
+            if (isLoggedIn) {
+                showView('dashboard');
+            } else {
+                showView('login');
+            }
+        });
+    }
+    if (loginToHomeLink) {
+        loginToHomeLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            showView('home');
+        });
+    }
+    const dashboardHomeBtn = document.getElementById('dashboard-home-btn');
+    if (dashboardHomeBtn) {
+        dashboardHomeBtn.addEventListener('click', () => {
+            showView('home');
+        });
+    }
 
     // Pricing Switcher Tab Toggle Logic
     const switchPaygBtn = document.getElementById('switch-payg');
@@ -463,6 +499,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     userEmailDisplay.textContent = userEmail;
                     loginErrorMsg.style.display = 'none';
                     showView('dashboard');
+                    updateNavUI();
                 }
             } catch (err) {
                 console.error("Auth error:", err);
@@ -485,6 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 isLoggedIn = false;
                 userEmail = '';
                 showView('home');
+                updateNavUI();
             }
         });
     }

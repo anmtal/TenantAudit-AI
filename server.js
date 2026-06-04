@@ -84,6 +84,42 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                 console.error("Error processing invoice payment success webhook:", err);
             }
         }
+    } else if (event.type === 'customer.subscription.deleted') {
+        const subscription = event.data.object;
+        const { userId, planType } = subscription.metadata || {};
+        
+        if (userId && planType) {
+            try {
+                console.log(`Processing subscription termination for user ${userId}: plan ${planType}`);
+                
+                const { createClient } = require('@supabase/supabase-js');
+                const supabaseUrl = process.env.SUPABASE_URL;
+                const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+                
+                if (supabaseUrl && supabaseServiceKey) {
+                    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+                    let updateFields = {};
+                    
+                    if (planType === 'byok') {
+                        updateFields = { byok_credits: 0 };
+                    } else {
+                        updateFields = { credits: 0 };
+                    }
+                    
+                    const { error: updateErr } = await supabaseAdmin
+                        .from('profiles')
+                        .update(updateFields)
+                        .eq('id', userId);
+                        
+                    if (updateErr) throw updateErr;
+                    console.log(`Successfully reset credits to 0 for user ${userId} via webhook due to cancellation/failure.`);
+                } else {
+                    console.warn("Supabase Service Role Key or URL not configured on backend. Webhook reset skipped.");
+                }
+            } catch (err) {
+                console.error("Error processing subscription deletion webhook:", err);
+            }
+        }
     }
 
     res.json({ received: true });

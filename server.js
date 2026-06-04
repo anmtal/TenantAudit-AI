@@ -5,6 +5,14 @@ const dotenv = require('dotenv');
 // Load environment variables
 dotenv.config();
 
+// Fix for Supabase Realtime in Node.js < 22 where WebSocket is not globally available
+global.WebSocket = require('ws');
+
+const { createClient } = require('@supabase/supabase-js');
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseAdmin = (supabaseUrl && supabaseServiceKey) ? createClient(supabaseUrl, supabaseServiceKey) : null;
+
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 
 const app = express();
@@ -160,6 +168,46 @@ app.post('/api/audit', async (req, res) => {
         let activeModel = model || 'gpt-4o-mini';
 
         if (connectionMode === 'hosted') {
+            // Validate that the request comes from an authenticated session with positive credit balance
+            if (supabaseAdmin) {
+                const authHeader = req.headers['authorization'];
+                if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                    return res.status(401).json({ error: "Unauthorized: Missing or invalid session token." });
+                }
+                const token = authHeader.substring(7).trim();
+                if (!token) {
+                    return res.status(401).json({ error: "Unauthorized: Empty session token." });
+                }
+                
+                // Retrieve user details using token
+                const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+                if (authError || !user) {
+                    console.error("[Auth Failure] Token verification failed:", authError?.message || "No user returned");
+                    return res.status(401).json({ error: "Unauthorized: Invalid or expired session token." });
+                }
+                
+                // Query user's credit balance
+                const { data: profile, error: profileErr } = await supabaseAdmin
+                    .from('profiles')
+                    .select('credits')
+                    .eq('id', user.id)
+                    .single();
+                    
+                if (profileErr) {
+                    console.error("[DB Failure] Failed to query profile credits:", profileErr.message);
+                    return res.status(500).json({ error: "Internal Server Error: Failed to retrieve page credits balance." });
+                }
+                
+                if (!profile || typeof profile.credits === 'undefined' || profile.credits <= 0) {
+                    console.warn(`[Blocked] User ${user.email} attempted hosted audit with insufficient credits: ${profile ? profile.credits : 'No profile'}`);
+                    return res.status(403).json({ error: "Forbidden: Insufficient page credits. Please top up your account." });
+                }
+                
+                console.log(`[Authorized] Hosted audit request by ${user.email} (${profile.credits} credits remaining)`);
+            } else {
+                console.warn("[Security Bypass] Supabase Admin client not configured. Proceeding without auth validation.");
+            }
+
             // Hosted SaaS Mode uses the server's private key and runs GPT-4o
             activeKey = process.env.OPENAI_API_KEY;
             activeProvider = 'openai';

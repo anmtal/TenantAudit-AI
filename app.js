@@ -1904,11 +1904,20 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             userPromptOverride: userPromptOverride
         };
 
+        const headers = {
+            "Content-Type": "application/json"
+        };
+
+        if (supabase) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                headers["Authorization"] = `Bearer ${session.access_token}`;
+            }
+        }
+
         const response = await fetch("/api/audit", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
+            headers: headers,
             body: JSON.stringify(payload)
         });
 

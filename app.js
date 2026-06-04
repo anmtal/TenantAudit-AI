@@ -306,7 +306,7 @@ function initializeApp() {
         const mode = localStorage.getItem('ta_connection_mode') || 'hosted';
 
         if (mode === 'byok') {
-            pageCredits = byokCredits;
+            pageCredits = 999999; // BYOB is always Unlimited page audits on our platform
         } else {
             pageCredits = hostedCredits;
         }
@@ -316,7 +316,23 @@ function initializeApp() {
         if (homeCreditsCount) {
             homeCreditsCount.textContent = displayVal;
         }
-        updateCreditsPillColor(pageCredits);
+
+        // Apply color styles for credits pill depending on mode
+        if (creditsTopupTrigger) {
+            if (mode === 'byok') {
+                creditsTopupTrigger.classList.remove('credits-low', 'credits-empty');
+                creditsTopupTrigger.style.color = 'var(--color-emerald)';
+                creditsTopupTrigger.style.borderColor = 'rgba(16, 185, 129, 0.25)';
+                creditsTopupTrigger.style.background = 'rgba(16, 185, 129, 0.08)';
+            } else {
+                creditsTopupTrigger.style.color = '';
+                creditsTopupTrigger.style.borderColor = '';
+                creditsTopupTrigger.style.background = '';
+                updateCreditsPillColor(pageCredits);
+            }
+        } else {
+            updateCreditsPillColor(pageCredits);
+        }
 
         // Sync header mode switcher toggle buttons
         const headerModeToggle = document.getElementById('header-mode-toggle');
@@ -332,12 +348,11 @@ function initializeApp() {
             });
         }
 
-        // Sync Top-up modal current balance display
+        // Sync Sync Top-up modal current balance display
         const topupBalanceValue = document.getElementById('topup-balance-value');
         if (topupBalanceValue) {
             if (selectedTopupPlan === 'byok') {
-                const displayBal = byokCredits >= 900000 ? "Unlimited" : byokCredits;
-                topupBalanceValue.textContent = `${displayBal} BYOB Pages`;
+                topupBalanceValue.textContent = `Unlimited BYOB Pages`;
                 topupBalanceValue.style.color = 'var(--color-emerald)';
             } else {
                 const displayBal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
@@ -1168,9 +1183,26 @@ function initializeApp() {
             
             // Update displayed credits count immediately when switching dropdown selection
             const selectedMode = e.target.value;
-            const tempCredits = selectedMode === 'byok' ? byokCredits : hostedCredits;
-            creditsCountDisplay.textContent = tempCredits;
-            updateCreditsPillColor(tempCredits);
+            const tempCredits = selectedMode === 'byok' ? 999999 : hostedCredits;
+            const displayVal = tempCredits >= 900000 ? "Unlimited" : tempCredits;
+            creditsCountDisplay.textContent = displayVal;
+            if (homeCreditsCount) {
+                homeCreditsCount.textContent = displayVal;
+            }
+            
+            if (creditsTopupTrigger) {
+                if (selectedMode === 'byok') {
+                    creditsTopupTrigger.classList.remove('credits-low', 'credits-empty');
+                    creditsTopupTrigger.style.color = 'var(--color-emerald)';
+                    creditsTopupTrigger.style.borderColor = 'rgba(16, 185, 129, 0.25)';
+                    creditsTopupTrigger.style.background = 'rgba(16, 185, 129, 0.08)';
+                } else {
+                    creditsTopupTrigger.style.color = '';
+                    creditsTopupTrigger.style.borderColor = '';
+                    creditsTopupTrigger.style.background = '';
+                    updateCreditsPillColor(tempCredits);
+                }
+            }
         });
     }
 

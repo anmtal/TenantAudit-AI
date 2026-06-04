@@ -1711,6 +1711,7 @@ select option {
 .pricing-period {
     font-size: 13px;
     color: var(--text-muted);
+    white-space: nowrap;
 }
 
 .pricing-features-list {

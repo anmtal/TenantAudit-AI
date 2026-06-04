@@ -1492,8 +1492,37 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             let status = "match";
             
             // Normalize values for comparison (handles variations, spaces, and defaults)
-            const lVal = lease.value.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const eVal = estoppel.value.toLowerCase().replace(/[^a-z0-9]/g, '');
+            function normalizeVal(val) {
+                if (!val) return '';
+                let norm = val.toLowerCase();
+                // Remove apostrophes first so "int'l" -> "intl"
+                norm = norm.replace(/'/g, '');
+                // Replace remaining non-alphanumeric chars with spaces to preserve word boundaries
+                norm = norm.replace(/[^a-z0-9\s]/g, ' ');
+                // Reduce multiple spaces to single spaces
+                norm = norm.replace(/\s+/g, ' ').trim();
+                
+                const abbreviations = {
+                    'intl': 'international',
+                    'corp': 'corporation',
+                    'inc': 'incorporated',
+                    'co': 'company',
+                    'ltd': 'limited',
+                    'llc': 'limited liability company',
+                    'lp': 'limited partnership',
+                    'assoc': 'association',
+                    'mfg': 'manufacturing',
+                    'univ': 'university',
+                    'dept': 'department'
+                };
+                
+                let words = norm.split(' ');
+                words = words.map(w => abbreviations[w] || w);
+                return words.join('');
+            }
+
+            const lVal = normalizeVal(lease.value);
+            const eVal = normalizeVal(estoppel.value);
 
             const isLMissing = lVal === 'notfound' || lVal === 'notmentioned' || lVal === '';
             const isEMissing = eVal === 'notfound' || eVal === 'notmentioned' || eVal === '';

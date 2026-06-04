@@ -170,12 +170,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateCreditsDisplay() {
         const mode = localStorage.getItem('ta_connection_mode') || 'hosted';
-        
-        // Update credits mode indicator in the pill
-        const modeDisplay = document.getElementById('credits-mode-display');
-        if (modeDisplay) {
-            modeDisplay.textContent = mode === 'byok' ? 'BYOB' : 'Hosted';
-        }
 
         if (mode === 'byok') {
             pageCredits = byokCredits;
@@ -468,12 +462,17 @@ document.addEventListener('DOMContentLoaded', () => {
                                     if (selectErr) throw selectErr;
                                     
                                     let updateFields = {};
+                                    const amt = parseInt(amount, 10);
                                     if (planType === 'byok') {
-                                        const newByokCredits = (profile.byok_credits || 0) + parseInt(amount, 10);
+                                        const isAnnual = (amt === 10000 || amt === 25000);
+                                        const baseCredits = isAnnual ? 0 : (profile.byok_credits || 0);
+                                        const newByokCredits = baseCredits + amt;
                                         updateFields = { byok_credits: newByokCredits };
                                         byokCredits = newByokCredits;
                                     } else {
-                                        const newHostedCredits = (profile.credits || 0) + parseInt(amount, 10);
+                                        const isAnnual = (amt === 8000 || amt === 20000);
+                                        const baseCredits = isAnnual ? 0 : (profile.credits || 0);
+                                        const newHostedCredits = baseCredits + amt;
                                         updateFields = { credits: newHostedCredits };
                                         hostedCredits = newHostedCredits;
                                     }
@@ -874,9 +873,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } else {
                     if (selectedTopupPlan === 'byok') {
-                        byokCredits += amount;
+                        const isAnnual = (amount === 10000 || amount === 25000);
+                        byokCredits = (isAnnual ? 0 : byokCredits) + amount;
                     } else {
-                        hostedCredits += amount;
+                        const isAnnual = (amount === 8000 || amount === 20000);
+                        hostedCredits = (isAnnual ? 0 : hostedCredits) + amount;
                     }
                     localStorage.setItem('ta_hosted_credits', hostedCredits);
                     localStorage.setItem('ta_byok_credits', byokCredits);

@@ -1794,7 +1794,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             );
 
             showLoader("Auditing discrepancies...");
-            performAILinkedAudit(leaseExtraction, estoppelExtraction);
+            await performAILinkedAudit(leaseExtraction, estoppelExtraction);
             
             // Deduct credits and log audit to Database
             try {
@@ -1932,7 +1932,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
 
     // --- Comparison Auditor Engine (Lease vs Estoppel) ---
-    function performAILinkedAudit(leaseJson, estoppelJson) {
+    async function performAILinkedAudit(leaseJson, estoppelJson) {
         const terms = [
             { key: "tenantName", label: "Tenant Name" },
             { key: "suiteNumber", label: "Suite / Unit Number" },
@@ -2023,7 +2023,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 redFlags++;
             }
 
-            console.log(`[Audit Comparison] term: "${t.label}" | lease: "${lease.value}" (normalized: "${lVal}") | estoppel: "${estoppel.value}" (normalized: "${eVal}") | status: "${status}"`);
+            console.log(`[Audit Comparison Baseline] term: "${t.label}" | lease: "${lease.value}" (normalized: "${lVal}") | estoppel: "${estoppel.value}" (normalized: "${eVal}") | status: "${status}"`);
 
             records.push({
                 term: t.label,
@@ -2031,17 +2031,18 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 estoppelVal: estoppel.value,
                 status: status,
                 leaseCite: lease.quote,
-                estoppelCite: estoppel.quote
+                estoppelCite: estoppel.quote,
+                verifiedReason: "Verified using local standard rules."
             });
         });
 
-        // Calculate score
-        const score = Math.round((matchCount / terms.length) * 100);
+        // Calculate baseline score
+        let score = Math.round((matchCount / terms.length) * 100);
 
         const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
         const apiProvider = localStorage.getItem('ta_api_provider') || 'openai';
         const llmModel = localStorage.getItem('ta_llm_model') || 'gpt-4o-mini';
-        const activeModelName = connectionMode === 'hosted' ? 'GPT-4o (Hosted)' : `${llmModel} (${apiProvider.toUpperCase()})`;
+        const activeModelName = connectionMode === 'hosted' ? 'Claude Sonnet (Hosted)' : `${llmModel} (${apiProvider.toUpperCase()})`;
 
         auditData = {
             metadata: {
@@ -2060,7 +2061,91 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             records: records
         };
 
+        // Render baseline instantly to the screen
         renderAuditResults();
+
+        // Perform semantic AI verification if connected
+        const apiKey = localStorage.getItem('ta_api_key');
+        const canVerify = connectionMode === 'hosted' || (connectionMode === 'byok' && apiKey);
+
+        if (canVerify) {
+            try {
+                console.log("[AI verification] Running semantic compliance comparison in background...");
+                showLoader("AI is verifying compliance audit...");
+                
+                const payload = {
+                    leaseJson,
+                    estoppelJson,
+                    connectionMode,
+                    provider: connectionMode === 'hosted' ? 'anthropic' : apiProvider,
+                    model: connectionMode === 'hosted' ? 'claude-sonnet-4-5-20250929' : llmModel,
+                    apiKey: connectionMode === 'hosted' ? null : apiKey
+                };
+                
+                const headers = {
+                    "Content-Type": "application/json"
+                };
+
+                if (supabase) {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (session) {
+                        headers["Authorization"] = `Bearer ${session.access_token}`;
+                    }
+                }
+
+                const response = await fetch("/api/compare", {
+                    method: "POST",
+                    headers: headers,
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    const aiReport = await response.json();
+                    console.log("[AI Verification Report]:", aiReport);
+                    
+                    let verifiedMatchCount = 0;
+                    let verifiedRedFlags = 0;
+                    
+                    // Merge verified statuses
+                    auditData.records = auditData.records.map(rec => {
+                        const t = terms.find(term => term.label === rec.term);
+                        if (t && aiReport[t.key]) {
+                            const aiField = aiReport[t.key];
+                            const status = aiField.status || rec.status;
+                            const reason = aiField.reason || "Verified semantically.";
+                            
+                            if (status === 'match') verifiedMatchCount++;
+                            else if (status === 'mismatch') verifiedRedFlags++;
+                            
+                            return {
+                                ...rec,
+                                status: status,
+                                verifiedReason: reason
+                            };
+                        } else {
+                            if (rec.status === 'match') verifiedMatchCount++;
+                            else if (rec.status === 'mismatch') verifiedRedFlags++;
+                            return rec;
+                        }
+                    });
+                    
+                    const verifiedScore = Math.round((verifiedMatchCount / terms.length) * 100);
+                    auditData.summary.matchScore = verifiedScore;
+                    auditData.summary.redFlags = verifiedRedFlags;
+                    
+                    // Re-render UI with premium AI-verified badges
+                    renderAuditResults();
+                    console.log("[AI Verification] Compliance audit successfully verified & refined semantically.");
+                } else {
+                    const errData = await response.json().catch(() => ({}));
+                    console.error("[AI Verification Failed] Backend returned status error:", errData.error || response.status);
+                }
+            } catch (e) {
+                console.error("[AI Verification Error] Network or client failure:", e);
+            } finally {
+                hideLoader();
+            }
+        }
     }
 
     // --- Render Results UI Panel ---

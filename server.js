@@ -208,14 +208,14 @@ app.post('/api/audit', async (req, res) => {
                 console.warn("[Security Bypass] Supabase Admin client not configured. Proceeding without auth validation.");
             }
 
-            // Hosted SaaS Mode uses the server's private key and runs GPT-4o
-            activeKey = process.env.OPENAI_API_KEY;
-            activeProvider = 'openai';
-            activeModel = 'gpt-4o'; // Server is configured to run gpt-4o as default
+            // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet
+            activeKey = process.env.ANTHROPIC_API_KEY;
+            activeProvider = 'anthropic';
+            activeModel = 'claude-sonnet-4-5-20250929'; // Server is configured to run Claude Sonnet as default
             
             if (!activeKey) {
                 return res.status(500).json({ 
-                    error: "SaaS OpenAI API Key is not configured on the backend server. Please switch to BYOK Mode in settings." 
+                    error: "SaaS Anthropic API Key is not configured on the backend server. Please switch to BYOK Mode in settings." 
                 });
             }
         } else {
@@ -488,6 +488,251 @@ Please extract the required fields and return the JSON.`;
         res.status(500).json({ error: error.message || "Internal server error" });
     }
 });
+
+// Route to handle AI-assisted compliance comparison of lease vs estoppel
+app.post('/api/compare', async (req, res) => {
+    try {
+        const { leaseJson, estoppelJson, connectionMode, provider, model, apiKey: userKey } = req.body;
+        
+        if (!leaseJson || !estoppelJson) {
+            return res.status(400).json({ error: "Missing required fields: leaseJson and estoppelJson" });
+        }
+
+        // Validate that the request comes from an authenticated session with positive credit balance
+        if (connectionMode === 'hosted') {
+            if (supabaseAdmin) {
+                const authHeader = req.headers['authorization'];
+                if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                    return res.status(401).json({ error: "Unauthorized: Missing or invalid session token." });
+                }
+                const token = authHeader.substring(7).trim();
+                if (!token) {
+                    return res.status(401).json({ error: "Unauthorized: Empty session token." });
+                }
+                
+                // Retrieve user details using token
+                const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+                if (authError || !user) {
+                    console.error("[Auth Failure] Token verification failed on comparison:", authError?.message || "No user returned");
+                    return res.status(401).json({ error: "Unauthorized: Invalid or expired session token." });
+                }
+                
+                // Query user's credit balance
+                const { data: profile, error: profileErr } = await supabaseAdmin
+                    .from('profiles')
+                    .select('credits')
+                    .eq('id', user.id)
+                    .single();
+                    
+                if (profileErr) {
+                    console.error("[DB Failure] Failed to query profile credits on comparison:", profileErr.message);
+                    return res.status(500).json({ error: "Internal Server Error: Failed to retrieve page credits balance." });
+                }
+                
+                if (!profile || typeof profile.credits === 'undefined' || profile.credits <= 0) {
+                    console.warn(`[Blocked] User ${user.email} attempted hosted comparison with insufficient credits: ${profile ? profile.credits : 'No profile'}`);
+                    return res.status(403).json({ error: "Forbidden: Insufficient page credits. Please top up your account." });
+                }
+                
+                console.log(`[Authorized] Hosted comparison request by ${user.email}`);
+            } else {
+                console.warn("[Security Bypass] Supabase Admin client not configured. Proceeding without auth validation.");
+            }
+        }
+
+        // Determine which API key to use
+        let activeKey;
+        let activeProvider = provider || 'openai';
+        let activeModel = model || 'gpt-4o-mini';
+
+        if (connectionMode === 'hosted') {
+            // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet as default
+            activeKey = process.env.ANTHROPIC_API_KEY;
+            activeProvider = 'anthropic';
+            activeModel = 'claude-sonnet-4-5-20250929';
+            
+            if (!activeKey) {
+                return res.status(500).json({ 
+                    error: "SaaS Anthropic API Key is not configured on the backend server. Please switch to BYOK Mode in settings." 
+                });
+            }
+        } else {
+            // BYOK Mode uses the client's provided key
+            activeKey = userKey;
+            if (!activeKey) {
+                return res.status(400).json({ error: "BYOK key is missing in request." });
+            }
+        }
+
+        // System prompt for structured JSON compliance comparison
+        const systemPrompt = `You are an expert commercial real estate due-diligence legal auditor.
+Your job is to compare extracted Lease terms and Estoppel terms for compliance.
+For each of the 11 terms, determine if the values represent a 'match', a 'warning', or a 'mismatch':
+- 'match': The values are semantically identical or fully compliant (e.g. "14,500 rentable square feet" and "14,500 SF" match; "$12,000" and "$12,000.00 / month" match; "Starbucks Corporation" and "Starbucks Corp." match).
+- 'warning': A value is missing in one document (e.g. "Not Mentioned" or "Not Found"), or there is a minor omission but not a direct contradiction.
+- 'mismatch': There is a clear contradiction or discrepancy (e.g. different rent amounts, different dates, different renewal terms).
+
+For each term, you must return a status ('match', 'warning', 'mismatch') and a concise reason.
+Return ONLY a valid JSON object in this exact format:
+{
+  "tenantName": { "status": "match|warning|mismatch", "reason": "Explanation" },
+  "suiteNumber": { "status": "match|warning|mismatch", "reason": "Explanation" },
+  "premisesSf": { "status": "match|warning|mismatch", "reason": "Explanation" },
+  "monthlyRent": { "status": "match|warning|mismatch", "reason": "Explanation" },
+  "expiryDate": { "status": "match|warning|mismatch", "reason": "Explanation" },
+  "securityDeposit": { "status": "match|warning|mismatch", "reason": "Explanation" },
+  "renewalOptions": { "status": "match|warning|mismatch", "reason": "Explanation" },
+  "camShare": { "status": "match|warning|mismatch", "reason": "Explanation" },
+  "guarantorName": { "status": "match|warning|mismatch", "reason": "Explanation" },
+  "prepaidRent": { "status": "match|warning|mismatch", "reason": "Explanation" },
+  "landlordDefault": { "status": "match|warning|mismatch", "reason": "Explanation" }
+}`;
+
+        const userPrompt = `Compare these two term extractions for discrepancies:
+======================================================================
+Lease Extracted:
+${JSON.stringify(leaseJson, null, 2)}
+
+Estoppel Extracted:
+${JSON.stringify(estoppelJson, null, 2)}
+======================================================================
+Please compare all fields and return the structured JSON report.`;
+
+        console.log(`[Audit Proxy] Running semantic comparison via connection: ${connectionMode}, provider: ${activeProvider}, model: ${activeModel}`);
+
+        // Route calls to corresponding LLM provider
+        if (activeProvider === 'openai') {
+            const response = await fetch("https://api.openai.com/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${activeKey}`
+                },
+                body: JSON.stringify({
+                    model: activeModel,
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userPrompt }
+                    ],
+                    response_format: { type: "json_object" },
+                    temperature: 0.1
+                })
+            });
+
+            if (!response.ok) {
+                const errJson = await response.json().catch(() => ({}));
+                return res.status(response.status).json({ error: errJson.error?.message || `OpenAI returned status ${response.status}` });
+            }
+
+            const data = await response.json();
+            const resultData = JSON.parse(data.choices[0].message.content);
+            return res.json(resultData);
+        } 
+        
+        else if (activeProvider === 'anthropic') {
+            const response = await fetch("https://api.anthropic.com/v1/messages", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-api-key": activeKey,
+                    "anthropic-version": "2023-06-01"
+                },
+                body: JSON.stringify({
+                    model: activeModel,
+                    max_tokens: 2000,
+                    system: systemPrompt,
+                    messages: [
+                        { role: "user", content: [{ type: "text", text: userPrompt }] }
+                    ],
+                    temperature: 0.1
+                })
+            });
+
+            if (!response.ok) {
+                const errJson = await response.json().catch(() => ({}));
+                return res.status(response.status).json({ error: errJson.error?.message || `Anthropic returned status ${response.status}` });
+            }
+
+            const data = await response.json();
+            const rawContent = data.content[0].text;
+            
+            const jsonStart = rawContent.indexOf('{');
+            const jsonEnd = rawContent.lastIndexOf('}');
+            if (jsonStart === -1 || jsonEnd === -1) {
+                return res.status(500).json({ error: "Anthropic response did not contain a valid JSON block." });
+            }
+            
+            const cleanContent = rawContent.slice(jsonStart, jsonEnd + 1).trim();
+            const resultData = JSON.parse(cleanContent);
+            return res.json(resultData);
+        } 
+        
+        else if (activeProvider === 'gemini') {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${activeKey}`;
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: userPrompt }] }],
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        temperature: 0.1
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const errJson = await response.json().catch(() => ({}));
+                return res.status(response.status).json({ error: errJson.error?.message || `Gemini returned status ${response.status}` });
+            }
+
+            const data = await response.json();
+            const rawText = data.candidates[0].content.parts[0].text;
+            const resultData = JSON.parse(rawText);
+            return res.json(resultData);
+        } 
+        
+        else if (activeProvider === 'deepseek') {
+            const response = await fetch("https://api.deepseek.com/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${activeKey}`
+                },
+                body: JSON.stringify({
+                    model: activeModel,
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userPrompt }
+                    ],
+                    response_format: { type: "json_object" },
+                    temperature: 0.1
+                })
+            });
+
+            if (!response.ok) {
+                const errJson = await response.json().catch(() => ({}));
+                return res.status(response.status).json({ error: errJson.error?.message || `DeepSeek returned status ${response.status}` });
+            }
+
+            const data = await response.json();
+            const resultData = JSON.parse(data.choices[0].message.content);
+            return res.json(resultData);
+        } 
+        
+        else {
+            return res.status(400).json({ error: `Unsupported AI provider: ${activeProvider}` });
+        }
+
+    } catch (error) {
+        console.error(`[Server Error]`, error);
+        res.status(500).json({ error: error.message || "Internal server error" });
+    }
+});
+
 
 // Stripe Checkout Session Creation
 app.post('/api/create-checkout-session', async (req, res) => {

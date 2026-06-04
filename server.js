@@ -29,6 +29,46 @@ app.use((req, res, next) => {
     next();
 });
 
+// Helper function to safely extract and parse JSON from LLM responses (handling code blocks & markdown fences)
+function extractAndParseJSON(rawText) {
+    if (typeof rawText !== 'string') {
+        return rawText;
+    }
+    
+    let cleanText = rawText.trim();
+    
+    // Remove markdown code block fences if present (e.g. ```json ... ``` or ``` ... ```)
+    cleanText = cleanText.replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/g, '$1').trim();
+    
+    // If it still has backticks, let's try a regex match to pull out block content
+    if (cleanText.includes('```')) {
+        const match = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(cleanText);
+        if (match && match[1]) {
+            cleanText = match[1].trim();
+        }
+    }
+    
+    // Find the bounds of the JSON object
+    const startIdx = cleanText.indexOf('{');
+    const endIdx = cleanText.lastIndexOf('}');
+    if (startIdx !== -1 && endIdx !== -1) {
+        cleanText = cleanText.substring(startIdx, endIdx + 1).trim();
+    }
+    
+    try {
+        return JSON.parse(cleanText);
+    } catch (err) {
+        console.error("[JSON Parse Error] Initial parse failed. Text:", cleanText);
+        // Attempt simple automatic JSON fix-ups (e.g. escape unescaped double quotes inside quote fields):
+        try {
+            const rescuedContent = cleanText.replace(/(?<![:{\[,])"(?![:}\],])/g, '\\"');
+            return JSON.parse(rescuedContent);
+        } catch (retryErr) {
+            throw new Error(`Failed to parse response as JSON: ${err.message}. Content: ${cleanText.slice(0, 300)}...`);
+        }
+    }
+}
+
 // Stripe Webhook Endpoint (MUST be defined before express.json() to capture raw body Buffer)
 app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     const sig = req.headers['stripe-signature'];
@@ -307,7 +347,7 @@ Please extract the required fields and return the JSON.`;
             }
 
             const data = await response.json();
-            const extractedData = JSON.parse(data.choices[0].message.content);
+            const extractedData = extractAndParseJSON(data.choices[0].message.content);
             return res.json(extractedData);
         } 
         
@@ -362,38 +402,7 @@ Please extract the required fields and return the JSON.`;
 
             const data = await response.json();
             const rawContent = data.content[0].text;
-            
-            // Extract the JSON object substring between the first '{' and last '}'
-            const jsonStart = rawContent.indexOf('{');
-            const jsonEnd = rawContent.lastIndexOf('}');
-            
-            if (jsonStart === -1 || jsonEnd === -1) {
-                return res.status(500).json({ 
-                    error: `LLM response did not contain a valid JSON block. Raw output: ${rawContent.slice(0, 200)}...` 
-                });
-            }
-            
-            const cleanContent = rawContent.slice(jsonStart, jsonEnd + 1).trim();
-            
-            let extractedData;
-            try {
-                extractedData = JSON.parse(cleanContent);
-            } catch (err) {
-                console.error("[JSON Parse Error] Raw text:", cleanContent);
-                // Attempt simple automatic JSON fix-ups:
-                try {
-                    // Try to escape any unescaped double quotes inside quote fields:
-                    const rescuedContent = cleanContent
-                        .replace(/(?<![:{\[,])"(?![:}\],])/g, '\\"');
-                    extractedData = JSON.parse(rescuedContent);
-                    console.log("[JSON Parse Rescued] Successfully parsed after escape correction.");
-                } catch (retryErr) {
-                    return res.status(500).json({ 
-                        error: `Claude output could not be parsed as valid JSON: ${err.message}. Raw output: ${cleanContent.slice(0, 300)}...` 
-                    });
-                }
-            }
-            
+            const extractedData = extractAndParseJSON(rawContent);
             return res.json(extractedData);
         } 
         
@@ -443,7 +452,7 @@ Please extract the required fields and return the JSON.`;
 
             const data = await response.json();
             const rawText = data.candidates[0].content.parts[0].text;
-            const extractedData = JSON.parse(rawText);
+            const extractedData = extractAndParseJSON(rawText);
             return res.json(extractedData);
         } 
         
@@ -475,7 +484,7 @@ Please extract the required fields and return the JSON.`;
             }
 
             const data = await response.json();
-            const extractedData = JSON.parse(data.choices[0].message.content);
+            const extractedData = extractAndParseJSON(data.choices[0].message.content);
             return res.json(extractedData);
         } 
         
@@ -625,7 +634,7 @@ Please compare all fields and return the structured JSON report.`;
             }
 
             const data = await response.json();
-            const resultData = JSON.parse(data.choices[0].message.content);
+            const resultData = extractAndParseJSON(data.choices[0].message.content);
             return res.json(resultData);
         } 
         
@@ -655,15 +664,7 @@ Please compare all fields and return the structured JSON report.`;
 
             const data = await response.json();
             const rawContent = data.content[0].text;
-            
-            const jsonStart = rawContent.indexOf('{');
-            const jsonEnd = rawContent.lastIndexOf('}');
-            if (jsonStart === -1 || jsonEnd === -1) {
-                return res.status(500).json({ error: "Anthropic response did not contain a valid JSON block." });
-            }
-            
-            const cleanContent = rawContent.slice(jsonStart, jsonEnd + 1).trim();
-            const resultData = JSON.parse(cleanContent);
+            const resultData = extractAndParseJSON(rawContent);
             return res.json(resultData);
         } 
         
@@ -691,7 +692,7 @@ Please compare all fields and return the structured JSON report.`;
 
             const data = await response.json();
             const rawText = data.candidates[0].content.parts[0].text;
-            const resultData = JSON.parse(rawText);
+            const resultData = extractAndParseJSON(rawText);
             return res.json(resultData);
         } 
         
@@ -719,7 +720,7 @@ Please compare all fields and return the structured JSON report.`;
             }
 
             const data = await response.json();
-            const resultData = JSON.parse(data.choices[0].message.content);
+            const resultData = extractAndParseJSON(data.choices[0].message.content);
             return res.json(resultData);
         } 
         
@@ -813,6 +814,62 @@ app.get('/api/verify-checkout-session', async (req, res) => {
         
         const session = await stripe.checkout.sessions.retrieve(session_id);
         if (session.payment_status === 'paid') {
+            const { userId, planType, amount } = session.metadata || {};
+            
+            if (userId && planType && amount) {
+                console.log(`[Stripe Verification] Processing purchase for user ${userId}: plan ${planType}, amount ${amount}`);
+                
+                if (supabaseAdmin) {
+                    // Fetch user's current profile credits
+                    const { data: profile, error: selectErr } = await supabaseAdmin
+                        .from('profiles')
+                        .select('credits, byok_credits')
+                        .eq('id', userId)
+                        .single();
+                        
+                    if (selectErr) {
+                        console.error("[Stripe Verification DB Select Error]:", selectErr.message);
+                        throw selectErr;
+                    }
+                    
+                    const amt = parseInt(amount, 10);
+                    let updateFields = {};
+                    
+                    if (planType === 'byok') {
+                        updateFields = { byok_credits: amt };
+                    } else {
+                        const isAnnual = (amt === 8000 || amt === 20000);
+                        const baseCredits = isAnnual ? 0 : (profile.credits || 0);
+                        updateFields = { credits: baseCredits + amt };
+                    }
+                    
+                    // Update user's profile credits
+                    const { error: updateErr } = await supabaseAdmin
+                        .from('profiles')
+                        .update(updateFields)
+                        .eq('id', userId);
+                        
+                    if (updateErr) {
+                        console.error("[Stripe Verification DB Update Error]:", updateErr.message);
+                        throw updateErr;
+                    }
+                    
+                    // Update plan type in auth user metadata
+                    const { error: metadataErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+                        user_metadata: { plan_type: planType }
+                    });
+                    
+                    if (metadataErr) {
+                        console.warn("[Stripe Verification User Metadata Warning]:", metadataErr.message);
+                        // Do not throw on metadata update failure, as credit balance is already saved successfully
+                    }
+                    
+                    console.log(`[Stripe Verification] Successfully credited user ${userId} with ${amount} pages for plan ${planType}`);
+                } else {
+                    console.warn("[Stripe Verification Bypass] Supabase Admin client not configured. Skip database write.");
+                }
+            }
+            
             res.json({ success: true, metadata: session.metadata });
         } else {
             res.json({ success: false, error: "Payment not completed" });

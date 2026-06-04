@@ -520,50 +520,10 @@ function initializeApp() {
                                 const data = await response.json();
                                 if (data.success) {
                                     const { amount, planType } = data.metadata;
-                                    
-                                    // Fetch current credits to avoid overwrite conflicts
-                                    const { data: profile, error: selectErr } = await supabase
-                                        .from('profiles')
-                                        .select('credits, byok_credits')
-                                        .eq('id', session.user.id)
-                                        .single();
-                                    
-                                    if (selectErr) throw selectErr;
-                                    
-                                    let updateFields = {};
                                     const amt = parseInt(amount, 10);
-                                    if (planType === 'byok') {
-                                        updateFields = { byok_credits: amt };
-                                        byokCredits = amt;
-                                    } else {
-                                        const isAnnual = (amt === 8000 || amt === 20000);
-                                        const baseCredits = isAnnual ? 0 : (profile.credits || 0);
-                                        const newHostedCredits = baseCredits + amt;
-                                        updateFields = { credits: newHostedCredits };
-                                        hostedCredits = newHostedCredits;
-                                    }
                                     
-                                    // Update credits in DB
-                                    const { error: updateErr } = await supabase
-                                        .from('profiles')
-                                        .update(updateFields)
-                                        .eq('id', session.user.id);
-                                        
-                                    if (updateErr) throw updateErr;
-                                    
-                                    // Update plan type in auth user metadata
-                                    const { error: metadataErr } = await supabase.auth.updateUser({
-                                        data: { plan_type: planType }
-                                    });
-                                    if (metadataErr) throw metadataErr;
-                                    
-                                    activePlanType = planType;
-                                    
-                                    // Apply plan connections gating UI lock
-                                    if (typeof applyPlanRestrictions === 'function') {
-                                        applyPlanRestrictions(planType);
-                                    }
-                                    updateCreditsDisplay();
+                                    // Reload user profile & credits (updated server-side)
+                                    await loadUserProfileAndCredits();
                                     
                                     // Clear URL parameters
                                     window.history.replaceState({}, document.title, window.location.pathname);
@@ -1314,7 +1274,9 @@ function initializeApp() {
     }
 
     function handleFileSelection(file, zoneEl, fileKey) {
-        if (file.type !== 'application/pdf') {
+        const isPdfType = file.type === 'application/pdf';
+        const isPdfExtension = file.name && file.name.toLowerCase().endsWith('.pdf');
+        if (!isPdfType && !isPdfExtension) {
             alert('🚫 Only text-based PDF files are supported.');
             return;
         }

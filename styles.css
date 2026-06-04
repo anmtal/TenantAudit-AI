@@ -1751,6 +1751,34 @@ select option {
     user-select: none;
 }
 
+/* Lucide Icon override styles */
+.btn i, .settings-btn i, .logout-btn i, .btn svg, .settings-btn svg, .logout-btn svg {
+    width: 15px;
+    height: 15px;
+    stroke-width: 2.25px;
+}
+
+.feature-icon svg, .card-icon svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 2px;
+}
+
+.upload-icon svg {
+    width: 32px;
+    height: 32px;
+    stroke-width: 1.75px;
+}
+
+.inline-icon {
+    display: inline-block;
+    vertical-align: -3px;
+    width: 16px;
+    height: 16px;
+    stroke-width: 2.25px;
+    margin-right: 4px;
+}
+
 
 
 

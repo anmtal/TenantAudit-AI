@@ -21,8 +21,11 @@
     <!-- Supabase JS Client SDK Library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+    <!-- Lucide Icons Library for Premium SVG Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
     <!-- Stylesheet -->
-    <link rel="stylesheet" href="styles.css?v=1.0.3">
+    <link rel="stylesheet" href="styles.css?v=1.0.4">
 </head>
 <body>
     <!-- Premium Glow Effects in Background -->
@@ -68,22 +71,22 @@
                 <h3 class="section-title">Audit with Confidence</h3>
                 <div class="features-grid">
                     <div class="feature-card">
-                        <div class="feature-icon">🔍</div>
+                        <div class="feature-icon"><i data-lucide="search"></i></div>
                         <h4>Discrepancy Matrix</h4>
                         <p>Auto-align monthly rent, premises SF, security deposits, and extension options side-by-side.</p>
                     </div>
                     <div class="feature-card">
-                        <div class="feature-icon">📑</div>
+                        <div class="feature-icon"><i data-lucide="file-text"></i></div>
                         <h4>Verbatim Quote Audit Trails</h4>
                         <p>Click any parameter to view the exact paragraph citation from both contracts in a split view drawer.</p>
                     </div>
                     <div class="feature-card">
-                        <div class="feature-icon">🛡️</div>
+                        <div class="feature-icon"><i data-lucide="shield-check"></i></div>
                         <h4>Zero Document Retention</h4>
                         <p>Zero database footprint. Documents are parsed client-side in-browser and never saved to a server.</p>
                     </div>
                     <div class="feature-card">
-                        <div class="feature-icon">💼</div>
+                        <div class="feature-icon"><i data-lucide="briefcase"></i></div>
                         <h4>Export Ready Reports</h4>
                         <p>Download a standardized CSV audit report to share with lenders, brokers, and acquisition teams.</p>
                     </div>
@@ -205,7 +208,7 @@
             <!-- Security Focus Section -->
             <section id="security-section" class="landing-security">
                 <div class="security-card">
-                    <h4>🔒 Commercial Grade Enterprise Security</h4>
+                    <h4><i data-lucide="lock" class="inline-icon"></i> Commercial Grade Enterprise Security</h4>
                     <p>Unlike other platforms, TenantAudit AI performs PDF text extraction directly in your browser. Your lease texts and credentials are routed via encrypted API proxy memory and are never stored on disk, eliminating corporate compliance and data liability risks.</p>
                 </div>
             </section>
@@ -243,7 +246,7 @@
                     </div>
                     
                     <div class="login-hint" id="login-hint-box">
-                        💡 <strong>Quick Test:</strong> Click Sign In with prefilled demo credentials.
+                        <i data-lucide="lightbulb" class="inline-icon"></i> <strong>Quick Test:</strong> Click Sign In with prefilled demo credentials.
                     </div>
                 </form>
 
@@ -278,13 +281,13 @@
                         </button>
                     </div>
                     <button class="settings-btn" id="dashboard-home-btn" title="Go back to Home page">
-                        <span>🏠</span> Home
+                        <i data-lucide="home"></i> Home
                     </button>
                     <button class="settings-btn" id="open-settings-btn">
-                        <span>⚙️</span> API Settings
+                        <i data-lucide="settings"></i> API Settings
                     </button>
                     <button class="logout-btn" id="logout-btn" title="Log Out of Session">
-                        <span>🚪</span> Log Out
+                        <i data-lucide="log-out"></i> Log Out
                     </button>
                 </div>
             </header>
@@ -292,14 +295,14 @@
             <!-- Document Upload & Launch Section -->
             <section class="glass-card" id="upload-panel">
                 <div class="card-header purple-bg">
-                    <div class="card-icon purple-bg">📂</div>
+                    <div class="card-icon purple-bg"><i data-lucide="folder-open"></i></div>
                     <h3>1. Upload Transaction Documents</h3>
                 </div>
                 
                 <div class="upload-grid">
                     <!-- Lease PDF Upload -->
                     <div class="upload-zone" id="lease-drop-zone">
-                        <div class="upload-icon">📄</div>
+                        <div class="upload-icon"><i data-lucide="file-text"></i></div>
                         <div class="upload-text">
                             <strong>Lease Agreement</strong>
                             <p>Drag & drop or click to upload Lease PDF</p>
@@ -310,7 +313,7 @@
                     
                     <!-- Estoppel PDF Upload -->
                     <div class="upload-zone" id="estoppel-drop-zone">
-                        <div class="upload-icon">✍️</div>
+                        <div class="upload-icon"><i data-lucide="pen-tool"></i></div>
                         <div class="upload-text">
                             <strong>Tenant Estoppel Certificate</strong>
                             <p>Drag & drop or click to upload Estoppel PDF</p>
@@ -323,10 +326,10 @@
                 <!-- Dashboard Actions -->
                 <div style="display: flex; gap: 16px; justify-content: flex-end; margin-top: 10px;">
                     <button class="btn btn-secondary" id="demo-btn">
-                        <span>🚀</span> Try with Sample Data
+                        <i data-lucide="rocket"></i> Try with Sample Data
                     </button>
                     <button class="btn btn-primary" id="start-audit-btn" disabled>
-                        <span>🔍</span> Run AI Lease Audit
+                        <i data-lucide="search"></i> Run AI Lease Audit
                     </button>
                 </div>
 
@@ -340,7 +343,7 @@
             <!-- Past Audits Transaction History Section -->
             <section class="glass-card" id="history-panel" style="margin-top: 24px;">
                 <div class="card-header cyan-bg">
-                    <div class="card-icon cyan-bg">📜</div>
+                    <div class="card-icon cyan-bg"><i data-lucide="history"></i></div>
                     <h3>Transaction Audit History</h3>
                 </div>
                 <div class="history-list-wrapper">
@@ -420,7 +423,7 @@
                             <p>Cross-referencing legal and financial terms between lease and tenant estoppel.</p>
                         </div>
                         <button class="btn btn-emerald" id="export-csv-btn">
-                            <span>📥</span> Export Due Diligence CSV
+                            <i data-lucide="download"></i> Export Due Diligence CSV
                         </button>
                     </div>
                     
@@ -444,13 +447,13 @@
                     <!-- Side-by-Side Verification Quote Drawer (Toggled via JS) -->
                     <div class="verification-drawer" id="verification-drawer" style="display: none;">
                         <div class="doc-quote-panel">
-                            <span class="doc-quote-title">📝 LEASE AGREEMENT PARAGRAPH</span>
+                            <span class="doc-quote-title"><i data-lucide="file-text" class="inline-icon"></i> LEASE AGREEMENT PARAGRAPH</span>
                             <div class="doc-quote-content" id="lease-quote-box">
                                 "Tenant shall pay to Landlord a Monthly Base Rent of $12,500..."
                             </div>
                         </div>
                         <div class="doc-quote-panel">
-                            <span class="doc-quote-title">✍️ ESTOPPEL STATEMENT</span>
+                            <span class="doc-quote-title"><i data-lucide="pen-tool" class="inline-icon"></i> ESTOPPEL STATEMENT</span>
                             <div class="doc-quote-content" id="estoppel-quote-box">
                                 "Current monthly rent is $12,500..."
                             </div>
@@ -465,7 +468,7 @@
                     <p>&copy; 2026 TenantAudit AI Inc. All rights reserved.</p>
                     <div class="footer-contact">
                         <a href="mailto:support@tenantaudit.ai" class="footer-contact-item">
-                            📩 support@tenantaudit.ai
+                            <i data-lucide="mail" class="inline-icon"></i> support@tenantaudit.ai
                         </a>
                     </div>
                 </div>
@@ -577,7 +580,7 @@
         <div class="modal-card disclaimer-card">
             <button class="modal-close-btn" id="close-disclaimer-btn">&times;</button>
             <div class="modal-title-wrapper">
-                <h3>⚖️ Legal Disclaimer & Terms of Use</h3>
+                <h3><i data-lucide="scale" class="inline-icon"></i> Legal Disclaimer & Terms of Use</h3>
                 <p>Please review and confirm our terms before running the automated audit:</p>
             </div>
             <div class="disclaimer-body">

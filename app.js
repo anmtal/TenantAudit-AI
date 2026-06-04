@@ -1601,11 +1601,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             
             let statusBadge = '';
             if (rec.status === 'match') {
-                statusBadge = '<span class="status-pill match-ok">● Match</span>';
+                statusBadge = '<span class="status-pill match-ok"><i data-lucide="check-circle"></i> Match</span>';
             } else if (rec.status === 'warning') {
-                statusBadge = '<span class="status-pill match-warning">● Warning</span>';
+                statusBadge = '<span class="status-pill match-warning"><i data-lucide="alert-triangle"></i> Warning</span>';
             } else {
-                statusBadge = '<span class="status-pill match-mismatch">❌ Mismatch</span>';
+                statusBadge = '<span class="status-pill match-mismatch"><i data-lucide="x-circle"></i> Mismatch</span>';
             }
 
             tr.innerHTML = `
@@ -1648,6 +1648,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         
         // Auto scroll to results panel smoothly
         resultsPanel.scrollIntoView({ behavior: 'smooth' });
+
+        // Update Lucide SVG icons dynamically rendered in the table
+        if (window.lucide) {
+            lucide.createIcons();
+        }
     }
 
     // --- Helper Score Dial Animation ---
@@ -1721,5 +1726,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
+    }
+
+    // Initialize Lucide icons on page load
+    if (window.lucide) {
+        lucide.createIcons();
     }
 });

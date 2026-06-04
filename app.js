@@ -665,7 +665,7 @@ function initializeApp() {
             switchByokBtn.classList.add('active');
             switchHostedBtn.classList.remove('active');
             hostedGrid.style.display = 'none';
-            byokGrid.style.display = 'grid';
+            byokGrid.style.display = 'flex';
             
             // If logged in, sync connection mode as well
             if (isLoggedIn) {
@@ -1036,7 +1036,7 @@ function initializeApp() {
                 switchByokBtn.classList.add('active');
                 switchHostedBtn.classList.remove('active');
                 hostedGrid.style.display = 'none';
-                byokGrid.style.display = 'grid';
+                byokGrid.style.display = 'flex';
             }
         }
         
@@ -1154,7 +1154,7 @@ function initializeApp() {
                         switchByokBtn.classList.add('active');
                         switchHostedBtn.classList.remove('active');
                         hostedGrid.style.display = 'none';
-                        byokGrid.style.display = 'grid';
+                        byokGrid.style.display = 'flex';
                     }
                 }
                 

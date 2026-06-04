@@ -367,23 +367,32 @@
                 </div>
                 
                 <div class="header-actions">
-                    <div class="user-meta-group">
-                        <span class="user-email-pill" id="user-email-display">contact@leasealign.io</span>
-                        <div class="connection-toggle-pill" id="header-mode-toggle" title="Switch connection mode">
-                            <button class="mode-toggle-btn active" data-mode="hosted">Hosted SaaS</button>
-                            <button class="mode-toggle-btn" data-mode="byok">BYOB</button>
-                        </div>
-                        <button class="credits-pill-btn" id="credits-topup-trigger" title="Click to purchase more credits">
-                            <span class="credits-pulse"></span>
-                            <span id="credits-count-display">0</span> Pages Left
-                        </button>
-                    </div>
+                    <!-- 1. Home -->
                     <button class="settings-btn" id="dashboard-home-btn" title="Go back to Home page">
                         <i data-lucide="home"></i> Home
                     </button>
+                    
+                    <!-- 2. Hosted SaaS / BYOB Toggle -->
+                    <div class="connection-toggle-pill" id="header-mode-toggle" title="Switch connection mode">
+                        <button class="mode-toggle-btn active" data-mode="hosted">Hosted SaaS</button>
+                        <button class="mode-toggle-btn" data-mode="byok">BYOB</button>
+                    </div>
+                    
+                    <!-- 3. Connection Settings -->
                     <button class="settings-btn" id="open-settings-btn">
                         <i data-lucide="settings"></i> API Settings
                     </button>
+                    
+                    <!-- 4. Pages Left -->
+                    <button class="credits-pill-btn" id="credits-topup-trigger" title="Click to purchase more credits">
+                        <span class="credits-pulse"></span>
+                        <span id="credits-count-display">0</span> Pages Left
+                    </button>
+                    
+                    <!-- 5. User Email Display -->
+                    <span class="user-email-pill" id="user-email-display">contact@leasealign.io</span>
+                    
+                    <!-- 6. Logout -->
                     <button class="logout-btn" id="logout-btn" title="Log Out of Session">
                         <i data-lucide="log-out"></i> Log Out
                     </button>
@@ -423,9 +432,6 @@
 
                 <!-- Dashboard Actions -->
                 <div style="display: flex; gap: 16px; justify-content: flex-end; margin-top: 10px;">
-                    <button class="btn btn-secondary" id="demo-btn">
-                        <i data-lucide="rocket"></i> Try with Sample Data
-                    </button>
                     <button class="btn btn-primary" id="start-audit-btn" disabled>
                         <i data-lucide="search"></i> Run AI Lease Audit
                     </button>

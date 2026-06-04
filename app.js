@@ -1528,15 +1528,18 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         
                         try {
                             if (supabase) {
-                                // Call RPC to deduct credits only if not unlimited
                                 const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                                const isUnlimited = (connectionMode === 'byok' && byokCredits >= 900000) || (connectionMode === 'hosted' && hostedCredits >= 900000);
-                                if (!isUnlimited) {
-                                    const { error: deductErr } = await supabase.rpc('deduct_credits', { 
-                                        pages_to_deduct: pagesNeeded,
-                                        plan_mode: connectionMode 
-                                    });
-                                    if (deductErr) throw deductErr;
+                                
+                                // Only deduct credits if NOT in BYOK (BYOB) mode
+                                if (connectionMode !== 'byok') {
+                                    const isUnlimited = hostedCredits >= 900000;
+                                    if (!isUnlimited) {
+                                        const { error: deductErr } = await supabase.rpc('deduct_credits', { 
+                                            pages_to_deduct: pagesNeeded,
+                                            plan_mode: 'hosted'
+                                        });
+                                        if (deductErr) throw deductErr;
+                                    }
                                 }
 
                                 // Log audit record to audits table
@@ -1557,16 +1560,19 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                                 await loadAuditHistory();
                             } else {
                                 const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                                if (connectionMode === 'byok') {
-                                    byokCredits -= pagesNeeded;
-                                    localStorage.setItem('ta_byok_credits', byokCredits);
-                                } else {
+                                if (connectionMode !== 'byok') {
                                     hostedCredits -= pagesNeeded;
                                     localStorage.setItem('ta_hosted_credits', hostedCredits);
                                 }
                                 updateCreditsDisplay();
                             }
-                            alert("🚀 Simulated audit completed: Deducted 5 page credits.");
+                            
+                            const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+                            if (connectionMode === 'byok') {
+                                alert("🚀 Simulated audit completed successfully!");
+                            } else {
+                                alert("🚀 Simulated audit completed: Deducted 5 page credits.");
+                            }
                         } catch (err) {
                             console.error("Demo logging/deduction error:", err);
                             alert(`🚫 Failed to log simulation: ${err.message}`);
@@ -1709,7 +1715,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);
             const totalPagesNeeded = leasePagesCount + estoppelPagesCount;
             
-            if (pageCredits < totalPagesNeeded) {
+            if (connectionMode !== 'byok' && pageCredits < totalPagesNeeded) {
                 hideLoader();
                 alert(`🚫 Insufficient page credits! This audit requires ${totalPagesNeeded} pages, but you only have ${pageCredits} pages left. Please top up your credits.`);
                 creditsModal.classList.add('active');
@@ -1800,13 +1806,17 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             try {
                 if (supabase) {
                     const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                    const isUnlimited = (connectionMode === 'byok' && byokCredits >= 900000) || (connectionMode === 'hosted' && hostedCredits >= 900000);
-                    if (!isUnlimited) {
-                        const { error: deductErr } = await supabase.rpc('deduct_credits', { 
-                            pages_to_deduct: totalPagesNeeded,
-                            plan_mode: connectionMode 
-                        });
-                        if (deductErr) throw deductErr;
+                    
+                    // Only deduct credits if NOT in BYOK (BYOB) mode
+                    if (connectionMode !== 'byok') {
+                        const isUnlimited = hostedCredits >= 900000;
+                        if (!isUnlimited) {
+                            const { error: deductErr } = await supabase.rpc('deduct_credits', { 
+                                pages_to_deduct: totalPagesNeeded,
+                                plan_mode: 'hosted'
+                            });
+                            if (deductErr) throw deductErr;
+                        }
                     }
 
                     const { error: logErr } = await supabase.from('audits').insert({
@@ -1827,12 +1837,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 } else {
                     // Fallback mock mode
                     const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                    if (connectionMode === 'byok') {
-                        if (byokCredits < 900000) {
-                            byokCredits -= totalPagesNeeded;
-                            localStorage.setItem('ta_byok_credits', byokCredits);
-                        }
-                    } else {
+                    // Only deduct credits if NOT in BYOK (BYOB) mode
+                    if (connectionMode !== 'byok') {
                         if (hostedCredits < 900000) {
                             hostedCredits -= totalPagesNeeded;
                             localStorage.setItem('ta_hosted_credits', hostedCredits);
@@ -1842,11 +1848,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 }
                 
                 hideLoader();
-                const isUnlimited = (connectionMode === 'byok' && byokCredits >= 900000) || (connectionMode === 'hosted' && hostedCredits >= 900000);
+                const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
                 if (connectionMode === 'byok') {
-                    const deductMsg = isUnlimited ? "" : ` Deducted ${totalPagesNeeded} page credits.`;
-                    alert(`🎉 Audit completed successfully using your custom API Key!${deductMsg}`);
+                    alert(`🎉 Audit completed successfully using your custom API Key!`);
                 } else {
+                    const isUnlimited = hostedCredits >= 900000;
                     const deductMsg = isUnlimited ? "" : ` Deducted ${totalPagesNeeded} page credits.`;
                     alert(`🎉 Audit completed successfully!${deductMsg}`);
                 }

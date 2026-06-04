@@ -1955,6 +1955,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 // Strip parentheticals and brackets first, e.g. "(a Delaware corporation)"
                 norm = norm.replace(/\(.*?\)/g, '');
                 norm = norm.replace(/\[.*?\]/g, '');
+                
+                // Strip cents/decimal .00 if present, e.g. "$12,000.00" -> "$12,000"
+                norm = norm.replace(/\.00\b/g, '');
+                
+                // Normalize square footage variations
+                norm = norm.replace(/rentable\s*square\s*feet|square\s*feet|square\s*foot|sq\s*ft|sqft|\bsf\b/g, '');
+
                 // Remove apostrophes first so "int'l" -> "intl"
                 norm = norm.replace(/'/g, '');
                 // Replace remaining non-alphanumeric chars with spaces to preserve word boundaries

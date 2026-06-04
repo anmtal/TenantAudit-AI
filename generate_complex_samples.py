@@ -214,7 +214,7 @@ def create_complex_estoppel_pdf(filename):
     
     # Statements with intentional discrepancies
     statements = [
-        "1. The undersigned Tenant is the sole occupant of Suite 4200 comprising approximately <b>14,200 SF</b> of rentable square footage of office space in the Building.",
+        "1. The undersigned Tenant is the sole occupant of Suite 4200 comprising approximately <b>14,500 SF</b> of rentable square footage of office space in the Building.",
         "2. The Lease is in full force and effect. However, Landlord is currently in default under its repair obligations for failing to complete the elevator modernization repairs on the 42nd floor, which impairs tenant access.",
         "3. The lease term ends on <b>September 30, 2031</b>.",
         "4. The current monthly base rent payable by Tenant is <b>$41,569.02 per month</b>.",

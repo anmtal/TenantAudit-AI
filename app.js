@@ -2,7 +2,7 @@
    LeaseAlign AI — Core Application Logic
    ========================================================================== */
 
-document.addEventListener('DOMContentLoaded', () => {
+function initializeApp() {
 
     // --- Custom Centered Alert Override ---
     (function() {
@@ -2183,4 +2183,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     if (window.lucide) {
         lucide.createIcons();
     }
-});
+}
+
+// Conditional execution wrapper to ensure app.js runs even if loaded asynchronously or after DOMContentLoaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+    initializeApp();
+}

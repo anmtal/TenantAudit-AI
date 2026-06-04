@@ -1,5 +1,5 @@
 /* ==========================================================================
-   TenantAudit AI — Core Application Logic
+   LeaseAlign AI — Core Application Logic
    ========================================================================== */
 
 document.addEventListener('DOMContentLoaded', () => {

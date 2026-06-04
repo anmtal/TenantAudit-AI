@@ -1339,6 +1339,8 @@ select option {
     gap: 8px;
     cursor: pointer;
     transition: var(--transition-smooth);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .credits-pill-btn:hover {

@@ -1832,6 +1832,41 @@ select option {
     margin-right: 4px;
 }
 
+/* Header Connection Mode Switcher */
+.connection-toggle-pill {
+    display: inline-flex;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 3px;
+    border-radius: 20px;
+    align-items: center;
+    gap: 2px;
+}
+
+.mode-toggle-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.mode-toggle-btn.active[data-mode="hosted"] {
+    background: var(--color-purple);
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(168, 85, 247, 0.35);
+}
+
+.mode-toggle-btn.active[data-mode="byok"] {
+    background: var(--color-emerald);
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.35);
+}
+
 
 
 

@@ -18,6 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let auditData = null;
     let isLoggedIn = false;
     let pageCredits = 0;
+    let hostedCredits = 0;
+    let byokCredits = 0;
     let userEmail = '';
     let supabase = null;
     let isSignUpMode = false;
@@ -166,24 +168,71 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function initializeAuthFallback() {
-        const storedLogin = localStorage.getItem('ta_logged_in') === 'true';
-        const storedEmail = localStorage.getItem('ta_user_email') || '';
-        let storedCredits = localStorage.getItem('ta_page_credits');
+    function updateCreditsDisplay() {
+        const mode = localStorage.getItem('ta_connection_mode') || 'hosted';
         
-        if (storedCredits === null) {
-            storedCredits = 0;
-            localStorage.setItem('ta_page_credits', storedCredits);
-        } else {
-            storedCredits = parseInt(storedCredits, 10);
+        // Update credits mode indicator in the pill
+        const modeDisplay = document.getElementById('credits-mode-display');
+        if (modeDisplay) {
+            modeDisplay.textContent = mode === 'byok' ? 'BYOB' : 'Hosted';
         }
-        
-        pageCredits = storedCredits;
+
+        if (mode === 'byok') {
+            pageCredits = byokCredits;
+        } else {
+            pageCredits = hostedCredits;
+        }
         creditsCountDisplay.textContent = pageCredits;
         updateCreditsPillColor(pageCredits);
 
+        // Sync header mode switcher toggle buttons
+        const headerModeToggle = document.getElementById('header-mode-toggle');
+        if (headerModeToggle) {
+            const btns = headerModeToggle.querySelectorAll('.mode-toggle-btn');
+            btns.forEach(btn => {
+                const btnMode = btn.getAttribute('data-mode');
+                if (btnMode === mode) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            });
+        }
+
+        // Sync Top-up modal current balance display
+        const topupBalanceValue = document.getElementById('topup-balance-value');
+        if (topupBalanceValue) {
+            if (selectedTopupPlan === 'byok') {
+                topupBalanceValue.textContent = `${byokCredits} BYOB Pages`;
+                topupBalanceValue.style.color = 'var(--color-emerald)';
+            } else {
+                topupBalanceValue.textContent = `${hostedCredits} Hosted SaaS Pages`;
+                topupBalanceValue.style.color = 'var(--color-purple)';
+            }
+        }
+    }
+
+    function initializeAuthFallback() {
+        const storedLogin = localStorage.getItem('ta_logged_in') === 'true';
+        const storedEmail = localStorage.getItem('ta_user_email') || '';
+        
+        let storedHosted = localStorage.getItem('ta_hosted_credits');
+        if (storedHosted === null) {
+            storedHosted = localStorage.getItem('ta_page_credits') || 0;
+            localStorage.setItem('ta_hosted_credits', storedHosted);
+        }
+        hostedCredits = parseInt(storedHosted, 10) || 0;
+        
+        let storedByok = localStorage.getItem('ta_byok_credits');
+        if (storedByok === null) {
+            storedByok = 0;
+            localStorage.setItem('ta_byok_credits', storedByok);
+        }
+        byokCredits = parseInt(storedByok, 10) || 0;
+
         activePlanType = localStorage.getItem('ta_user_plan_type') || 'hosted';
         applyPlanRestrictions(activePlanType);
+        updateCreditsDisplay();
 
         if (storedLogin && storedEmail) {
             isLoggedIn = true;
@@ -214,24 +263,37 @@ document.addEventListener('DOMContentLoaded', () => {
             const planType = user.user_metadata?.plan_type || 'hosted';
             activePlanType = planType;
             console.log("User plan type loaded from metadata:", activePlanType);
-            applyPlanRestrictions(activePlanType);
             
+            // Fetch credits and byok_credits (with fallback for backward compatibility)
+            let profileData = null;
             const { data, error } = await supabase
                 .from('profiles')
-                .select('credits')
+                .select('credits, byok_credits')
                 .eq('id', user.id)
                 .single();
                 
             if (error) {
-                console.error("Error loading profile credits:", error);
-                return;
+                console.warn("Could not fetch byok_credits, trying fallback select for credits only. Error:", error);
+                const { data: fallbackData, error: fallbackError } = await supabase
+                    .from('profiles')
+                    .select('credits')
+                    .eq('id', user.id)
+                    .single();
+                if (fallbackError) {
+                    console.error("Error loading profile credits fallback:", fallbackError);
+                    return;
+                }
+                profileData = { ...fallbackData, byok_credits: 0 };
+            } else {
+                profileData = data;
             }
             
-            if (data) {
-                console.log("Fetched profile credits from database:", data.credits);
-                pageCredits = data.credits;
-                creditsCountDisplay.textContent = pageCredits;
-                updateCreditsPillColor(pageCredits);
+            if (profileData) {
+                console.log("Fetched profile credits. Hosted:", profileData.credits, "BYOK:", profileData.byok_credits);
+                hostedCredits = profileData.credits || 0;
+                byokCredits = profileData.byok_credits || 0;
+                applyPlanRestrictions(activePlanType);
+                updateCreditsDisplay();
             } else {
                 console.log("No profile data returned for user:", user.id);
             }
@@ -399,18 +461,27 @@ document.addEventListener('DOMContentLoaded', () => {
                                     // Fetch current credits to avoid overwrite conflicts
                                     const { data: profile, error: selectErr } = await supabase
                                         .from('profiles')
-                                        .select('credits')
+                                        .select('credits, byok_credits')
                                         .eq('id', session.user.id)
                                         .single();
                                     
                                     if (selectErr) throw selectErr;
                                     
-                                    const newCredits = (profile.credits || 0) + parseInt(amount, 10);
+                                    let updateFields = {};
+                                    if (planType === 'byok') {
+                                        const newByokCredits = (profile.byok_credits || 0) + parseInt(amount, 10);
+                                        updateFields = { byok_credits: newByokCredits };
+                                        byokCredits = newByokCredits;
+                                    } else {
+                                        const newHostedCredits = (profile.credits || 0) + parseInt(amount, 10);
+                                        updateFields = { credits: newHostedCredits };
+                                        hostedCredits = newHostedCredits;
+                                    }
                                     
                                     // Update credits in DB
                                     const { error: updateErr } = await supabase
                                         .from('profiles')
-                                        .update({ credits: newCredits })
+                                        .update(updateFields)
                                         .eq('id', session.user.id);
                                         
                                     if (updateErr) throw updateErr;
@@ -421,15 +492,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                     });
                                     if (metadataErr) throw metadataErr;
                                     
-                                    pageCredits = newCredits;
-                                    creditsCountDisplay.textContent = pageCredits;
-                                    updateCreditsPillColor(pageCredits);
                                     activePlanType = planType;
                                     
                                     // Apply plan connections gating UI lock
                                     if (typeof applyPlanRestrictions === 'function') {
                                         applyPlanRestrictions(planType);
                                     }
+                                    updateCreditsDisplay();
                                     
                                     // Clear URL parameters
                                     window.history.replaceState({}, document.title, window.location.pathname);
@@ -512,6 +581,20 @@ document.addEventListener('DOMContentLoaded', () => {
             switchByokBtn.classList.remove('active');
             hostedGrid.style.display = 'grid';
             byokGrid.style.display = 'none';
+            
+            // If logged in, sync connection mode as well
+            if (isLoggedIn) {
+                const currentMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+                if (currentMode !== 'hosted') {
+                    localStorage.setItem('ta_connection_mode', 'hosted');
+                    if (settingsMode) settingsMode.value = 'hosted';
+                    const savedKey = localStorage.getItem('ta_api_key') || '';
+                    updateSettingsUI('hosted', '');
+                    selectedTopupPlan = 'hosted';
+                    if (buyPlanHosted) buyPlanHosted.click();
+                    updateCreditsDisplay();
+                }
+            }
         });
 
         switchByokBtn.addEventListener('click', () => {
@@ -519,6 +602,20 @@ document.addEventListener('DOMContentLoaded', () => {
             switchHostedBtn.classList.remove('active');
             hostedGrid.style.display = 'none';
             byokGrid.style.display = 'grid';
+            
+            // If logged in, sync connection mode as well
+            if (isLoggedIn) {
+                const currentMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+                if (currentMode !== 'byok') {
+                    localStorage.setItem('ta_connection_mode', 'byok');
+                    if (settingsMode) settingsMode.value = 'byok';
+                    const savedKey = localStorage.getItem('ta_api_key') || '';
+                    updateSettingsUI('byok', savedKey);
+                    selectedTopupPlan = 'byok';
+                    if (buyPlanByok) buyPlanByok.click();
+                    updateCreditsDisplay();
+                }
+            }
         });
     }
 
@@ -702,6 +799,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <option value="8000">Annual Package: 8,000 Pages ($999.00)</option>
                 <option value="20000">Enterprise Package: 20,000 Pages ($2,499.00)</option>
             `;
+            updateCreditsDisplay();
         });
 
         buyPlanByok.addEventListener('click', () => {
@@ -715,6 +813,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <option value="10000">Annual Package: 10,000 Pages ($999.00)</option>
                 <option value="25000">Enterprise Package: 25,000 Pages ($2,499.00)</option>
             `;
+            updateCreditsDisplay();
         });
     }
 
@@ -774,17 +873,21 @@ document.addEventListener('DOMContentLoaded', () => {
                         throw new Error("Stripe checkout session creation failed. No URL returned.");
                     }
                 } else {
-                    pageCredits += amount;
-                    localStorage.setItem('ta_page_credits', pageCredits);
+                    if (selectedTopupPlan === 'byok') {
+                        byokCredits += amount;
+                    } else {
+                        hostedCredits += amount;
+                    }
+                    localStorage.setItem('ta_hosted_credits', hostedCredits);
+                    localStorage.setItem('ta_byok_credits', byokCredits);
                     localStorage.setItem('ta_user_plan_type', selectedTopupPlan);
-                    creditsCountDisplay.textContent = pageCredits;
-                    updateCreditsPillColor(pageCredits);
-
+                    
                     activePlanType = selectedTopupPlan;
                     applyPlanRestrictions(activePlanType);
+                    updateCreditsDisplay();
                     
                     creditsModal.classList.remove('active');
-                    alert(`🎉 Offline Demo Mode: Successfully added +${amount} page credits and activated your ${activePlanType === 'byok' ? 'BYOK' : 'Hosted'} Plan!`);
+                    alert(`🎉 Offline Demo Mode: Successfully added +${amount} page credits and activated your ${selectedTopupPlan.toUpperCase()} Package!`);
                 }
             } catch (err) {
                 console.error("Top up error:", err);
@@ -814,27 +917,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Plan-Based Settings Restrictions Gating ---
     function applyPlanRestrictions(planType) {
-        console.log(`[Plan Restrictions] Applying restrictions for plan type: ${planType}`);
+        console.log(`[Plan Restrictions] Applying restrictions. Hosted credits: ${hostedCredits}, BYOK credits: ${byokCredits}`);
         const settingsModeDropdown = document.getElementById('settings-mode');
         if (!settingsModeDropdown) return;
         
         const hostedOption = settingsModeDropdown.querySelector('option[value="hosted"]');
         const byokOption = settingsModeDropdown.querySelector('option[value="byok"]');
         
-        if (planType === 'hosted') {
-            if (byokOption) byokOption.disabled = true;
-            if (hostedOption) hostedOption.disabled = false;
-            settingsModeDropdown.value = 'hosted';
-            localStorage.setItem('ta_connection_mode', 'hosted');
-            updateSettingsUI('hosted', '');
-        } else if (planType === 'byok') {
-            if (hostedOption) hostedOption.disabled = true;
-            if (byokOption) byokOption.disabled = false;
-            settingsModeDropdown.value = 'byok';
-            localStorage.setItem('ta_connection_mode', 'byok');
-            const savedApiKey = localStorage.getItem('ta_api_key') || '';
-            updateSettingsUI('byok', savedApiKey);
+        // If user has credits in a mode, unlock it. If they have 0 in both, unlock both so they can explore.
+        const canUseHosted = hostedCredits > 0 || (hostedCredits === 0 && byokCredits === 0);
+        const canUseByok = byokCredits > 0 || (hostedCredits === 0 && byokCredits === 0);
+        
+        if (hostedOption) hostedOption.disabled = !canUseHosted;
+        if (byokOption) byokOption.disabled = !canUseByok;
+        
+        // Determine active mode: use saved mode if unlocked, otherwise fallback to the unlocked one
+        let targetMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+        if (targetMode === 'hosted' && !canUseHosted) {
+            targetMode = 'byok';
+        } else if (targetMode === 'byok' && !canUseByok) {
+            targetMode = 'hosted';
         }
+        
+        settingsModeDropdown.value = targetMode;
+        localStorage.setItem('ta_connection_mode', targetMode);
+        
+        const savedApiKey = localStorage.getItem('ta_api_key') || '';
+        updateSettingsUI(targetMode, targetMode === 'byok' ? savedApiKey : '');
     }
 
     // --- Load Saved Settings ---
@@ -852,6 +961,33 @@ document.addEventListener('DOMContentLoaded', () => {
         
         updateModelDropdown(savedProvider, savedModel);
         updateSettingsUI(savedMode, savedKey);
+        
+        // Sync landing page pricing switcher to saved mode
+        if (switchHostedBtn && switchByokBtn && hostedGrid && byokGrid) {
+            if (savedMode === 'hosted') {
+                switchHostedBtn.classList.add('active');
+                switchByokBtn.classList.remove('active');
+                hostedGrid.style.display = 'grid';
+                byokGrid.style.display = 'none';
+            } else {
+                switchByokBtn.classList.add('active');
+                switchHostedBtn.classList.remove('active');
+                hostedGrid.style.display = 'none';
+                byokGrid.style.display = 'grid';
+            }
+        }
+        
+        // Sync top-up plan type to match saved connection mode
+        selectedTopupPlan = savedMode;
+        if (savedMode === 'hosted') {
+            if (buyPlanHosted) buyPlanHosted.classList.add('active');
+            if (buyPlanByok) buyPlanByok.classList.remove('active');
+        } else {
+            if (buyPlanByok) buyPlanByok.classList.add('active');
+            if (buyPlanHosted) buyPlanHosted.classList.remove('active');
+        }
+
+        updateCreditsDisplay();
     }
 
     function updateSettingsUI(mode, apiKey) {
@@ -867,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', () => {
             clearSettingsBtn.style.display = apiKey ? 'inline-block' : 'none';
             
             if (apiKey) {
-                openSettingsBtn.textContent = '⚙️ Connection: BYOK Active';
+                openSettingsBtn.textContent = '⚙️ Connection: BYOB Active';
                 openSettingsBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
                 openSettingsBtn.style.color = '#34d399';
             } else {
@@ -886,6 +1022,12 @@ document.addEventListener('DOMContentLoaded', () => {
         settingsMode.addEventListener('change', (e) => {
             const tempKey = settingsApiKey.value.trim();
             updateSettingsUI(e.target.value, tempKey);
+            
+            // Update displayed credits count immediately when switching dropdown selection
+            const selectedMode = e.target.value;
+            const tempCredits = selectedMode === 'byok' ? byokCredits : hostedCredits;
+            creditsCountDisplay.textContent = tempCredits;
+            updateCreditsPillColor(tempCredits);
         });
     }
 
@@ -898,10 +1040,67 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Modal Listeners ---
     if (openSettingsBtn) openSettingsBtn.addEventListener('click', () => settingsModal.classList.add('active'));
-    if (closeSettingsBtn) closeSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
+    if (closeSettingsBtn) {
+        closeSettingsBtn.addEventListener('click', () => {
+            settingsModal.classList.remove('active');
+            loadSettings();
+        });
+    }
     if (settingsModal) {
         settingsModal.addEventListener('click', (e) => {
-            if (e.target === settingsModal) settingsModal.classList.remove('active');
+            if (e.target === settingsModal) {
+                settingsModal.classList.remove('active');
+                loadSettings();
+            }
+        });
+    }
+
+    // Header Connection Mode Switcher Toggle Listener
+    const headerModeToggle = document.getElementById('header-mode-toggle');
+    if (headerModeToggle) {
+        const btns = headerModeToggle.querySelectorAll('.mode-toggle-btn');
+        btns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const selectedMode = btn.getAttribute('data-mode');
+                
+                // Save connection mode
+                localStorage.setItem('ta_connection_mode', selectedMode);
+                
+                // Sync settings modal dropdown
+                if (settingsMode) {
+                    settingsMode.value = selectedMode;
+                }
+                
+                // Sync settings UI and key states
+                const savedKey = localStorage.getItem('ta_api_key') || '';
+                updateSettingsUI(selectedMode, selectedMode === 'byok' ? savedKey : '');
+                
+                // Sync pricing grid display on landing page
+                if (switchHostedBtn && switchByokBtn && hostedGrid && byokGrid) {
+                    if (selectedMode === 'hosted') {
+                        switchHostedBtn.classList.add('active');
+                        switchByokBtn.classList.remove('active');
+                        hostedGrid.style.display = 'grid';
+                        byokGrid.style.display = 'none';
+                    } else {
+                        switchByokBtn.classList.add('active');
+                        switchHostedBtn.classList.remove('active');
+                        hostedGrid.style.display = 'none';
+                        byokGrid.style.display = 'grid';
+                    }
+                }
+                
+                // Sync top-up plan type
+                selectedTopupPlan = selectedMode;
+                if (selectedMode === 'hosted') {
+                    if (buyPlanHosted) buyPlanHosted.click();
+                } else {
+                    if (buyPlanByok) buyPlanByok.click();
+                }
+
+                // Update credits pill text and count display
+                updateCreditsDisplay();
+            });
         });
     }
 
@@ -1259,7 +1458,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         try {
                             if (supabase) {
                                 // Call RPC to deduct credits
-                                const { error: deductErr } = await supabase.rpc('deduct_credits', { pages_to_deduct: pagesNeeded });
+                                const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+                                const { error: deductErr } = await supabase.rpc('deduct_credits', { 
+                                    pages_to_deduct: pagesNeeded,
+                                    plan_mode: connectionMode 
+                                });
                                 if (deductErr) throw deductErr;
 
                                 // Log audit record to audits table
@@ -1279,10 +1482,15 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                                 await loadUserProfileAndCredits();
                                 await loadAuditHistory();
                             } else {
-                                pageCredits -= pagesNeeded;
-                                localStorage.setItem('ta_page_credits', pageCredits);
-                                creditsCountDisplay.textContent = pageCredits;
-                                updateCreditsPillColor(pageCredits);
+                                const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+                                if (connectionMode === 'byok') {
+                                    byokCredits -= pagesNeeded;
+                                    localStorage.setItem('ta_byok_credits', byokCredits);
+                                } else {
+                                    hostedCredits -= pagesNeeded;
+                                    localStorage.setItem('ta_hosted_credits', hostedCredits);
+                                }
+                                updateCreditsDisplay();
                             }
                             alert("🚀 Simulated audit completed: Deducted 5 page credits.");
                         } catch (err) {
@@ -1517,7 +1725,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             // Deduct credits and log audit to Database
             try {
                 if (supabase) {
-                    const { error: deductErr } = await supabase.rpc('deduct_credits', { pages_to_deduct: totalPagesNeeded });
+                    const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+                    const { error: deductErr } = await supabase.rpc('deduct_credits', { 
+                        pages_to_deduct: totalPagesNeeded,
+                        plan_mode: connectionMode 
+                    });
                     if (deductErr) throw deductErr;
 
                     const { error: logErr } = await supabase.from('audits').insert({
@@ -1537,10 +1749,15 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     await loadAuditHistory();
                 } else {
                     // Fallback mock mode
-                    pageCredits -= totalPagesNeeded;
-                    localStorage.setItem('ta_page_credits', pageCredits);
-                    creditsCountDisplay.textContent = pageCredits;
-                    updateCreditsPillColor(pageCredits);
+                    const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+                    if (connectionMode === 'byok') {
+                        byokCredits -= totalPagesNeeded;
+                        localStorage.setItem('ta_byok_credits', byokCredits);
+                    } else {
+                        hostedCredits -= totalPagesNeeded;
+                        localStorage.setItem('ta_hosted_credits', hostedCredits);
+                    }
+                    updateCreditsDisplay();
                 }
                 
                 hideLoader();

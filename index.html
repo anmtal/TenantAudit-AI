@@ -100,8 +100,8 @@
                 <p style="color: var(--text-secondary); max-width: 500px; text-align: center; margin-top: -16px; font-size: 14px;">Choose between using our secure hosted server or configuring your own API key to get 25% extra page credits.</p>
                 
                 <div class="pricing-switcher-wrapper">
-                    <button class="pricing-switch-btn active" id="switch-hosted">Hosted API Plan</button>
-                    <button class="pricing-switch-btn" id="switch-byok">BYOK Plan (+25% Pages)</button>
+                    <button class="pricing-switch-btn active" id="switch-hosted">Hosted SaaS Plan</button>
+                    <button class="pricing-switch-btn" id="switch-byok">BYOB Plan (+25% Pages)</button>
                 </div>
  
                 <!-- Hosted API Plans (5 Tiers) -->
@@ -391,9 +391,13 @@
                 <div class="header-actions">
                     <div class="user-meta-group">
                         <span class="user-email-pill" id="user-email-display">contact@leasealign.io</span>
+                        <div class="connection-toggle-pill" id="header-mode-toggle" title="Switch connection mode">
+                            <button class="mode-toggle-btn active" data-mode="hosted">Hosted SaaS</button>
+                            <button class="mode-toggle-btn" data-mode="byok">BYOB</button>
+                        </div>
                         <button class="credits-pill-btn" id="credits-topup-trigger" title="Click to purchase more credits">
                             <span class="credits-pulse"></span>
-                            <span id="credits-count-display">0</span> Pages Left
+                            <span id="credits-count-display">0</span> <span id="credits-mode-display">Hosted</span> Pages Left
                         </button>
                     </div>
                     <button class="settings-btn" id="dashboard-home-btn" title="Go back to Home page">
@@ -601,7 +605,7 @@
             <button class="modal-close-btn" id="close-settings-btn">&times;</button>
             <div class="modal-title-wrapper">
                 <h3>Configure Connection Settings</h3>
-                <p>Choose whether to use our secure hosted backend server or supply your own developer key directly (BYOK Mode).</p>
+                <p>Choose whether to use our secure hosted backend server or supply your own developer key directly (BYOB Mode).</p>
             </div>
             
             <form id="settings-form" onsubmit="return false;">
@@ -611,7 +615,7 @@
                     <div class="select-wrapper">
                         <select id="settings-mode">
                             <option value="hosted" selected>Hosted SaaS Mode (No Setup Required)</option>
-                            <option value="byok">Bring Your Own Key (BYOK Mode)</option>
+                            <option value="byok">Bring Your Own Bot (BYOB Mode)</option>
                         </select>
                     </div>
                 </div>
@@ -668,8 +672,11 @@
                 <div class="form-group">
                     <label>Select Plan Type</label>
                     <div class="pricing-switcher-wrapper" style="display: flex; width: 100%; margin-top: 4px; margin-bottom: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); padding: 4px; border-radius: 30px;">
-                        <button type="button" class="pricing-switch-btn active" id="buy-plan-hosted" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">Hosted API Plan</button>
-                        <button type="button" class="pricing-switch-btn" id="buy-plan-byok" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">BYOK Plan (+25% Pages)</button>
+                        <button type="button" class="pricing-switch-btn active" id="buy-plan-hosted" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">Hosted SaaS Plan</button>
+                        <button type="button" class="pricing-switch-btn" id="buy-plan-byok" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">BYOB Plan (+25% Pages)</button>
+                    </div>
+                    <div id="topup-current-balance-display" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 15px; text-align: center; background: rgba(255,255,255,0.02); padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.04);">
+                        Current Balance: <strong style="color: var(--color-purple);" id="topup-balance-value">0 Hosted SaaS Pages</strong>
                     </div>
                 </div>
 

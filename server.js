@@ -347,7 +347,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
                     currency: 'usd',
                     product_data: {
                         name: `${packageName} - LeaseAlign AI`,
-                        description: `Purchase of ${amount} page credits for ${planType === 'hosted' ? 'Hosted API Plan' : 'BYOK Plan'}`,
+                        description: `Purchase of ${amount} page credits for ${planType === 'hosted' ? 'Hosted SaaS Plan' : 'BYOB Plan'}`,
                     },
                     unit_amount: priceInCents,
                 },

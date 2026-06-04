@@ -1327,9 +1327,9 @@ select option {
 }
 
 .credits-pill-btn {
-    background: rgba(16, 185, 129, 0.08);
-    border: 1px solid rgba(16, 185, 129, 0.25);
-    color: var(--color-emerald);
+    background: rgba(168, 85, 247, 0.08);
+    border: 1px solid rgba(168, 85, 247, 0.25);
+    color: var(--color-purple);
     padding: 8px 14px;
     border-radius: 8px;
     font-size: 13px;
@@ -1344,9 +1344,9 @@ select option {
 }
 
 .credits-pill-btn:hover {
-    background: rgba(16, 185, 129, 0.15);
-    border-color: rgba(16, 185, 129, 0.4);
-    box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+    background: rgba(168, 85, 247, 0.15);
+    border-color: rgba(168, 85, 247, 0.4);
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.15);
 }
 
 .credits-pill-btn.credits-low {
@@ -1863,6 +1863,91 @@ select option {
     box-shadow: 0 0 10px rgba(168, 85, 247, 0.35);
 }
 
+/* --- Custom Centered Premium Alert Modal --- */
+.custom-alert-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(8, 8, 10, 0.65);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 99999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
 
+.custom-alert-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
 
+.custom-alert-card {
+    background: rgba(20, 20, 25, 0.95);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    box-shadow: 0 0 30px rgba(168, 85, 247, 0.15), inset 0 0 12px rgba(255, 255, 255, 0.02);
+    border-radius: 16px;
+    padding: 24px 32px;
+    max-width: 440px;
+    width: 90%;
+    text-align: center;
+    transform: scale(0.9);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
 
+.custom-alert-overlay.active .custom-alert-card {
+    transform: scale(1);
+}
+
+.custom-alert-logo {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 16px auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(168, 85, 247, 0.1);
+    border: 1px solid rgba(168, 85, 247, 0.25);
+    border-radius: 12px;
+    color: var(--color-purple);
+}
+
+.custom-alert-title {
+    font-family: var(--font-heading);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.custom-alert-message {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 24px;
+    white-space: pre-line;
+}
+
+.custom-alert-btn {
+    background: var(--color-purple);
+    color: #fff;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
+}
+
+.custom-alert-btn:hover {
+    background: #b866ff;
+    box-shadow: 0 4px 20px rgba(168, 85, 247, 0.4);
+    transform: translateY(-1px);
+}

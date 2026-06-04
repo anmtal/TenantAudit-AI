@@ -4,6 +4,57 @@
 
 document.addEventListener('DOMContentLoaded', () => {
 
+    // --- Custom Centered Alert Override ---
+    (function() {
+        const overlay = document.createElement('div');
+        overlay.className = 'custom-alert-overlay';
+        
+        const card = document.createElement('div');
+        card.className = 'custom-alert-card';
+        
+        const logo = document.createElement('div');
+        logo.className = 'custom-alert-logo';
+        logo.innerHTML = '<i data-lucide="bell"></i>';
+        
+        const title = document.createElement('div');
+        title.className = 'custom-alert-title';
+        title.textContent = 'LeaseAlign AI';
+        
+        const message = document.createElement('div');
+        message.className = 'custom-alert-message';
+        
+        const btn = document.createElement('button');
+        btn.className = 'custom-alert-btn';
+        btn.textContent = 'OK';
+        
+        card.appendChild(logo);
+        card.appendChild(title);
+        card.appendChild(message);
+        card.appendChild(btn);
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+        
+        const closeAlert = () => {
+            overlay.classList.remove('active');
+        };
+        
+        btn.addEventListener('click', closeAlert);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                closeAlert();
+            }
+        });
+        
+        window.alert = function(msg) {
+            message.textContent = msg;
+            overlay.classList.add('active');
+            
+            if (window.lucide) {
+                lucide.createIcons();
+            }
+        };
+    })();
+
     // --- State Variables ---
     let filesState = {
         lease: null,
@@ -39,6 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const loginToHomeLink = document.getElementById('login-to-home-link');
     const logoutBtn = document.getElementById('logout-btn');
     const homeLogoutBtn = document.getElementById('home-logout-btn');
+    const homeCreditsDisplay = document.getElementById('home-credits-display');
+    const homeCreditsCount = document.getElementById('home-credits-count');
     
     // Auth Toggle selectors
     const authToggleLink = document.getElementById('auth-toggle-link');
@@ -160,6 +213,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (homeLogoutBtn) {
             homeLogoutBtn.style.display = isLoggedIn ? 'flex' : 'none';
         }
+        if (homeCreditsDisplay) {
+            homeCreditsDisplay.style.display = isLoggedIn ? 'flex' : 'none';
+        }
     }
 
     function updateCreditsPillColor(credits) {
@@ -181,6 +237,9 @@ document.addEventListener('DOMContentLoaded', () => {
             pageCredits = hostedCredits;
         }
         creditsCountDisplay.textContent = pageCredits;
+        if (homeCreditsCount) {
+            homeCreditsCount.textContent = pageCredits;
+        }
         updateCreditsPillColor(pageCredits);
 
         // Sync header mode switcher toggle buttons
@@ -772,16 +831,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Credits Modal Handlers
+    const handleTopupClick = () => {
+        creditsModal.classList.add('active');
+        // Sync with user's current plan type
+        if (activePlanType === 'hosted') {
+            if (buyPlanHosted) buyPlanHosted.click();
+        } else {
+            if (buyPlanByok) buyPlanByok.click();
+        }
+    };
+
     if (creditsTopupTrigger) {
-        creditsTopupTrigger.addEventListener('click', () => {
-            creditsModal.classList.add('active');
-            // Sync with user's current plan type
-            if (activePlanType === 'hosted') {
-                if (buyPlanHosted) buyPlanHosted.click();
-            } else {
-                if (buyPlanByok) buyPlanByok.click();
-            }
-        });
+        creditsTopupTrigger.addEventListener('click', handleTopupClick);
+    }
+
+    if (homeCreditsDisplay) {
+        homeCreditsDisplay.addEventListener('click', handleTopupClick);
     }
     
     if (closeCreditsBtn) {

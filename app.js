@@ -67,6 +67,66 @@ function initializeApp() {
         return sid;
     }
 
+    // Helper to completely clear user state, files, and auth inputs on logout
+    function resetAppSessionState() {
+        console.log("[Wipe Session] Clearing all user files, inputs, and results data...");
+        
+        // 1. Clear auth form inputs
+        if (loginEmail) loginEmail.value = '';
+        if (loginPassword) loginPassword.value = '';
+        if (registerFirstName) registerFirstName.value = '';
+        if (registerLastName) registerLastName.value = '';
+        if (registerCompany) registerCompany.value = '';
+        if (loginErrorMsg) {
+            loginErrorMsg.textContent = '';
+            loginErrorMsg.style.display = 'none';
+        }
+
+        // 2. Wipes internal file states
+        filesState.lease = null;
+        filesState.estoppel = null;
+        extractedText.lease = '';
+        extractedText.estoppel = '';
+        auditData = null;
+
+        // 3. Reset input files elements values
+        if (leaseFileInput) leaseFileInput.value = '';
+        if (estoppelFileInput) estoppelFileInput.value = '';
+
+        // 4. Reset drop zone visual containers and files descriptions
+        if (leaseDropZone) {
+            leaseDropZone.classList.remove('file-selected');
+            if (leaseFileInfo) {
+                leaseFileInfo.textContent = 'No file selected';
+                leaseFileInfo.style.display = 'none';
+            }
+            const removeLeaseBtn = document.getElementById('remove-lease-file-btn');
+            if (removeLeaseBtn) removeLeaseBtn.style.display = 'none';
+        }
+
+        if (estoppelDropZone) {
+            estoppelDropZone.classList.remove('file-selected');
+            if (estoppelFileInfo) {
+                estoppelFileInfo.textContent = 'No file selected';
+                estoppelFileInfo.style.display = 'none';
+            }
+            const removeEstoppelBtn = document.getElementById('remove-estoppel-file-btn');
+            if (removeEstoppelBtn) removeEstoppelBtn.style.display = 'none';
+        }
+
+        // 5. Disable auditing actions
+        if (startAuditBtn) startAuditBtn.disabled = true;
+
+        // 6. Reset panels views visibility
+        if (resultsPanel) resultsPanel.style.display = 'none';
+        if (uploadPanel) uploadPanel.style.display = 'block';
+
+        // 7. Clear user-specific session trackers
+        localStorage.removeItem('ta_session_id');
+        localStorage.removeItem('ta_user_email');
+        localStorage.removeItem('ta_logged_in');
+    }
+
     // --- State Variables ---
     let filesState = {
         lease: null,
@@ -339,16 +399,16 @@ function initializeApp() {
             activePlanType = planType;
             console.log("User plan type loaded from metadata:", activePlanType);
             
-            // Fetch credits and byok_credits (with fallback for backward compatibility)
+            // Fetch credits, byok_credits and active_session_id
             let profileData = null;
             const { data, error } = await supabase
                 .from('profiles')
-                .select('credits, byok_credits')
+                .select('credits, byok_credits, active_session_id')
                 .eq('id', user.id)
                 .single();
                 
             if (error) {
-                console.warn("Could not fetch byok_credits, trying fallback select for credits only. Error:", error);
+                console.warn("Could not fetch profile fields, trying fallback select for credits only. Error:", error);
                 const { data: fallbackData, error: fallbackError } = await supabase
                     .from('profiles')
                     .select('credits')
@@ -358,12 +418,21 @@ function initializeApp() {
                     console.error("Error loading profile credits fallback:", fallbackError);
                     return;
                 }
-                profileData = { ...fallbackData, byok_credits: 0 };
+                profileData = { ...fallbackData, byok_credits: 0, active_session_id: null };
             } else {
                 profileData = data;
             }
             
             if (profileData) {
+                // Real-time seat enforcement check
+                const currentSessionId = localStorage.getItem('ta_session_id');
+                if (profileData.active_session_id && currentSessionId && profileData.active_session_id !== currentSessionId) {
+                    console.warn(`[Seat Enforcement Mismatch] DB Session: ${profileData.active_session_id}, Local Session: ${currentSessionId}`);
+                    alert("🚫 Multiple active sessions detected. Your account has been logged in on another device/browser.");
+                    await handleLogout();
+                    return;
+                }
+
                 console.log("Fetched profile credits. Hosted:", profileData.credits, "BYOK:", profileData.byok_credits);
                 hostedCredits = profileData.credits || 0;
                 byokCredits = profileData.byok_credits || 0;
@@ -579,6 +648,7 @@ function initializeApp() {
                         userEmail = '';
                         showView('home');
                         updateNavUI();
+                        resetAppSessionState();
                     }
                 });
             } else {
@@ -826,12 +896,11 @@ function initializeApp() {
         if (supabase) {
             await supabase.auth.signOut();
         } else {
-            localStorage.setItem('ta_logged_in', 'false');
-            localStorage.removeItem('ta_user_email');
             isLoggedIn = false;
             userEmail = '';
             showView('home');
             updateNavUI();
+            resetAppSessionState();
         }
     };
 
@@ -2374,6 +2443,14 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     if (window.lucide) {
         lucide.createIcons();
     }
+
+    // Verify seat restrictions in real-time when switching back to this browser/tab
+    window.addEventListener('focus', () => {
+        if (isLoggedIn && supabase) {
+            console.log("[Window Focus] Verifying seat session validity...");
+            loadUserProfileAndCredits();
+        }
+    });
 }
 
 // Conditional execution wrapper to ensure app.js runs even if loaded asynchronously or after DOMContentLoaded

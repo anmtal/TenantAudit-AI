@@ -362,6 +362,73 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Load credits and past history from Supabase
                         await loadUserProfileAndCredits();
                         await loadAuditHistory();
+
+                        // --- Check for Stripe Redirect Success ---
+                        const urlParams = new URLSearchParams(window.location.search);
+                        if (urlParams.get('checkout_success') === 'true' && urlParams.get('session_id')) {
+                            const sessionId = urlParams.get('session_id');
+                            showLoader("Verifying Stripe payment...");
+                            try {
+                                const response = await fetch(`/api/verify-checkout-session?session_id=${sessionId}`);
+                                const data = await response.json();
+                                if (data.success) {
+                                    const { amount, planType } = data.metadata;
+                                    
+                                    // Fetch current credits to avoid overwrite conflicts
+                                    const { data: profile, error: selectErr } = await supabase
+                                        .from('profiles')
+                                        .select('credits')
+                                        .eq('id', session.user.id)
+                                        .single();
+                                    
+                                    if (selectErr) throw selectErr;
+                                    
+                                    const newCredits = (profile.credits || 0) + parseInt(amount, 10);
+                                    
+                                    // Update credits in DB
+                                    const { error: updateErr } = await supabase
+                                        .from('profiles')
+                                        .update({ credits: newCredits })
+                                        .eq('id', session.user.id);
+                                        
+                                    if (updateErr) throw updateErr;
+                                    
+                                    // Update plan type in auth user metadata
+                                    const { error: metadataErr } = await supabase.auth.updateUser({
+                                        data: { plan_type: planType }
+                                    });
+                                    if (metadataErr) throw metadataErr;
+                                    
+                                    pageCredits = newCredits;
+                                    creditsCountDisplay.textContent = pageCredits;
+                                    updateCreditsPillColor(pageCredits);
+                                    activePlanType = planType;
+                                    
+                                    // Apply plan connections gating UI lock
+                                    if (typeof applyPlanRestrictions === 'function') {
+                                        applyPlanRestrictions(planType);
+                                    }
+                                    
+                                    // Clear URL parameters
+                                    window.history.replaceState({}, document.title, window.location.pathname);
+                                    
+                                    alert(`🎉 Payment Verified! Successfully added +${amount} credits to your account. Active plan set to ${planType.toUpperCase()}.`);
+                                } else {
+                                    alert("Stripe Checkout verification failed: " + (data.error || "Unknown error"));
+                                }
+                            } catch (err) {
+                                console.error("Redirect verification error:", err);
+                                alert("Failed to verify Stripe payment: " + err.message);
+                            } finally {
+                                hideLoader();
+                            }
+                        }
+
+                        // --- Check for Stripe Redirect Cancel ---
+                        if (urlParams.get('checkout_cancel') === 'true') {
+                            window.history.replaceState({}, document.title, window.location.pathname);
+                            alert("Payment canceled. No credits were added.");
+                        }
                     } else {
                         isLoggedIn = false;
                         userEmail = '';
@@ -620,36 +687,50 @@ document.addEventListener('DOMContentLoaded', () => {
                     const { data: { user } } = await supabase.auth.getUser();
                     if (!user) throw new Error("No authenticated user found.");
 
-                    // Fetch current balance from profiles
-                    const { data: profile, error: selectErr } = await supabase
-                        .from('profiles')
-                        .select('credits')
-                        .eq('id', user.id)
-                        .single();
+                    // Determine price and package name based on amount and plan type
+                    let price = 49.00;
+                    let packageName = "Starter Package";
+                    
+                    if (selectedTopupPlan === 'hosted') {
+                        if (amount === 100) { price = 49.00; packageName = "Starter Package"; }
+                        else if (amount === 500) { price = 149.00; packageName = "Strip Center Package"; }
+                        else if (amount === 1500) { price = 399.00; packageName = "Neighborhood Center Package"; }
+                        else if (amount === 8000) { price = 999.00; packageName = "Annual Retainer"; }
+                        else if (amount === 20000) { price = 2499.00; packageName = "Enterprise Retainer"; }
+                    } else {
+                        if (amount === 125) { price = 49.00; packageName = "Starter Package"; }
+                        else if (amount === 625) { price = 149.00; packageName = "Strip Center Package"; }
+                        else if (amount === 1875) { price = 399.00; packageName = "Neighborhood Center Package"; }
+                        else if (amount === 10000) { price = 999.00; packageName = "Annual Retainer"; }
+                        else if (amount === 25000) { price = 2499.00; packageName = "Enterprise Retainer"; }
+                    }
 
-                    if (selectErr) throw selectErr;
+                    creditsModal.classList.remove('active');
+                    showLoader("Connecting to payment checkout...");
 
-                    const newCredits = (profile.credits || 0) + amount;
-
-                    const { error: updateErr } = await supabase
-                        .from('profiles')
-                        .update({ credits: newCredits })
-                        .eq('id', user.id);
-
-                    if (updateErr) throw updateErr;
-
-                    // Update plan type in user metadata
-                    const { error: metadataErr } = await supabase.auth.updateUser({
-                        data: { plan_type: selectedTopupPlan }
+                    const response = await fetch('/api/create-checkout-session', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            amount,
+                            planType: selectedTopupPlan,
+                            userId: user.id,
+                            price,
+                            packageName
+                        })
                     });
-                    if (metadataErr) throw metadataErr;
 
-                    pageCredits = newCredits;
-                    creditsCountDisplay.textContent = pageCredits;
-                    updateCreditsPillColor(pageCredits);
+                    const sessionData = await response.json();
+                    hideLoader();
 
-                    activePlanType = selectedTopupPlan;
-                    applyPlanRestrictions(activePlanType);
+                    if (sessionData.error) throw new Error(sessionData.error);
+
+                    if (sessionData.url) {
+                        // Redirect to Stripe checkout page
+                        window.location.href = sessionData.url;
+                    } else {
+                        throw new Error("Stripe checkout session creation failed. No URL returned.");
+                    }
                 } else {
                     pageCredits += amount;
                     localStorage.setItem('ta_page_credits', pageCredits);
@@ -659,10 +740,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     activePlanType = selectedTopupPlan;
                     applyPlanRestrictions(activePlanType);
+                    
+                    creditsModal.classList.remove('active');
+                    alert(`🎉 Offline Demo Mode: Successfully added +${amount} page credits and activated your ${activePlanType === 'byok' ? 'BYOK' : 'Hosted'} Plan!`);
                 }
-                
-                creditsModal.classList.remove('active');
-                alert(`🎉 Successfully added +${amount} page credits and activated your ${activePlanType === 'byok' ? 'BYOK' : 'Hosted'} Plan!`);
             } catch (err) {
                 console.error("Top up error:", err);
                 alert(`🚫 Credit update failed: ${err.message}`);

@@ -5,6 +5,8 @@ const dotenv = require('dotenv');
 // Load environment variables
 dotenv.config();
 
+const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
+
 const app = express();
 const PORT = process.env.PORT || 8000;
 
@@ -317,6 +319,78 @@ Please extract the required fields and return the JSON.`;
     } catch (error) {
         console.error(`[Server Error]`, error);
         res.status(500).json({ error: error.message || "Internal server error" });
+    }
+});
+
+// Stripe Checkout Session Creation
+app.post('/api/create-checkout-session', async (req, res) => {
+    const { amount, planType, userId, price, packageName } = req.body;
+    
+    if (!amount || !planType || !userId || !price || !packageName) {
+        return res.status(400).json({ error: "Missing required fields for checkout session" });
+    }
+    
+    const priceInCents = Math.round(price * 100);
+    
+    try {
+        if (!stripe) {
+            return res.status(400).json({ error: "Stripe is not configured on the server. Please add STRIPE_SECRET_KEY to your .env file." });
+        }
+        
+        // Dynamically compute absolute URL based on request headers (Vercel-safe)
+        const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
+        
+        const session = await stripe.checkout.sessions.create({
+            payment_method_types: ['card'],
+            line_items: [{
+                price_data: {
+                    currency: 'usd',
+                    product_data: {
+                        name: `${packageName} - LeaseAlign AI`,
+                        description: `Purchase of ${amount} page credits for ${planType === 'hosted' ? 'Hosted API Plan' : 'BYOK Plan'}`,
+                    },
+                    unit_amount: priceInCents,
+                },
+                quantity: 1,
+            }],
+            mode: 'payment',
+            metadata: {
+                userId: userId,
+                planType: planType,
+                amount: amount.toString()
+            },
+            success_url: `${origin}/?checkout_success=true&session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${origin}/?checkout_cancel=true`,
+        });
+        
+        res.json({ id: session.id, url: session.url, mode: 'stripe' });
+    } catch (err) {
+        console.error("Error creating checkout session:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Stripe Session Verification
+app.get('/api/verify-checkout-session', async (req, res) => {
+    const { session_id } = req.query;
+    if (!session_id) {
+        return res.status(400).json({ error: "Missing session_id query parameter" });
+    }
+    
+    try {
+        if (!stripe) {
+            return res.status(400).json({ error: "Stripe is not configured on this server." });
+        }
+        
+        const session = await stripe.checkout.sessions.retrieve(session_id);
+        if (session.payment_status === 'paid') {
+            res.json({ success: true, metadata: session.metadata });
+        } else {
+            res.json({ success: false, error: "Payment not completed" });
+        }
+    } catch (err) {
+        console.error("Error verifying checkout session:", err);
+        res.status(500).json({ error: err.message });
     }
 });
 

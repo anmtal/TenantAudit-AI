@@ -472,12 +472,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 isSignUpMode = !isSignUpMode;
                 if (isSignUpMode) {
                     loginTitle.textContent = "Create an Account";
-                    loginSubtitle.textContent = "Sign up for TenantAudit AI to start auditing commercial leases.";
+                    loginSubtitle.textContent = "Sign up for LeaseAlign AI to start auditing commercial leases.";
                     loginSubmitBtn.textContent = "Register Account";
                     loginHintBox.style.display = 'none';
                     authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
                 } else {
-                    loginTitle.textContent = "Sign In to TenantAudit AI";
+                    loginTitle.textContent = "Sign In to LeaseAlign AI";
                     loginSubtitle.textContent = "Enter your credentials to access your transaction dashboard";
                     loginSubmitBtn.textContent = "Sign In";
                     loginHintBox.style.display = 'block';
@@ -1738,7 +1738,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const url = URL.createObjectURL(blob);
             
             link.setAttribute("href", url);
-            link.setAttribute("download", `TenantAudit_due_diligence_report_${new Date().toISOString().substring(0, 10)}.csv`);
+            link.setAttribute("download", `LeaseAlign_due_diligence_report_${new Date().toISOString().substring(0, 10)}.csv`);
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();

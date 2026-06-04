@@ -323,7 +323,7 @@ Please extract the required fields and return the JSON.`;
 // Start Server
 app.listen(PORT, () => {
     console.log(`================================================================`);
-    console.log(`🚀 TenantAudit AI is running in dual connection mode!`);
+    console.log(`🚀 LeaseAlign AI is running in dual connection mode!`);
     console.log(`👉 Local URL: http://localhost:${PORT}`);
     console.log(`🔑 Server API Key: ${process.env.OPENAI_API_KEY ? "CONFIGURED (SaaS Mode Active)" : "NOT SET (Only BYOK & Simulation Active)"}`);
     console.log(`================================================================`);

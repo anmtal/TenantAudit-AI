@@ -1962,6 +1962,16 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 // Normalize square footage variations
                 norm = norm.replace(/rentable\s*square\s*feet|square\s*feet|square\s*foot|sq\s*ft|sqft|\bsf\b/g, '');
 
+                // Strip common filler words/phrases to prevent false mismatches
+                const fillers = [
+                    /per\s*month/g, /monthly\s*base\s*rent/g, /monthly\s*rent/g, /base\s*rent/g,
+                    /rent/g, /monthly/g, /yearly/g, /annually/g, /annual/g, /per\s*annum/g,
+                    /suite/g, /unit/g, /room/g, /floor/g, /rentable/g, /approximately/g, /exactly/g
+                ];
+                fillers.forEach(pattern => {
+                    norm = norm.replace(pattern, '');
+                });
+
                 // Remove apostrophes first so "int'l" -> "intl"
                 norm = norm.replace(/'/g, '');
                 // Replace remaining non-alphanumeric chars with spaces to preserve word boundaries
@@ -1985,7 +1995,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 
                 let words = norm.split(' ');
                 words = words.map(w => abbreviations[w] || w);
-                return words.join('');
+                return words.join(' ');
             }
 
             const lVal = normalizeVal(lease.value);

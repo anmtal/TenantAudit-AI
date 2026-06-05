@@ -145,6 +145,8 @@ function initializeApp() {
     let byokCredits = 0;
     let userEmail = '';
     let supabase = null;
+    let supabaseUrl = '';
+    let supabaseAnonKey = '';
     let isSignUpMode = false;
     let activePlanType = 'hosted'; // 'hosted' or 'byok'
 
@@ -402,12 +404,28 @@ function initializeApp() {
             return;
         }
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                console.log("loadUserProfileAndCredits: No user session found.");
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                console.log("loadUserProfileAndCredits: No active session found.");
                 return;
             }
-            console.log("Fetching credits for user ID:", user.id, "email:", user.email);
+
+            console.log("Fetching fresh user metadata from auth server for user:", session.user.email);
+            
+            // Fetch the latest user metadata directly from the Supabase Auth server to bypass SDK memory caching
+            const authRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+                headers: {
+                    'apikey': supabaseAnonKey,
+                    'Authorization': `Bearer ${session.access_token}`
+                }
+            });
+            
+            if (!authRes.ok) {
+                console.warn("Failed to fetch fresh user metadata from auth server.");
+                return;
+            }
+            
+            const user = await authRes.json();
 
             // Load plan type and active session ID from metadata
             const planType = user.user_metadata?.plan_type || 'hosted';
@@ -559,7 +577,9 @@ function initializeApp() {
             const res = await fetch('/api/config?t=' + Date.now());
             const config = await res.json();
             if (config.supabaseUrl && config.supabaseAnonKey && window.supabase) {
-                supabase = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+                supabaseUrl = config.supabaseUrl;
+                supabaseAnonKey = config.supabaseAnonKey;
+                supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
                 console.log("Supabase Client initialized successfully.");
                 
                 // Set up auth state change listener
@@ -2471,6 +2491,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     window.addEventListener('focus', () => {
         if (isLoggedIn && supabase) {
             console.log("[Window Focus] Verifying seat session validity...");
+            loadUserProfileAndCredits();
+        }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && isLoggedIn && supabase) {
+            console.log("[Visibility Change] Verifying seat session validity...");
             loadUserProfileAndCredits();
         }
     });

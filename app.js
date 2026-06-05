@@ -2180,6 +2180,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         let records = [];
         let redFlags = 0;
         let matchCount = 0;
+        let warningCount = 0;
 
         terms.forEach(t => {
             const lease = leaseJson[t.key] || { value: "Not Mentioned", quote: "No citation found." };

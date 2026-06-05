@@ -125,6 +125,9 @@ function initializeApp() {
         localStorage.removeItem('ta_session_id');
         localStorage.removeItem('ta_user_email');
         localStorage.removeItem('ta_logged_in');
+
+        // 8. Dismiss any active visual loaders
+        hideLoader();
     }
 
     // --- State Variables ---

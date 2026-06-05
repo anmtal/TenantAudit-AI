@@ -165,6 +165,59 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- --------------------------------------------------------------------
+-- 5b. Server-Side Atomic Credits Deduction & Refund (Race-Condition Free)
+-- --------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.deduct_user_credits(target_user_id UUID, pages_to_deduct INTEGER, plan_mode TEXT)
+RETURNS BOOLEAN AS $$
+DECLARE
+  current_bal INTEGER;
+BEGIN
+  IF plan_mode = 'hosted' THEN
+    SELECT credits INTO current_bal FROM public.profiles WHERE id = target_user_id FOR UPDATE;
+    IF current_bal >= pages_to_deduct THEN
+      UPDATE public.profiles
+      SET credits = credits - pages_to_deduct
+      WHERE id = target_user_id;
+      RETURN TRUE;
+    ELSE
+      RETURN FALSE;
+    END IF;
+  ELSIF plan_mode = 'byok' THEN
+    SELECT byok_credits INTO current_bal FROM public.profiles WHERE id = target_user_id FOR UPDATE;
+    IF current_bal >= pages_to_deduct OR current_bal >= 900000 THEN
+      IF current_bal < 900000 THEN
+        UPDATE public.profiles
+        SET byok_credits = byok_credits - pages_to_deduct
+        WHERE id = target_user_id;
+      END IF;
+      RETURN TRUE;
+    ELSE
+      RETURN FALSE;
+    END IF;
+  ELSE
+    RETURN FALSE;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.refund_user_credits(target_user_id UUID, pages_to_refund INTEGER, plan_mode TEXT)
+RETURNS VOID AS $$
+BEGIN
+  IF plan_mode = 'hosted' THEN
+    UPDATE public.profiles
+    SET credits = credits + pages_to_refund
+    WHERE id = target_user_id;
+  ELSIF plan_mode = 'byok' THEN
+    IF (SELECT byok_credits FROM public.profiles WHERE id = target_user_id) < 900000 THEN
+      UPDATE public.profiles
+      SET byok_credits = byok_credits + pages_to_refund
+      WHERE id = target_user_id;
+    END IF;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- --------------------------------------------------------------------
 -- 6. Optional Developer/Admin Testing Helper Queries
 -- --------------------------------------------------------------------
 -- These queries are commented out. Uncomment and run them individually 

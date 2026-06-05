@@ -313,7 +313,7 @@ function initializeApp() {
         const mode = localStorage.getItem('ta_connection_mode') || 'hosted';
 
         if (mode === 'byok') {
-            pageCredits = 999999; // BYOB is always Unlimited page audits on our platform
+            pageCredits = 999999; // BYOK is always Unlimited page audits on our platform
         } else {
             pageCredits = hostedCredits;
         }
@@ -359,7 +359,7 @@ function initializeApp() {
         const topupBalanceValue = document.getElementById('topup-balance-value');
         if (topupBalanceValue) {
             if (selectedTopupPlan === 'byok') {
-                topupBalanceValue.textContent = `Unlimited BYOB Pages`;
+                topupBalanceValue.textContent = `Unlimited BYOK Pages`;
                 topupBalanceValue.style.color = 'var(--color-emerald)';
             } else {
                 const displayBal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
@@ -499,19 +499,24 @@ function initializeApp() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
-            // Cleanup: Delete expired records belonging to the current user
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - 30);
-            const cutoffIso = cutoffDate.toISOString();
-            
-            try {
-                await supabase
-                    .from('audits')
-                    .delete()
-                    .eq('user_id', user.id)
-                    .lt('created_at', cutoffIso);
-            } catch (cleanupErr) {
-                console.error("Failed to delete expired audits:", cleanupErr);
+            // Cleanup: Delete expired records belonging to the current user (Run at most once per day)
+            const todayStr = new Date().toISOString().split('T')[0];
+            if (localStorage.getItem('ta_last_cleanup') !== todayStr) {
+                const cutoffDate = new Date();
+                cutoffDate.setDate(cutoffDate.getDate() - 30);
+                const cutoffIso = cutoffDate.toISOString();
+                
+                try {
+                    await supabase
+                        .from('audits')
+                        .delete()
+                        .eq('user_id', user.id)
+                        .lt('created_at', cutoffIso);
+                    localStorage.setItem('ta_last_cleanup', todayStr);
+                    console.log("[Cleanup] Expired audits cleanup completed for today.");
+                } catch (cleanupErr) {
+                    console.error("Failed to delete expired audits:", cleanupErr);
+                }
             }
 
             // Fetch history isolated strictly for the current user
@@ -1023,8 +1028,8 @@ function initializeApp() {
             buyPlanHosted.classList.remove('active');
             selectedTopupPlan = 'byok';
             creditsAmount.innerHTML = `
-                <option value="149" selected>BYOB Monthly: Unlimited Pages ($149.00/mo)</option>
-                <option value="1299">BYOB Annual: Unlimited Pages ($1,299.00/yr)</option>
+                <option value="149" selected>BYOK Monthly: Unlimited Pages ($149.00/mo)</option>
+                <option value="1299">BYOK Annual: Unlimited Pages ($1,299.00/yr)</option>
             `;
             updateCreditsDisplay();
         });
@@ -1054,8 +1059,8 @@ function initializeApp() {
                         else if (amount === 8000) { price = 999.00; packageName = "Annual Package"; }
                         else if (amount === 20000) { price = 2499.00; packageName = "Enterprise Package"; }
                     } else {
-                        if (amount === 149) { price = 149.00; packageName = "BYOB Monthly Plan"; }
-                        else if (amount === 1299) { price = 1299.00; packageName = "BYOB Annual Plan"; }
+                        if (amount === 149) { price = 149.00; packageName = "BYOK Monthly Plan"; }
+                        else if (amount === 1299) { price = 1299.00; packageName = "BYOK Annual Plan"; }
                     }
 
                     creditsModal.classList.remove('active');
@@ -2796,7 +2801,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         </tbody>
     </table>
 
-    <div class="footer">
+    <div class="legal-disclaimer" style="margin-top: 40px; border-top: 1px dashed #d1d5db; padding-top: 15px; font-size: 10px; color: #6b7280; text-align: center; line-height: 1.4; font-style: italic;">
+        ⚠️ <strong>Legal Disclaimer:</strong> LeaseAlign AI is an LLM-assisted audit utility. All comparison results are for informational purposes only and must be verified by qualified legal counsel prior to closing.
+    </div>
+    <div class="footer" style="margin-top: 15px;">
         <p>CONFIDENTIAL — Prepared for B2B Transaction Due Diligence — Powered by LeaseAlign AI (leasealign.io)</p>
     </div>
 </body>

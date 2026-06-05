@@ -15,11 +15,51 @@ const supabaseAdmin = (supabaseUrl && supabaseServiceKey) ? createClient(supabas
 
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 
+const allowedOrigins = [
+    'https://leasealign.io',
+    'https://www.leasealign.io',
+    'https://leasealign-ai.vercel.app',
+    'https://leasealign.vercel.app'
+];
+
+function getCorsOptions() {
+    return {
+        origin: function (origin, callback) {
+            if (!origin) return callback(null, true);
+            const isLocalhost = origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1');
+            if (allowedOrigins.indexOf(origin) !== -1 || isLocalhost) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        }
+    };
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 90000) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetchWithTimeout(url, {
+            ...options,
+            signal: controller.signal
+        });
+        clearTimeout(id);
+        return response;
+    } catch (error) {
+        clearTimeout(id);
+        if (error.name === 'AbortError') {
+            throw new Error(`Gateway timeout: Upstream AI provider took longer than ${timeoutMs / 1000} seconds to respond.`);
+        }
+        throw error;
+    }
+}
+
 const app = express();
 const PORT = process.env.PORT || 8000;
 
 // Middleware
-app.use(cors());
+app.use(cors(getCorsOptions()));
 
 // Disable caching for all responses to ensure frontend/API are never cached
 app.use((req, res, next) => {
@@ -96,7 +136,7 @@ async function requireAuth(req, res, next) {
         // Verify active session for single-seat restriction using auth user metadata
         const clientSessionId = req.headers['x-session-id'] || req.headers['X-Session-ID'];
         const activeSessionId = user.user_metadata?.active_session_id;
-        if (activeSessionId && clientSessionId && activeSessionId !== clientSessionId) {
+        if (activeSessionId && activeSessionId !== clientSessionId) {
             console.warn(`[Blocked] Session mismatch for user ${user.email}. Auth Metadata: ${activeSessionId}, Header: ${clientSessionId}`);
             return res.status(403).json({
                 error: "session_mismatch",
@@ -273,8 +313,11 @@ app.use(express.static(__dirname));
 
 // Route to serve public Supabase configuration parameters
 app.get('/api/config', (req, res) => {
+    if (!process.env.SUPABASE_URL) {
+        console.warn("[Config Warning] SUPABASE_URL environment variable is missing on server.");
+    }
     res.json({
-        supabaseUrl: process.env.SUPABASE_URL || 'https://mcfrihcnqatynfhpijkh.supabase.co',
+        supabaseUrl: process.env.SUPABASE_URL || '',
         supabaseAnonKey: process.env.SUPABASE_ANON_KEY || ''
     });
 });
@@ -310,25 +353,18 @@ app.post('/api/audit', requireAuth, async (req, res) => {
 
         if (connectionMode === 'hosted') {
             if (supabaseAdmin) {
-                // Query user's credit balance
-                const { data: profile, error: profileErr } = await supabaseAdmin
-                    .from('profiles')
-                    .select('credits')
-                    .eq('id', req.user.id)
-                    .single();
-                     
-                if (profileErr) {
-                    console.error("[DB Failure] Failed to query profile credits:", profileErr.message);
-                    return res.status(500).json({ error: "Internal Server Error: Failed to retrieve page credits balance." });
+                // Atomic pre-deduction of credits via RPC
+                const { data: success, error: deductErr } = await supabaseAdmin
+                    .rpc('deduct_user_credits', { 
+                        target_user_id: req.user.id, 
+                        pages_to_deduct: pageCount, 
+                        plan_mode: 'hosted' 
+                    });
+                if (deductErr || !success) {
+                    console.warn(`[Blocked] User ${req.user.email} attempted hosted audit with insufficient credits.`);
+                    return res.status(403).json({ error: `Forbidden: Insufficient page credits. This audit requires ${pageCount} pages.` });
                 }
-                
-                currentCredits = profile ? (profile.credits || 0) : 0;
-                if (currentCredits < pageCount) {
-                    console.warn(`[Blocked] User ${req.user.email} attempted hosted audit with insufficient credits. Required: ${pageCount}, Has: ${currentCredits}`);
-                    return res.status(403).json({ error: `Forbidden: Insufficient page credits. This audit requires ${pageCount} pages, but you only have ${currentCredits} remaining.` });
-                }
-                
-                console.log(`[Authorized] Hosted audit request by ${req.user.email} (${currentCredits} credits remaining, needs ${pageCount})`);
+                console.log(`[Authorized & Deducted] Hosted audit request by ${req.user.email} (needs ${pageCount} credits)`);
             }
 
             // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet
@@ -342,6 +378,27 @@ app.post('/api/audit', requireAuth, async (req, res) => {
                 });
             }
         } else {
+            // BYOK Mode: check active BYOK subscription (credits > 0)
+            if (supabaseAdmin) {
+                const { data: profile, error: profileErr } = await supabaseAdmin
+                    .from('profiles')
+                    .select('byok_credits')
+                    .eq('id', req.user.id)
+                    .single();
+                     
+                if (profileErr) {
+                    console.error("[DB Failure] Failed to query profile BYOK credits:", profileErr.message);
+                    return res.status(500).json({ error: "Internal Server Error: Failed to retrieve subscription status." });
+                }
+                
+                const byokCredits = profile ? (profile.byok_credits || 0) : 0;
+                if (byokCredits <= 0) {
+                    console.warn(`[Blocked] User ${req.user.email} attempted BYOK audit without active BYOK subscription.`);
+                    return res.status(403).json({ error: "Forbidden: No active BYOK subscription. Please subscribe to the BYOK Plan in settings to use your own API keys." });
+                }
+                console.log(`[Authorized] BYOK audit request by ${req.user.email} (BYOK Credits: ${byokCredits})`);
+            }
+
             // BYOK Mode uses the client's provided key
             activeKey = userKey;
             if (!activeKey) {
@@ -407,7 +464,7 @@ Please extract the required fields and return the JSON.`;
                 messagesContent = userPrompt;
             }
 
-            const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            const response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -459,7 +516,7 @@ Please extract the required fields and return the JSON.`;
             }
 
             // Anthropic Claude Messages API
-            const response = await fetch("https://api.anthropic.com/v1/messages", {
+            const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -507,7 +564,7 @@ Please extract the required fields and return the JSON.`;
 
             // Google Gemini generateContent API (supports json output mime type)
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${activeKey}`;
-            const response = await fetch(url, {
+            const response = await fetchWithTimeout(url, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
@@ -541,7 +598,7 @@ Please extract the required fields and return the JSON.`;
                 return res.status(400).json({ error: "DeepSeek does not support vision/OCR audits. Please select OpenAI, Anthropic, or Gemini in settings." });
             }
             // DeepSeek OpenAI-compatible API proxy
-            const response = await fetch("https://api.deepseek.com/chat/completions", {
+            const response = await fetchWithTimeout("https://api.deepseek.com/chat/completions", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -571,19 +628,7 @@ Please extract the required fields and return the JSON.`;
             return res.status(400).json({ error: `Unsupported AI provider: ${activeProvider}` });
         }
 
-        // Deduct page credits from user profile for Hosted mode after successful extraction
-        if (connectionMode === 'hosted' && supabaseAdmin && extractedData) {
-            const newCredits = Math.max(0, currentCredits - pageCount);
-            const { error: deductErr } = await supabaseAdmin
-                .from('profiles')
-                .update({ credits: newCredits })
-                .eq('id', req.user.id);
-            if (deductErr) {
-                console.error("[DB Failure] Failed to deduct credits after successful audit:", deductErr.message);
-            } else {
-                console.log(`[Credits] Deducted ${pageCount} pages from user ${req.user.email}. Remaining: ${newCredits}`);
-            }
-        }
+
 
         if (extractedData) {
             return res.json(extractedData);
@@ -593,6 +638,19 @@ Please extract the required fields and return the JSON.`;
 
     } catch (error) {
         console.error(`[Server Error]`, error);
+        // Refund deducted page credits on failure
+        if (connectionMode === 'hosted' && supabaseAdmin) {
+            try {
+                await supabaseAdmin.rpc('refund_user_credits', {
+                    target_user_id: req.user.id,
+                    pages_to_refund: pageCount,
+                    plan_mode: 'hosted'
+                });
+                console.log(`[Refund] Successfully refunded ${pageCount} credits to user ${req.user.email} due to error.`);
+            } catch (refundErr) {
+                console.error("[Refund Failure] Failed to refund user credits:", refundErr);
+            }
+        }
         res.status(500).json({ error: error.message || "Internal server error" });
     }
 });
@@ -608,22 +666,39 @@ app.post('/api/compare', requireAuth, async (req, res) => {
 
         if (connectionMode === 'hosted') {
             if (supabaseAdmin) {
-                // Check if user has at least 1 credit remaining (compare uses very few tokens, we just require positive balance)
+                // Atomic pre-deduction of 5 credits for comparison
+                const { data: success, error: deductErr } = await supabaseAdmin
+                    .rpc('deduct_user_credits', { 
+                        target_user_id: req.user.id, 
+                        pages_to_deduct: 5, 
+                        plan_mode: 'hosted' 
+                    });
+                if (deductErr || !success) {
+                    console.warn(`[Blocked] User ${req.user.email} attempted hosted comparison with insufficient credits.`);
+                    return res.status(403).json({ error: "Forbidden: Insufficient page credits. This comparison requires 5 pages." });
+                }
+                console.log(`[Authorized & Deducted] Hosted comparison request by ${req.user.email} (needs 5 credits)`);
+            }
+        } else {
+            // BYOK Mode: check active BYOK subscription
+            if (supabaseAdmin) {
                 const { data: profile, error: profileErr } = await supabaseAdmin
                     .from('profiles')
-                    .select('credits')
+                    .select('byok_credits')
                     .eq('id', req.user.id)
                     .single();
                      
                 if (profileErr) {
-                    console.error("[DB Failure] Failed to query profile credits on comparison:", profileErr.message);
-                    return res.status(500).json({ error: "Internal Server Error: Failed to retrieve page credits balance." });
+                    console.error("[DB Failure] Failed to query profile BYOK credits on comparison:", profileErr.message);
+                    return res.status(500).json({ error: "Internal Server Error: Failed to retrieve subscription status." });
                 }
                 
-                if (!profile || typeof profile.credits === 'undefined' || profile.credits <= 0) {
-                    console.warn(`[Blocked] User ${req.user.email} attempted hosted comparison with insufficient credits.`);
-                    return res.status(403).json({ error: "Forbidden: Insufficient page credits. Please top up your account." });
+                const byokCredits = profile ? (profile.byok_credits || 0) : 0;
+                if (byokCredits <= 0) {
+                    console.warn(`[Blocked] User ${req.user.email} attempted BYOK comparison without active BYOK subscription.`);
+                    return res.status(403).json({ error: "Forbidden: No active BYOK subscription. Please subscribe to the BYOK Plan in settings to use your own API keys." });
                 }
+                console.log(`[Authorized] BYOK comparison request by ${req.user.email} (BYOK Credits: ${byokCredits})`);
             }
         }
 
@@ -689,7 +764,7 @@ Please compare all fields and return the structured JSON report.`;
 
         // Route calls to corresponding LLM provider
         if (activeProvider === 'openai') {
-            const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            const response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -717,7 +792,7 @@ Please compare all fields and return the structured JSON report.`;
         } 
         
         else if (activeProvider === 'anthropic') {
-            const response = await fetch("https://api.anthropic.com/v1/messages", {
+            const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -748,7 +823,7 @@ Please compare all fields and return the structured JSON report.`;
         
         else if (activeProvider === 'gemini') {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${activeKey}`;
-            const response = await fetch(url, {
+            const response = await fetchWithTimeout(url, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
@@ -775,7 +850,7 @@ Please compare all fields and return the structured JSON report.`;
         } 
         
         else if (activeProvider === 'deepseek') {
-            const response = await fetch("https://api.deepseek.com/chat/completions", {
+            const response = await fetchWithTimeout("https://api.deepseek.com/chat/completions", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -808,6 +883,19 @@ Please compare all fields and return the structured JSON report.`;
 
     } catch (error) {
         console.error(`[Server Error]`, error);
+        // Refund deducted page credits on failure
+        if (connectionMode === 'hosted' && supabaseAdmin) {
+            try {
+                await supabaseAdmin.rpc('refund_user_credits', {
+                    target_user_id: req.user.id,
+                    pages_to_refund: pageCount,
+                    plan_mode: 'hosted'
+                });
+                console.log(`[Refund] Successfully refunded ${pageCount} credits to user ${req.user.email} due to error.`);
+            } catch (refundErr) {
+                console.error("[Refund Failure] Failed to refund user credits:", refundErr);
+            }
+        }
         res.status(500).json({ error: error.message || "Internal server error" });
     }
 });
@@ -863,7 +951,7 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
                     currency: 'usd',
                     product_data: {
                         name: `${packageName} - LeaseAlign AI`,
-                        description: displayAmount === 'Unlimited' ? 'Unlimited pages subscription for BYOB connection mode' : `Purchase of ${amount} page credits for Hosted SaaS connection mode`,
+                        description: displayAmount === 'Unlimited' ? 'Unlimited pages subscription for BYOK connection mode' : `Purchase of ${amount} page credits for Hosted SaaS connection mode`,
                     },
                     unit_amount: priceInCents,
                 },

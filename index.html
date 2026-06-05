@@ -143,7 +143,7 @@
                 
                 <div class="pricing-switcher-wrapper">
                     <button class="pricing-switch-btn active" id="switch-hosted">Hosted SaaS Plan</button>
-                    <button class="pricing-switch-btn" id="switch-byok">BYOB Plan (Unlimited Pages)</button>
+                    <button class="pricing-switch-btn" id="switch-byok">BYOK Plan (Unlimited Pages)</button>
                 </div>
 
                 <!-- Plan Comparison Grid (Hosted SaaS vs BYOB) -->
@@ -165,7 +165,7 @@
                         <div>
                             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
                                 <div class="feature-icon" style="font-size: 14px; margin: 0; background: transparent; color: var(--color-cyan);"><i data-lucide="key-round"></i></div>
-                                <h4 style="font-size: 15px; font-weight: 700; color: var(--text-primary);">BYOB Mode (Bring Your Own Bot)</h4>
+                                <h4 style="font-size: 15px; font-weight: 700; color: var(--text-primary);">BYOK Mode (Bring Your Own Key)</h4>
                             </div>
                             <p style="color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">Supply your own API key (OpenAI, Anthropic, Gemini, DeepSeek). Pay for your own LLM usage directly and run <strong>unlimited audits</strong>.</p>
                         </div>
@@ -273,9 +273,9 @@
  
                 <!-- BYOK Plans (2 Tiers, Unlimited Pages) -->
                 <div class="pricing-grid" id="byok-grid" style="display: none; flex-flow: row wrap; justify-content: center; gap: 30px; max-width: 900px; margin: 0 auto; width: 100%;">
-                    <!-- BYOB Monthly Plan -->
+                    <!-- BYOK Monthly Plan -->
                     <div class="pricing-card" style="max-width: 380px; width: 100%;">
-                        <span class="pricing-tier">BYOB Monthly Plan</span>
+                        <span class="pricing-tier">BYOK Monthly Plan</span>
                         <div class="pricing-price-box">
                             <span class="pricing-price">$149</span>
                             <span class="pricing-period">/ month</span>
@@ -292,9 +292,9 @@
                         <button class="btn btn-secondary pricing-cta-btn" data-plan="byok" data-amount="149">Get Monthly Plan</button>
                     </div>
 
-                    <!-- BYOB Annual Plan -->
+                    <!-- BYOK Annual Plan -->
                     <div class="pricing-card featured-card" style="max-width: 380px; width: 100%;">
-                        <span class="pricing-tier" style="color: var(--color-purple);">BYOB Annual Plan</span>
+                        <span class="pricing-tier" style="color: var(--color-purple);">BYOK Annual Plan</span>
                         <div class="pricing-price-box">
                             <span class="pricing-price">$1,299</span>
                             <span class="pricing-period">/ year</span>
@@ -322,26 +322,31 @@
                     </div>
                     <div class="security-info">
                         <h4>Commercial Grade Enterprise Security</h4>
-                        <p>Unlike other platforms, LeaseAlign AI performs PDF text extraction directly in your browser. Your lease texts and credentials are routed via encrypted API proxy memory and are never stored on disk, eliminating corporate compliance and data liability risks.</p>
+                        <p>Unlike other platforms, LeaseAlign AI performs PDF text extraction directly in your browser. Your lease texts and credentials are routed via encrypted API proxy memory and are never stored on disk. Audit summary comparisons are securely saved under your own private account, eliminating corporate compliance and data liability risks.</p>
                     </div>
                 </div>
             </section>
 
             <!-- Landing Page Footer -->
-            <footer id="contact-footer" class="app-footer" style="margin-top: 64px; width: 100%;">
-                <div class="footer-left">
-                    <p>&copy; 2026 LeaseAlign AI Inc. All rights reserved.</p>
-                    <div class="footer-contact">
-                        <a href="mailto:contact@leasealign.io" class="footer-contact-item">
-                            <i data-lucide="mail" class="inline-icon"></i> contact@leasealign.io
-                        </a>
-                        <a href="https://calendly.com/contact-leasealign/30min" target="_blank" rel="noopener noreferrer" class="footer-contact-item" style="margin-left: 16px;">
-                            <i data-lucide="calendar" class="inline-icon"></i> Book a Demo
-                        </a>
+            <footer id="contact-footer" class="app-footer" style="margin-top: 64px; width: 100%; display: flex; flex-direction: column; gap: 1rem; align-items: center; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div class="footer-left">
+                        <p>&copy; 2026 LeaseAlign AI Inc. All rights reserved.</p>
+                        <div class="footer-contact">
+                            <a href="mailto:contact@leasealign.io" class="footer-contact-item">
+                                <i data-lucide="mail" class="inline-icon"></i> contact@leasealign.io
+                            </a>
+                            <a href="https://calendly.com/contact-leasealign/30min" target="_blank" rel="noopener noreferrer" class="footer-contact-item" style="margin-left: 16px;">
+                                <i data-lucide="calendar" class="inline-icon"></i> Book a Demo
+                            </a>
+                        </div>
+                    </div>
+                    <div class="footer-links">
+                        <span class="status-indicator-footer"><span class="dot bg-emerald"></span> B2B Transaction Due Diligence Workspace</span>
                     </div>
                 </div>
-                <div class="footer-links">
-                    <span class="status-indicator-footer"><span class="dot bg-emerald"></span> B2B Transaction Due Diligence Workspace</span>
+                <div style="width: 100%; text-align: center; font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; border-top: 1px dashed var(--border-color); padding-top: 0.75rem; margin-top: 0.5rem;">
+                    ⚠️ <strong>Legal Disclaimer:</strong> LeaseAlign AI is an LLM-assisted audit utility. All comparison results are for informational purposes only and must be verified by qualified legal counsel prior to closing.
                 </div>
             </footer>
         </div>
@@ -372,11 +377,11 @@
                     </div>
                     <div class="form-group">
                         <label for="login-email">Email Address</label>
-                        <input type="email" id="login-email" class="text-input" placeholder="name@company.com" required value="contact@leasealign.io">
+                        <input type="email" id="login-email" class="text-input" placeholder="name@company.com" required>
                     </div>
                     <div class="form-group">
                         <label for="login-password">Password</label>
-                        <input type="password" id="login-password" class="text-input" placeholder="••••••••" required value="admin">
+                        <input type="password" id="login-password" class="text-input" placeholder="••••••••" required>
                     </div>
                     
                     <div class="login-alert" id="login-error-msg" style="display: none;">
@@ -387,6 +392,9 @@
                     
                     <div class="auth-toggle-link" id="auth-toggle-container">
                         Don't have an account? <a href="#" id="auth-toggle-link">Sign Up</a>
+                    </div>
+                    <div class="legal-disclaimer-card" style="margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-muted); text-align: center; line-height: 1.4; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                        ⚠️ <strong>Legal Disclaimer:</strong> LeaseAlign AI is an LLM-assisted audit utility. All comparison results are for informational purposes and must be verified by qualified legal counsel prior to closing.
                     </div>
                 </form>
 
@@ -418,10 +426,10 @@
                         <i data-lucide="home"></i> Home
                     </button>
                     
-                    <!-- 2. Hosted SaaS / BYOB Toggle -->
+                    <!-- 2. Hosted SaaS / BYOK Toggle -->
                     <div class="connection-toggle-pill" id="header-mode-toggle" title="Switch connection mode">
                         <button class="mode-toggle-btn active" data-mode="hosted">Hosted SaaS</button>
-                        <button class="mode-toggle-btn" data-mode="byok">BYOB</button>
+                        <button class="mode-toggle-btn" data-mode="byok">BYOK</button>
                     </div>
                     
                     <!-- 3. Connection Settings -->
@@ -627,20 +635,25 @@
             </section>
 
             <!-- Footer -->
-            <footer class="app-footer">
-                <div class="footer-left">
-                    <p>&copy; 2026 LeaseAlign AI Inc. All rights reserved.</p>
-                    <div class="footer-contact">
-                        <a href="mailto:contact@leasealign.io" class="footer-contact-item">
-                            <i data-lucide="mail" class="inline-icon"></i> contact@leasealign.io
-                        </a>
-                        <a href="https://calendly.com/contact-leasealign/30min" target="_blank" rel="noopener noreferrer" class="footer-contact-item" style="margin-left: 16px;">
-                            <i data-lucide="calendar" class="inline-icon"></i> Book a Demo
-                        </a>
+            <footer class="app-footer" style="display: flex; flex-direction: column; gap: 1rem; align-items: center; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div class="footer-left">
+                        <p>&copy; 2026 LeaseAlign AI Inc. All rights reserved.</p>
+                        <div class="footer-contact">
+                            <a href="mailto:contact@leasealign.io" class="footer-contact-item">
+                                <i data-lucide="mail" class="inline-icon"></i> contact@leasealign.io
+                            </a>
+                            <a href="https://calendly.com/contact-leasealign/30min" target="_blank" rel="noopener noreferrer" class="footer-contact-item" style="margin-left: 16px;">
+                                <i data-lucide="calendar" class="inline-icon"></i> Book a Demo
+                            </a>
+                        </div>
+                    </div>
+                    <div class="footer-links">
+                        <span class="status-indicator-footer"><span class="dot bg-emerald"></span> B2B Transaction Due Diligence Workspace</span>
                     </div>
                 </div>
-                <div class="footer-links">
-                    <span class="status-indicator-footer"><span class="dot bg-emerald"></span> B2B Transaction Due Diligence Workspace</span>
+                <div style="width: 100%; text-align: center; font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; border-top: 1px dashed var(--border-color); padding-top: 0.75rem; margin-top: 0.5rem;">
+                    ⚠️ <strong>Legal Disclaimer:</strong> LeaseAlign AI is an LLM-assisted audit utility. All comparison results are for informational purposes only and must be verified by qualified legal counsel prior to closing.
                 </div>
             </footer>
         </div>
@@ -652,7 +665,7 @@
             <button class="modal-close-btn" id="close-settings-btn">&times;</button>
             <div class="modal-title-wrapper">
                 <h3>Configure Connection Settings</h3>
-                <p>Choose whether to use our secure hosted backend server or supply your own developer key directly (BYOB Mode).</p>
+                <p>Choose whether to use our secure hosted backend server or supply your own developer key directly (BYOK Mode).</p>
             </div>
             
             <form id="settings-form" onsubmit="return false;">
@@ -662,7 +675,7 @@
                     <div class="select-wrapper">
                         <select id="settings-mode">
                             <option value="hosted" selected>Hosted SaaS Mode (No Setup Required)</option>
-                            <option value="byok">Bring Your Own Bot (BYOB Mode)</option>
+                            <option value="byok">Bring Your Own Key (BYOK Mode)</option>
                         </select>
                     </div>
                 </div>
@@ -720,7 +733,7 @@
                     <label>Select Plan Type</label>
                     <div class="pricing-switcher-wrapper" style="display: flex; width: 100%; margin-top: 4px; margin-bottom: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); padding: 4px; border-radius: 30px;">
                         <button type="button" class="pricing-switch-btn active" id="buy-plan-hosted" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">Hosted SaaS Plan</button>
-                        <button type="button" class="pricing-switch-btn" id="buy-plan-byok" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">BYOB Plan (Unlimited Pages)</button>
+                        <button type="button" class="pricing-switch-btn" id="buy-plan-byok" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">BYOK Plan (Unlimited Pages)</button>
                     </div>
                     <div id="topup-current-balance-display" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 15px; text-align: center; background: rgba(255,255,255,0.02); padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.04);">
                         Current Balance: <strong style="color: var(--color-purple);" id="topup-balance-value">0 Hosted SaaS Pages</strong>

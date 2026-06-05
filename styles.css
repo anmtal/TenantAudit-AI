@@ -1971,3 +1971,52 @@ select option {
     box-shadow: 0 4px 20px rgba(168, 85, 247, 0.4);
     transform: translateY(-1px);
 }
+
+/* ====================================================================
+   Print Stylesheet (Hides UI chrome for professional PDF generation)
+   ==================================================================== */
+@media print {
+    body, html {
+        background: #ffffff !important;
+        color: #000000 !important;
+    }
+    /* Hide navigation header, upload card, history logs, settings buttons, and footers */
+    .app-header, 
+    #upload-panel, 
+    .history-section, 
+    .app-footer, 
+    .header-actions, 
+    .logout-btn, 
+    .settings-btn, 
+    .btn, 
+    .pricing-switcher-wrapper, 
+    .modal-overlay,
+    #login-view {
+        display: none !important;
+    }
+    /* Show and optimize results panel */
+    #results-panel {
+        display: block !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }
+    .glass-card {
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        box-shadow: none !important;
+        color: #000000 !important;
+        page-break-inside: avoid;
+    }
+    table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+    }
+    th, td {
+        border: 1px solid #cbd5e1 !important;
+        padding: 8px 12px !important;
+        color: #000000 !important;
+    }
+}

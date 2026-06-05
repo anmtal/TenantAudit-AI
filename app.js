@@ -230,6 +230,7 @@ function initializeApp() {
     const leaseQuoteBox = document.getElementById('lease-quote-box');
     const estoppelQuoteBox = document.getElementById('estoppel-quote-box');
     const exportCsvBtn = document.getElementById('export-csv-btn');
+    const exportPdfBtn = document.getElementById('export-pdf-btn');
     
     // Settings Modal Selectors
     const openSettingsBtn = document.getElementById('open-settings-btn');
@@ -491,6 +492,20 @@ function initializeApp() {
         historyListContainer.innerHTML = '';
         
         try {
+            // Cleanup: Delete records older than 30 days
+            try {
+                const cutoffDate = new Date();
+                cutoffDate.setDate(cutoffDate.getDate() - 30);
+                const cutoffIso = cutoffDate.toISOString();
+                
+                await supabase
+                    .from('audits')
+                    .delete()
+                    .lt('created_at', cutoffIso);
+            } catch (cleanupErr) {
+                console.error("Failed to delete expired audits:", cleanupErr);
+            }
+
             const { data, error } = await supabase
                 .from('audits')
                 .select('*')
@@ -2471,6 +2486,307 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+        });
+    }
+
+    // --- Export Audit to PDF report ---
+    if (exportPdfBtn) {
+        exportPdfBtn.addEventListener('click', () => {
+            if (!auditData) return;
+            
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                alert("Please allow popups to export the PDF report.");
+                return;
+            }
+            
+            printWindow.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>LeaseAlign AI Report - ${escapeHtml(auditData.metadata.tenantName)}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #1f2937;
+            background-color: #ffffff;
+            margin: 0;
+            padding: 40px;
+            line-height: 1.5;
+            font-size: 13px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .logo-text {
+            font-size: 24px;
+            font-weight: 800;
+            color: #7c3aed;
+            margin: 0;
+        }
+        .logo-tagline {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #6b7280;
+            margin: 0;
+        }
+        .report-title {
+            text-align: right;
+        }
+        .report-title h2 {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 0;
+            color: #111827;
+        }
+        .report-title p {
+            font-size: 12px;
+            color: #6b7280;
+            margin: 4px 0 0 0;
+        }
+        .meta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 30px;
+            background: #f9fafb;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #f3f4f6;
+        }
+        .meta-item {
+            font-size: 13px;
+        }
+        .meta-item strong {
+            color: #374151;
+        }
+        .summary-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 15px;
+            border-left: 4px solid #7c3aed;
+            padding-left: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .kpis-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 30px;
+        }
+        .kpi-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px 10px;
+            text-align: center;
+            background: #ffffff;
+        }
+        .kpi-card.score-card {
+            background: #faf5ff;
+            border-color: #d8b4fe;
+        }
+        .kpi-card.redflag-card {
+            background: #fef2f2;
+            border-color: #fca5a5;
+        }
+        .kpi-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #6b7280;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .kpi-value {
+            font-size: 18px;
+            font-weight: 800;
+            color: #111827;
+        }
+        .text-purple { color: #7c3aed; }
+        .text-red { color: #dc2626; }
+        
+        .table-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 15px;
+            margin-top: 30px;
+            border-left: 4px solid #7c3aed;
+            padding-left: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-bottom: 30px;
+        }
+        th {
+            background: #f3f4f6;
+            color: #374151;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.05em;
+            padding: 10px 12px;
+            border: 1px solid #e5e7eb;
+        }
+        td {
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+            vertical-align: top;
+        }
+        .status-badge {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+        .status-match {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .status-mismatch {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .citation {
+            font-size: 10px;
+            color: #4b5563;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px dashed #e5e7eb;
+            font-style: italic;
+            line-height: 1.4;
+        }
+        .footer {
+            text-align: center;
+            font-size: 11px;
+            color: #9ca3af;
+            margin-top: 50px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 15px;
+        }
+        
+        @media print {
+            body {
+                padding: 0;
+            }
+            table {
+                page-break-inside: auto;
+            }
+            tr {
+                page-break-inside: avoid;
+                page-break-after: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1 class="logo-text">LeaseAlign AI</h1>
+            <p class="logo-tagline">Commercial Lease & Estoppel Due Diligence</p>
+        </div>
+        <div class="report-title">
+            <h2>Transaction Due Diligence Report</h2>
+            <p>Generated: ${new Date().toLocaleString()}</p>
+        </div>
+    </div>
+
+    <div class="meta-grid">
+        <div class="meta-item"><strong>Tenant Name:</strong> ${escapeHtml(auditData.metadata.tenantName)}</div>
+        <div class="meta-item"><strong>Audit Model:</strong> ${escapeHtml(auditData.metadata.auditModel)}</div>
+        <div class="meta-item" style="grid-column: span 2; margin-top: 4px;"><strong>Source Lease File:</strong> ${escapeHtml(auditData.metadata.leaseFile)}</div>
+        <div class="meta-item" style="grid-column: span 2; margin-top: 4px;"><strong>Source Estoppel File:</strong> ${escapeHtml(auditData.metadata.estoppelFile)}</div>
+    </div>
+
+    <h3 class="summary-title">Executive Audit Summary</h3>
+    <div class="kpis-grid">
+        <div class="kpi-card score-card">
+            <div class="kpi-label">Match Score</div>
+            <div class="kpi-value text-purple">${auditData.summary.matchScore}%</div>
+        </div>
+        <div class="kpi-card redflag-card">
+            <div class="kpi-label">Red Flags</div>
+            <div class="kpi-value text-red">${auditData.summary.redFlags}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Monthly Rent</div>
+            <div class="kpi-value">${escapeHtml(auditData.summary.monthlyRent)}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Premises SF</div>
+            <div class="kpi-value">${escapeHtml(auditData.summary.premisesSf)}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Expiry Date</div>
+            <div class="kpi-value">${escapeHtml(auditData.summary.expiryDate)}</div>
+        </div>
+    </div>
+
+    <h3 class="table-title">Lease vs. Estoppel Comparison Matrix</h3>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 20%; text-align: left;">Term Audited</th>
+                <th style="width: 33%; text-align: left;">Lease Agreement Value & Citation</th>
+                <th style="width: 33%; text-align: left;">Estoppel Certificate Value & Citation</th>
+                <th style="width: 14%; text-align: center;">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${auditData.records.map(r => {
+                const badgeClass = r.status === 'match' ? 'status-match' : 'status-mismatch';
+                const statusText = r.status === 'match' ? 'Verified' : 'Mismatch';
+                return `
+                <tr>
+                    <td style="font-weight: 600;">${escapeHtml(r.term)}</td>
+                    <td>
+                        <div><strong>${escapeHtml(r.leaseVal)}</strong></div>
+                        ${r.leaseCite ? `<div class="citation">Quote: "${escapeHtml(r.leaseCite)}"</div>` : ''}
+                    </td>
+                    <td>
+                        <div><strong>${escapeHtml(r.estoppelVal)}</strong></div>
+                        ${r.estoppelCite ? `<div class="citation">Quote: "${escapeHtml(r.estoppelCite)}"</div>` : ''}
+                    </td>
+                    <td style="text-align: center; vertical-align: middle;">
+                        <span class="status-badge ${badgeClass}">${statusText}</span>
+                    </td>
+                </tr>
+                `;
+            }).join('')}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        <p>CONFIDENTIAL — Prepared for B2B Transaction Due Diligence — Powered by LeaseAlign AI (leasealign.io)</p>
+    </div>
+</body>
+</html>
+            `);
+            printWindow.document.close();
+            
+            setTimeout(() => {
+                printWindow.focus();
+                printWindow.print();
+                printWindow.close();
+            }, 350);
         });
     }
 

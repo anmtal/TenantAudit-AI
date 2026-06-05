@@ -500,7 +500,10 @@
             <section class="glass-card" id="history-panel" style="margin-top: 24px;">
                 <div class="card-header cyan-bg">
                     <div class="card-icon cyan-bg"><i data-lucide="history"></i></div>
-                    <h3>Transaction Audit History</h3>
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                        <h3>Transaction Audit History</h3>
+                        <p style="font-size: 11px; color: var(--text-muted);">Audits are automatically purged from the system after 30 days for data security.</p>
+                    </div>
                 </div>
                 <div class="history-list-wrapper">
                     <div id="history-loading-msg" class="history-empty-state">Loading history...</div>
@@ -578,9 +581,14 @@
                             <h4>2. Comparison Matrix & Discrepancy Flagging</h4>
                             <p>Cross-referencing legal and financial terms between lease and tenant estoppel.</p>
                         </div>
-                        <button class="btn btn-emerald" id="export-csv-btn">
-                            <i data-lucide="download"></i> Export Due Diligence CSV
-                        </button>
+                        <div style="display: flex; gap: 12px;">
+                            <button class="btn btn-secondary" id="export-pdf-btn">
+                                <i data-lucide="file-text"></i> Export PDF Report
+                            </button>
+                            <button class="btn btn-emerald" id="export-csv-btn">
+                                <i data-lucide="download"></i> Export Due Diligence CSV
+                            </button>
+                        </div>
                     </div>
                     
                     <div class="audit-table-wrapper">

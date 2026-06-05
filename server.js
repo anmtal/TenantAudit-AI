@@ -350,6 +350,7 @@ app.post('/api/audit', requireAuth, async (req, res) => {
         let activeProvider = provider || 'openai';
         let activeModel = model || 'gpt-4o-mini';
         let currentCredits = 0;
+        let extractedData;
 
         if (connectionMode === 'hosted') {
             if (supabaseAdmin) {
@@ -1082,6 +1083,279 @@ app.get('/api/verify-checkout-session', async (req, res) => {
         console.error("Error verifying checkout session:", err);
         res.status(500).json({ error: err.message });
     }
+});
+
+// ====================================================================
+// LEADS GENERATION API
+// Target: Commercial Real Estate firms (brokers, property managers,
+//         acquisition groups, legal/title firms) for LeaseAlign AI outreach
+// Uses: Google Places API (Text Search + Place Details)
+// ====================================================================
+
+// Helper: derive a clean domain from a website URL
+function extractDomain(websiteUrl) {
+    if (!websiteUrl) return null;
+    try {
+        const url = new URL(websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`);
+        return url.hostname.replace(/^www\./, '').toLowerCase();
+    } catch {
+        return null;
+    }
+}
+
+// Helper: generate the most probable generic firm email formats from domain
+function generateFirmEmails(domain) {
+    if (!domain) return [];
+    return [
+        `info@${domain}`,
+        `contact@${domain}`,
+        `hello@${domain}`,
+        `leasing@${domain}`
+    ];
+}
+
+// Helper: generate probable person-level email patterns
+function generatePersonEmails(firstName, lastName, domain) {
+    if (!domain || !firstName || !lastName) return [];
+    const f = firstName.toLowerCase().replace(/[^a-z]/g, '');
+    const l = lastName.toLowerCase().replace(/[^a-z]/g, '');
+    if (!f || !l) return [];
+    return [
+        `${f}.${l}@${domain}`,
+        `${f[0]}${l}@${domain}`,
+        `${f}@${domain}`,
+        `${f}${l}@${domain}`
+    ];
+}
+
+// Helper: fetch a page of Google Places Text Search results
+async function searchGooglePlaces(query, apiKey, pageToken = null) {
+    const baseUrl = 'https://maps.googleapis.com/maps/api/place/textsearch/json';
+    const params = new URLSearchParams({ query, key: apiKey, type: 'establishment' });
+    if (pageToken) params.set('pagetoken', pageToken);
+    const response = await fetchWithTimeout(`${baseUrl}?${params.toString()}`, {}, 15000);
+    if (!response.ok) throw new Error(`Google Places API returned ${response.status}`);
+    return response.json();
+}
+
+// Helper: fetch detailed Place info (website, phone, formatted address)
+async function getPlaceDetails(placeId, apiKey) {
+    const fields = 'name,website,formatted_phone_number,formatted_address,international_phone_number';
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&key=${apiKey}`;
+    const response = await fetchWithTimeout(url, {}, 10000);
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.result || null;
+}
+
+// CRE search query templates — covers the primary buyer personas for LeaseAlign AI
+const CRE_QUERY_TEMPLATES = [
+    'commercial real estate broker',
+    'commercial property management company',
+    'commercial real estate investment firm',
+    'real estate acquisition group',
+    'commercial real estate law firm',
+    'title company commercial real estate',
+    'tenant representation broker',
+    'landlord representation commercial real estate'
+];
+
+// POST /api/leads
+// Body: { city: "Dallas, TX", limit: 100, googleApiKey: "AIza..." }
+// Returns: array of lead objects with firm name, emails, city, etc.
+app.post('/api/leads', requireAuth, async (req, res) => {
+    try {
+        const { city, limit = 25, googleApiKey } = req.body;
+
+        if (!city) {
+            return res.status(400).json({ error: 'Missing required field: city' });
+        }
+
+        const apiKey = googleApiKey || process.env.GOOGLE_PLACES_API_KEY;
+        if (!apiKey) {
+            return res.status(400).json({
+                error: 'Google Places API key is required. Pass googleApiKey in the request body or set GOOGLE_PLACES_API_KEY in server environment.'
+            });
+        }
+
+        const maxLeads = Math.min(parseInt(limit, 10) || 25, 200);
+        const leadsMap = new Map(); // keyed by place_id to deduplicate
+        const queryCount = Math.min(Math.ceil(maxLeads / 20), CRE_QUERY_TEMPLATES.length);
+
+        console.log(`[Leads API] Searching for ${maxLeads} CRE leads in: ${city}`);
+
+        // Run multiple CRE query types against the city, collecting up to maxLeads unique places
+        for (let qi = 0; qi < queryCount && leadsMap.size < maxLeads; qi++) {
+            const query = `${CRE_QUERY_TEMPLATES[qi]} in ${city}`;
+            let pageToken = null;
+            let pagesFetched = 0;
+
+            do {
+                // Google Places requires a short pause before using a next_page_token
+                if (pageToken) await new Promise(r => setTimeout(r, 2000));
+
+                let searchData;
+                try {
+                    searchData = await searchGooglePlaces(query, apiKey, pageToken);
+                } catch (err) {
+                    console.warn(`[Leads API] Search failed for query "${query}":`, err.message);
+                    break;
+                }
+
+                if (searchData.status === 'REQUEST_DENIED') {
+                    return res.status(400).json({ error: `Google Places API denied: ${searchData.error_message}` });
+                }
+
+                const places = searchData.results || [];
+                for (const place of places) {
+                    if (leadsMap.size >= maxLeads) break;
+                    if (!leadsMap.has(place.place_id)) {
+                        leadsMap.set(place.place_id, {
+                            place_id: place.place_id,
+                            firm_name: place.name,
+                            city: city,
+                            address: place.formatted_address || null,
+                            rating: place.rating || null
+                        });
+                    }
+                }
+
+                pageToken = searchData.next_page_token || null;
+                pagesFetched++;
+            } while (pageToken && leadsMap.size < maxLeads && pagesFetched < 3);
+        }
+
+        console.log(`[Leads API] Found ${leadsMap.size} unique places. Fetching details...`);
+
+        // Enrich each place with details (website → domain → emails)
+        const leads = [];
+        const placeEntries = Array.from(leadsMap.values());
+
+        // Batch detail requests with small concurrency to avoid quota limits
+        const BATCH_SIZE = 5;
+        for (let i = 0; i < placeEntries.length; i += BATCH_SIZE) {
+            const batch = placeEntries.slice(i, i + BATCH_SIZE);
+            const detailResults = await Promise.allSettled(
+                batch.map(place => getPlaceDetails(place.place_id, apiKey))
+            );
+
+            for (let j = 0; j < batch.length; j++) {
+                const base = batch[j];
+                const detailResult = detailResults[j];
+                const detail = (detailResult.status === 'fulfilled') ? detailResult.value : null;
+
+                const websiteUrl = detail?.website || null;
+                const domain = extractDomain(websiteUrl);
+                const firmEmails = generateFirmEmails(domain);
+
+                leads.push({
+                    firm_name: base.firm_name,
+                    city: base.city,
+                    address: detail?.formatted_address || base.address || null,
+                    phone: detail?.formatted_phone_number || detail?.international_phone_number || null,
+                    website: websiteUrl,
+                    domain: domain,
+                    // Generic firm-level emails (info@, contact@, leasing@)
+                    firm_email_primary: firmEmails[0] || null,
+                    firm_email_alt: firmEmails[1] || null,
+                    firm_email_leasing: firmEmails[3] || null,
+                    // Person-level data: Google Places does not provide contacts.
+                    // These fields are intentionally blank — enrich via LinkedIn Sales
+                    // Navigator, Apollo.io, or Hunter.io using the domain above.
+                    person_first_name: null,
+                    person_last_name: null,
+                    person_title: null,
+                    person_email: null,
+                    // Suggested person email formats once person name is known
+                    person_email_pattern_1: domain ? `[firstname].[lastname]@${domain}` : null,
+                    person_email_pattern_2: domain ? `[f][lastname]@${domain}` : null,
+                    // Source metadata
+                    google_place_id: base.place_id,
+                    google_rating: base.rating
+                });
+            }
+        }
+
+        console.log(`[Leads API] Returning ${leads.length} enriched leads for ${city}`);
+
+        return res.json({
+            city,
+            total: leads.length,
+            note: 'Person-level fields (person_first_name, person_last_name, person_email) require enrichment via Apollo.io, Hunter.io, or LinkedIn. Use the domain and email patterns provided.',
+            leads
+        });
+
+    } catch (error) {
+        console.error('[Leads API Error]', error);
+        return res.status(500).json({ error: error.message || 'Internal server error in leads generation' });
+    }
+});
+
+// GET /api/leads/cities
+// Returns the top US cities for commercial real estate targeting
+app.get('/api/leads/cities', requireAuth, (req, res) => {
+    const US_CRE_CITIES = [
+        "New York, NY", "Los Angeles, CA", "Chicago, IL", "Houston, TX", "Dallas, TX",
+        "Atlanta, GA", "Phoenix, AZ", "Philadelphia, PA", "San Antonio, TX", "San Diego, CA",
+        "San Jose, CA", "Austin, TX", "Jacksonville, FL", "Fort Worth, TX", "Columbus, OH",
+        "Charlotte, NC", "Indianapolis, IN", "San Francisco, CA", "Seattle, WA", "Denver, CO",
+        "Nashville, TN", "Oklahoma City, OK", "El Paso, TX", "Washington, DC", "Boston, MA",
+        "Las Vegas, NV", "Louisville, KY", "Memphis, TN", "Portland, OR", "Baltimore, MD",
+        "Milwaukee, WI", "Albuquerque, NM", "Tucson, AZ", "Fresno, CA", "Sacramento, CA",
+        "Kansas City, MO", "Mesa, AZ", "Cleveland, OH", "Raleigh, NC", "Omaha, NE",
+        "Colorado Springs, CO", "Long Beach, CA", "Virginia Beach, VA", "Minneapolis, MN",
+        "Tampa, FL", "New Orleans, LA", "Arlington, TX", "Bakersfield, CA", "Honolulu, HI",
+        "Anaheim, CA", "Aurora, CO", "Santa Ana, CA", "Corpus Christi, TX", "Riverside, CA",
+        "St. Louis, MO", "Lexington, KY", "Pittsburgh, PA", "Anchorage, AK", "Stockton, CA",
+        "Cincinnati, OH", "St. Paul, MN", "Toledo, OH", "Greensboro, NC", "Newark, NJ",
+        "Plano, TX", "Henderson, NV", "Lincoln, NE", "Buffalo, NY", "Fort Wayne, IN",
+        "Jersey City, NJ", "Chula Vista, CA", "Orlando, FL", "St. Petersburg, FL", "Laredo, TX",
+        "Norfolk, VA", "Madison, WI", "Durham, NC", "Lubbock, TX", "Winston-Salem, NC",
+        "Garland, TX", "Glendale, AZ", "Hialeah, FL", "Reno, NV", "Baton Rouge, LA",
+        "Irvine, CA", "Chesapeake, VA", "Irving, TX", "Scottsdale, AZ", "North Las Vegas, NV",
+        "Fremont, CA", "Gilbert, AZ", "San Bernardino, CA", "Boise, ID", "Birmingham, AL",
+        "Rochester, NY", "Richmond, VA", "Spokane, WA", "Des Moines, IA", "Montgomery, AL",
+        "Modesto, CA", "Fayetteville, NC", "Tacoma, WA", "Shreveport, LA", "Fontana, CA"
+    ];
+    res.json({ total: US_CRE_CITIES.length, cities: US_CRE_CITIES });
+});
+
+// POST /api/leads/export-csv
+// Body: { leads: [...] }  — converts a leads array to a downloadable CSV string
+app.post('/api/leads/export-csv', requireAuth, (req, res) => {
+    const { leads } = req.body;
+    if (!Array.isArray(leads) || leads.length === 0) {
+        return res.status(400).json({ error: 'No leads provided to export' });
+    }
+
+    const headers = [
+        'Firm Name', 'City', 'Address', 'Phone', 'Website', 'Domain',
+        'Firm Email (Primary)', 'Firm Email (Alt)', 'Firm Email (Leasing)',
+        'Person First Name', 'Person Last Name', 'Person Title', 'Person Email',
+        'Email Pattern 1', 'Email Pattern 2', 'Google Place ID', 'Google Rating'
+    ];
+
+    const escapeCSV = (val) => {
+        if (val === null || val === undefined) return '';
+        const str = String(val);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+    };
+
+    const rows = leads.map(l => [
+        l.firm_name, l.city, l.address, l.phone, l.website, l.domain,
+        l.firm_email_primary, l.firm_email_alt, l.firm_email_leasing,
+        l.person_first_name, l.person_last_name, l.person_title, l.person_email,
+        l.person_email_pattern_1, l.person_email_pattern_2,
+        l.google_place_id, l.google_rating
+    ].map(escapeCSV).join(','));
+
+    const csv = [headers.join(','), ...rows].join('\r\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="leasealign_leads_${Date.now()}.csv"`);
+    res.send(csv);
 });
 
 // Start Server

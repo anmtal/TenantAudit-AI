@@ -2122,7 +2122,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             docType: docType,
             connectionMode: connectionMode,
             provider: connectionMode === 'hosted' ? 'anthropic' : provider,
-            model: connectionMode === 'hosted' ? 'claude-sonnet-4-5-20250929' : model,
+            model: connectionMode === 'hosted' ? 'claude-sonnet-4-6' : model,
             apiKey: connectionMode === 'hosted' ? null : apiKey,
             systemPromptOverride: systemPromptOverride,
             userPromptOverride: userPromptOverride
@@ -2310,7 +2310,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     estoppelJson,
                     connectionMode,
                     provider: connectionMode === 'hosted' ? 'anthropic' : apiProvider,
-                    model: connectionMode === 'hosted' ? 'claude-sonnet-4-5-20250929' : llmModel,
+                    model: connectionMode === 'hosted' ? 'claude-sonnet-4-6' : llmModel,
                     apiKey: connectionMode === 'hosted' ? null : apiKey
                 };
                 

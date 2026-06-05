@@ -370,7 +370,7 @@ app.post('/api/audit', requireAuth, async (req, res) => {
             // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet
             activeKey = process.env.ANTHROPIC_API_KEY;
             activeProvider = 'anthropic';
-            activeModel = 'claude-sonnet-4-5-20250929';
+            activeModel = 'claude-sonnet-4-6';
             
             if (!activeKey) {
                 return res.status(500).json({ 
@@ -711,7 +711,7 @@ app.post('/api/compare', requireAuth, async (req, res) => {
             // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet as default
             activeKey = process.env.ANTHROPIC_API_KEY;
             activeProvider = 'anthropic';
-            activeModel = 'claude-sonnet-4-5-20250929';
+            activeModel = 'claude-sonnet-4-6';
             
             if (!activeKey) {
                 return res.status(500).json({ 
@@ -733,6 +733,9 @@ For each of the 11 terms, determine if the values represent a 'match', a 'warnin
 - 'match': The values are semantically identical or fully compliant (e.g. "14,500 rentable square feet" and "14,500 SF" match; "$12,000" and "$12,000.00 / month" match; "Starbucks Corporation" and "Starbucks Corp." match).
 - 'warning': A value is missing in one document (e.g. "Not Mentioned" or "Not Found"), or there is a minor omission but not a direct contradiction.
 - 'mismatch': There is a clear contradiction or discrepancy (e.g. different rent amounts, different dates, different renewal terms).
+
+CRITICAL GUIDELINES FOR SPECIFIC FIELDS:
+- Rent Escalation Schedules: If the Lease specifies a starting rent with an escalation schedule or a range of monthly rent steps over time (e.g. "$35,000 escalating 3.5% annually" or "$35,000 in Year 1 to $47,701.41 in Year 10"), and the Estoppel specifies a rent that matches one of the subsequent years/steps (e.g. "$41,569.02"), this represents a scheduled rent progression. You MUST classify this as a 'warning' (requiring verification of the current lease year/anniversary) rather than a 'mismatch' (direct contradiction).
 
 For each term, you must return a status ('match', 'warning', 'mismatch') and a concise reason.
 Return ONLY a valid JSON object in this exact format:

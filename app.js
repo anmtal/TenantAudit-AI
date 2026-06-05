@@ -409,53 +409,45 @@ function initializeApp() {
             }
             console.log("Fetching credits for user ID:", user.id, "email:", user.email);
 
-            // Load plan type from metadata
+            // Load plan type and active session ID from metadata
             const planType = user.user_metadata?.plan_type || 'hosted';
             activePlanType = planType;
             console.log("User plan type loaded from metadata:", activePlanType);
             
-            // Fetch credits, byok_credits and active_session_id
+            const activeSessionId = user.user_metadata?.active_session_id;
+            
+            // Fetch credits, byok_credits (bypassing session_id table column to avoid migrations mismatch)
             let profileData = null;
             const { data, error } = await supabase
                 .from('profiles')
-                .select('credits, byok_credits, active_session_id')
+                .select('credits, byok_credits')
                 .eq('id', user.id)
                 .single();
                 
             if (error) {
-                console.warn("Could not fetch profile fields, trying fallback select for credits and byok_credits. Error:", error);
-                const { data: fallbackData, error: fallbackError } = await supabase
-                    .from('profiles')
-                    .select('credits, byok_credits')
-                    .eq('id', user.id)
-                    .single();
-                if (fallbackError) {
-                    console.error("Error loading profile credits fallback:", fallbackError);
-                    return;
-                }
-                profileData = { ...fallbackData, active_session_id: null };
+                console.warn("Could not fetch profile fields. Error:", error);
             } else {
                 profileData = data;
             }
             
-            if (profileData) {
-                // Real-time seat enforcement check
-                const currentSessionId = localStorage.getItem('ta_session_id');
-                if (profileData.active_session_id && currentSessionId && profileData.active_session_id !== currentSessionId) {
-                    console.warn(`[Seat Enforcement Mismatch] DB Session: ${profileData.active_session_id}, Local Session: ${currentSessionId}`);
-                    alert("🚫 Multiple active sessions detected. Your account has been logged in on another device/browser.");
-                    await handleLogout();
-                    return;
-                }
+            // Real-time seat enforcement check using auth user metadata
+            const currentSessionId = localStorage.getItem('ta_session_id');
+            if (activeSessionId && currentSessionId && activeSessionId !== currentSessionId) {
+                console.warn(`[Seat Enforcement Mismatch] Auth Metadata Session: ${activeSessionId}, Local Session: ${currentSessionId}`);
+                alert("🚫 Multiple active sessions detected. Your account has been logged in on another device/browser.");
+                await handleLogout();
+                return;
+            }
 
+            if (profileData) {
                 console.log("Fetched profile credits. Hosted:", profileData.credits, "BYOK:", profileData.byok_credits);
                 hostedCredits = profileData.credits || 0;
                 byokCredits = profileData.byok_credits || 0;
-                applyPlanRestrictions(activePlanType);
-                updateCreditsDisplay();
             } else {
                 console.log("No profile data returned for user:", user.id);
             }
+            applyPlanRestrictions(activePlanType);
+            updateCreditsDisplay();
         } catch (e) {
             console.error("Failed to load user profile:", e);
         }
@@ -584,20 +576,19 @@ function initializeApp() {
                         await loadUserProfileAndCredits();
                         await loadAuditHistory();
 
-                        // Sync active session ID to profiles table for single-seat enforcement
+                        // Sync active session ID to auth user metadata for single-seat enforcement
                         const sessionId = getOrGenerateSessionId();
                         try {
-                            const { error: syncErr } = await supabase
-                                .from('profiles')
-                                .update({ active_session_id: sessionId })
-                                .eq('id', session.user.id);
+                            const { error: syncErr } = await supabase.auth.updateUser({
+                                data: { active_session_id: sessionId }
+                            });
                             if (syncErr) {
-                                console.warn("[Session Sync Warning] Failed to update active_session_id:", syncErr.message);
+                                console.warn("[Session Sync Warning] Failed to update active_session_id in metadata:", syncErr.message);
                             } else {
-                                console.log("[Session Sync] Successfully updated active_session_id in DB:", sessionId);
+                                console.log("[Session Sync] Successfully updated active_session_id in metadata:", sessionId);
                             }
                         } catch (e) {
-                            console.error("[Session Sync Error] Exception during update:", e);
+                            console.error("[Session Sync Error] Exception during metadata update:", e);
                         }
                         
                         // Check if there was a pending package selection before login

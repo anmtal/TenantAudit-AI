@@ -666,18 +666,18 @@ app.post('/api/compare', requireAuth, async (req, res) => {
 
         if (connectionMode === 'hosted') {
             if (supabaseAdmin) {
-                // Atomic pre-deduction of 5 credits for comparison
+                // Atomic pre-deduction of 1 credit for comparison
                 const { data: success, error: deductErr } = await supabaseAdmin
                     .rpc('deduct_user_credits', { 
                         target_user_id: req.user.id, 
-                        pages_to_deduct: 5, 
+                        pages_to_deduct: 1, 
                         plan_mode: 'hosted' 
                     });
                 if (deductErr || !success) {
                     console.warn(`[Blocked] User ${req.user.email} attempted hosted comparison with insufficient credits.`);
-                    return res.status(403).json({ error: "Forbidden: Insufficient page credits. This comparison requires 5 pages." });
+                    return res.status(403).json({ error: "Forbidden: Insufficient page credits. This comparison requires 1 page credit." });
                 }
-                console.log(`[Authorized & Deducted] Hosted comparison request by ${req.user.email} (needs 5 credits)`);
+                console.log(`[Authorized & Deducted] Hosted comparison request by ${req.user.email} (needs 1 credit)`);
             }
         } else {
             // BYOK Mode: check active BYOK subscription
@@ -891,10 +891,10 @@ Please compare all fields and return the structured JSON report.`;
             try {
                 await supabaseAdmin.rpc('refund_user_credits', {
                     target_user_id: req.user.id,
-                    pages_to_refund: pageCount,
+                    pages_to_refund: 1,
                     plan_mode: 'hosted'
                 });
-                console.log(`[Refund] Successfully refunded ${pageCount} credits to user ${req.user.email} due to error.`);
+                console.log(`[Refund] Successfully refunded 1 credit to user ${req.user.email} due to error.`);
             } catch (refundErr) {
                 console.error("[Refund Failure] Failed to refund user credits:", refundErr);
             }

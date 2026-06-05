@@ -56,13 +56,14 @@ function initializeApp() {
     })();
 
     // Helper to generate or retrieve a unique session ID for single-seat login enforcement
-    function getOrGenerateSessionId() {
+    function getOrGenerateSessionId(forceNew = false) {
         let sid = localStorage.getItem('ta_session_id');
-        if (!sid) {
+        if (!sid || forceNew) {
             sid = (window.crypto && crypto.randomUUID) 
                 ? crypto.randomUUID() 
                 : 'sid_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
             localStorage.setItem('ta_session_id', sid);
+            localStorage.setItem('ta_session_timestamp', Date.now().toString());
         }
         return sid;
     }
@@ -123,6 +124,7 @@ function initializeApp() {
 
         // 7. Clear user-specific session trackers
         localStorage.removeItem('ta_session_id');
+        localStorage.removeItem('ta_session_timestamp');
         localStorage.removeItem('ta_user_email');
         localStorage.removeItem('ta_logged_in');
 
@@ -459,9 +461,14 @@ function initializeApp() {
             // Real-time seat enforcement check using auth user metadata
             const currentSessionId = localStorage.getItem('ta_session_id');
             const isFreshLogin = localStorage.getItem('ta_fresh_login') === 'true';
+            const sessionTimestampStr = localStorage.getItem('ta_session_timestamp');
+            const sessionAge = sessionTimestampStr ? (Date.now() - parseInt(sessionTimestampStr, 10)) : Infinity;
+            
             if (isFreshLogin) {
                 console.log("[Seat Enforcement] Fresh login detected. Overriding active_session_id.");
                 localStorage.removeItem('ta_fresh_login');
+            } else if (sessionAge < 10000) {
+                console.log("[Seat Enforcement Grace] Session ID was generated recently (age under 10s). Bypassing mismatch check for metadata propagation.");
             } else if (activeSessionId && currentSessionId && activeSessionId !== currentSessionId) {
                 console.warn(`[Seat Enforcement Mismatch] Auth Metadata Session: ${activeSessionId}, Local Session: ${currentSessionId}`);
                 alert("🚫 Multiple active sessions detected. Your account has been logged in on another device/browser.");
@@ -629,12 +636,9 @@ function initializeApp() {
                         showView('dashboard');
                         updateNavUI();
                         
-                        // Load credits and past history from Supabase
-                        await loadUserProfileAndCredits();
-                        await loadAuditHistory();
-
-                        // Sync active session ID to auth user metadata for single-seat enforcement
-                        const sessionId = getOrGenerateSessionId();
+                        // Sync active session ID to auth user metadata for single-seat enforcement first
+                        const isFreshLogin = localStorage.getItem('ta_fresh_login') === 'true';
+                        const sessionId = getOrGenerateSessionId(isFreshLogin);
                         try {
                             const { error: syncErr } = await supabase.auth.updateUser({
                                 data: { active_session_id: sessionId }
@@ -647,6 +651,10 @@ function initializeApp() {
                         } catch (e) {
                             console.error("[Session Sync Error] Exception during metadata update:", e);
                         }
+
+                        // Load credits and past history from Supabase
+                        await loadUserProfileAndCredits();
+                        await loadAuditHistory();
                         
                         // Check if there was a pending package selection before login
                         if (window.pendingPurchase) {
@@ -1648,6 +1656,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     }
                 } catch (e) {
                     console.error(`[Pass 1 Routing Error] Failed to route ${docType}:`, e);
+                    const isCritical = e.message.includes('Forbidden') || 
+                                       e.message.includes('Unauthorized') || 
+                                       e.message.includes('session_mismatch') || 
+                                       e.message.includes('credit') || 
+                                       e.message.includes('subscription') || 
+                                       e.message.includes('key');
+                    if (isCritical) throw e;
                 }
                 
                 // Fallback
@@ -1691,6 +1706,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 }
             } catch (e) {
                 console.error(`[Pass 1 Vision Routing Error] Failed to route scanned ${docType}:`, e);
+                const isCritical = e.message.includes('Forbidden') || 
+                                   e.message.includes('Unauthorized') || 
+                                   e.message.includes('session_mismatch') || 
+                                   e.message.includes('credit') || 
+                                   e.message.includes('subscription') || 
+                                   e.message.includes('key');
+                if (isCritical) throw e;
             }
             
             if (!relevantPageNums || relevantPageNums.length === 0) {
@@ -2867,6 +2889,35 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         if (isLoggedIn && supabase) {
             console.log("[Window Focus] Verifying seat session validity...");
             loadUserProfileAndCredits();
+        }
+    });
+
+    // Sync session across tabs dynamically in real-time
+    window.addEventListener('storage', async (e) => {
+        if (e.key === 'ta_session_id') {
+            console.log("[Storage Sync] Session ID changed in another tab/window. New ID:", e.newValue);
+            if (!e.newValue) {
+                // Session cleared (logout)
+                isLoggedIn = false;
+                userEmail = '';
+                resetAppSessionState();
+                updateNavUI();
+                showView('auth-panel');
+            } else {
+                // Session sync login
+                isLoggedIn = true;
+                userEmail = localStorage.getItem('ta_user_email') || '';
+                if (userEmailDisplay) userEmailDisplay.textContent = userEmail;
+                if (supabase) {
+                    await loadUserProfileAndCredits();
+                    await loadAuditHistory();
+                } else {
+                    hostedCredits = parseInt(localStorage.getItem('ta_hosted_credits') || '0', 10);
+                    byokCredits = parseInt(localStorage.getItem('ta_byok_credits') || '0', 10);
+                }
+                updateNavUI();
+                showView('dashboard');
+            }
         }
     });
 

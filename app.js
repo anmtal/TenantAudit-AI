@@ -450,7 +450,11 @@ function initializeApp() {
             
             // Real-time seat enforcement check using auth user metadata
             const currentSessionId = localStorage.getItem('ta_session_id');
-            if (activeSessionId && currentSessionId && activeSessionId !== currentSessionId) {
+            const isFreshLogin = localStorage.getItem('ta_fresh_login') === 'true';
+            if (isFreshLogin) {
+                console.log("[Seat Enforcement] Fresh login detected. Overriding active_session_id.");
+                localStorage.removeItem('ta_fresh_login');
+            } else if (activeSessionId && currentSessionId && activeSessionId !== currentSessionId) {
                 console.warn(`[Seat Enforcement Mismatch] Auth Metadata Session: ${activeSessionId}, Local Session: ${currentSessionId}`);
                 alert("🚫 Multiple active sessions detected. Your account has been logged in on another device/browser.");
                 await handleLogout();
@@ -858,6 +862,7 @@ function initializeApp() {
                         const lastName = registerLastName ? registerLastName.value.trim() : '';
                         const company = registerCompany ? registerCompany.value.trim() : '';
 
+                        localStorage.setItem('ta_fresh_login', 'true');
                         const { data, error } = await supabase.auth.signUp({
                             email: email,
                             password: password,
@@ -869,14 +874,21 @@ function initializeApp() {
                                 }
                             }
                         });
-                        if (error) throw error;
+                        if (error) {
+                            localStorage.removeItem('ta_fresh_login');
+                            throw error;
+                        }
                         alert("🎉 Account created successfully! Please top up your page credits to begin auditing.");
                     } else {
+                        localStorage.setItem('ta_fresh_login', 'true');
                         const { data, error } = await supabase.auth.signInWithPassword({
                             email: email,
                             password: password
                         });
-                        if (error) throw error;
+                        if (error) {
+                            localStorage.removeItem('ta_fresh_login');
+                            throw error;
+                        }
                     }
                 } else {
                     localStorage.setItem('ta_logged_in', 'true');

@@ -298,7 +298,7 @@ function initializeApp() {
             homeLogoutBtn.style.display = isLoggedIn ? 'flex' : 'none';
         }
         if (homeCreditsDisplay) {
-            homeCreditsDisplay.style.display = isLoggedIn ? 'flex' : 'none';
+            homeCreditsDisplay.style.display = 'none';
         }
     }
 

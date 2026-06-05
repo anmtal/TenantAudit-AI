@@ -958,14 +958,27 @@ function initializeApp() {
     }
 
     const handleLogout = async () => {
-        if (supabase) {
-            await supabase.auth.signOut();
-        } else {
+        try {
+            if (supabase) {
+                await supabase.auth.signOut();
+            }
+        } catch (signOutErr) {
+            console.warn("[Logout Warning] Supabase signOut threw an error, cleaning up local state instead:", signOutErr);
+        } finally {
             isLoggedIn = false;
             userEmail = '';
             showView('home');
             updateNavUI();
             resetAppSessionState();
+            
+            // Clear any lingering session keys in localStorage just in case
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+                const key = localStorage.key(i);
+                if (key && (key.startsWith('sb-') || key.includes('auth-token') || key === 'ta_session_id')) {
+                    localStorage.removeItem(key);
+                }
+            }
+            console.log("[Logout] Local session state cleared successfully.");
         }
     };
 

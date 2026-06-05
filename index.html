@@ -447,7 +447,7 @@
 
             <!-- Document Upload & Launch Section -->
             <section class="glass-card" id="upload-panel">
-                <div class="card-header purple-bg">
+                <div class="card-header">
                     <div class="card-icon purple-bg"><i data-lucide="folder-open"></i></div>
                     <h3>1. Upload Transaction Documents</h3>
                 </div>
@@ -493,24 +493,6 @@
                 <div class="loader-overlay" id="audit-loader">
                     <div class="spinner"></div>
                     <div class="loader-text" id="loader-status-text">Parsing Lease text layers...</div>
-                </div>
-            </section>
-
-            <!-- Past Audits Transaction History Section -->
-            <section class="glass-card" id="history-panel" style="margin-top: 24px;">
-                <div class="card-header cyan-bg">
-                    <div class="card-icon cyan-bg"><i data-lucide="history"></i></div>
-                    <div style="display: flex; flex-direction: column; gap: 2px;">
-                        <h3>Transaction Audit History</h3>
-                        <p style="font-size: 11px; color: var(--text-muted);">Audits are automatically purged from the system after 30 days for data security.</p>
-                    </div>
-                </div>
-                <div class="history-list-wrapper">
-                    <div id="history-loading-msg" class="history-empty-state">Loading history...</div>
-                    <div id="history-empty-msg" class="history-empty-state" style="display: none;">No past audits found. Your completed audits will be logged here.</div>
-                    <div class="history-grid" id="history-list-container" style="display: none;">
-                        <!-- Injected dynamically via app.js -->
-                    </div>
                 </div>
             </section>
 
@@ -622,6 +604,24 @@
                                 "Current monthly rent is $12,500..."
                             </div>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Past Audits Transaction History Section -->
+            <section class="glass-card" id="history-panel" style="margin-top: 24px;">
+                <div class="card-header">
+                    <div class="card-icon cyan-bg"><i data-lucide="history"></i></div>
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                        <h3>Transaction Audit History</h3>
+                        <p style="font-size: 11px; color: var(--text-muted);">Audits are automatically purged from the system after 30 days for data security.</p>
+                    </div>
+                </div>
+                <div class="history-list-wrapper">
+                    <div id="history-loading-msg" class="history-empty-state">Loading history...</div>
+                    <div id="history-empty-msg" class="history-empty-state" style="display: none;">No past audits found. Your completed audits will be logged here.</div>
+                    <div class="history-grid" id="history-list-container" style="display: none;">
+                        <!-- Injected dynamically via app.js -->
                     </div>
                 </div>
             </section>

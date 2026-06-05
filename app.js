@@ -2661,6 +2661,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             background: #d1fae5;
             color: #065f46;
         }
+        .status-warning {
+            background: #ffedd5;
+            color: #9a3412;
+        }
         .status-mismatch {
             background: #fee2e2;
             color: #991b1b;
@@ -2752,8 +2756,15 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         </thead>
         <tbody>
             ${auditData.records.map(r => {
-                const badgeClass = r.status === 'match' ? 'status-match' : 'status-mismatch';
-                const statusText = r.status === 'match' ? 'Verified' : 'Mismatch';
+                let badgeClass = 'status-mismatch';
+                let statusText = 'Mismatch';
+                if (r.status === 'match') {
+                    badgeClass = 'status-match';
+                    statusText = 'Verified';
+                } else if (r.status === 'warning') {
+                    badgeClass = 'status-warning';
+                    statusText = 'Warning';
+                }
                 return `
                 <tr>
                     <td style="font-weight: 600;">${escapeHtml(r.term)}</td>

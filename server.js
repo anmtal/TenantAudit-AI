@@ -29,6 +29,89 @@ app.use((req, res, next) => {
     next();
 });
 
+// Simple in-memory rate limiter middleware (max 200 requests per 15 minutes per IP)
+const rateLimitWindowMs = 15 * 60 * 1000;
+const rateLimitMax = 200;
+const ipHits = new Map();
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, entry] of ipHits.entries()) {
+        if (now - entry.resetTime > 0) ipHits.delete(ip);
+    }
+}, 5 * 60 * 1000);
+
+function rateLimiter(req, res, next) {
+    const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const now = Date.now();
+    
+    if (!ipHits.has(ip)) {
+        ipHits.set(ip, { hits: 1, resetTime: now + rateLimitWindowMs });
+        return next();
+    }
+    
+    const entry = ipHits.get(ip);
+    if (now - entry.resetTime > 0) {
+        entry.hits = 1;
+        entry.resetTime = now + rateLimitWindowMs;
+        return next();
+    }
+    
+    entry.hits++;
+    if (entry.hits > rateLimitMax) {
+        return res.status(429).json({
+            error: "Too Many Requests",
+            message: "Too many requests from this IP. Please try again after 15 minutes."
+        });
+    }
+    next();
+}
+
+app.use(rateLimiter);
+
+// Auth Middleware to authenticate user and check seat limits
+async function requireAuth(req, res, next) {
+    if (!supabaseAdmin) {
+        console.warn("[Security Bypass] Supabase Admin client not configured. Proceeding without auth validation.");
+        req.user = { id: 'mock-user-id', email: 'mock@example.com', user_metadata: {} };
+        return next();
+    }
+
+    const authHeader = req.headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: "Unauthorized: Missing or invalid session token." });
+    }
+    const token = authHeader.substring(7).trim();
+    if (!token) {
+        return res.status(401).json({ error: "Unauthorized: Empty session token." });
+    }
+
+    try {
+        const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+        if (authError || !user) {
+            console.error("[Auth Failure] Token verification failed:", authError?.message || "No user returned");
+            return res.status(401).json({ error: "Unauthorized: Invalid or expired session token." });
+        }
+
+        // Verify active session for single-seat restriction using auth user metadata
+        const clientSessionId = req.headers['x-session-id'] || req.headers['X-Session-ID'];
+        const activeSessionId = user.user_metadata?.active_session_id;
+        if (activeSessionId && clientSessionId && activeSessionId !== clientSessionId) {
+            console.warn(`[Blocked] Session mismatch for user ${user.email}. Auth Metadata: ${activeSessionId}, Header: ${clientSessionId}`);
+            return res.status(403).json({
+                error: "session_mismatch",
+                message: "Your account is logged in on another device. This subscription is limited to 1 active seat."
+            });
+        }
+
+        req.user = user;
+        next();
+    } catch (err) {
+        console.error("[Auth Failure] Exception during token check:", err);
+        return res.status(500).json({ error: "Internal Server Error during auth check." });
+    }
+}
+
 // Helper function to safely extract and parse JSON from LLM responses (handling code blocks & markdown fences)
 function extractAndParseJSON(rawText) {
     if (typeof rawText !== 'string') {
@@ -93,17 +176,28 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
         if (invoice.subscription) {
             try {
                 const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
-                const { userId, planType, amount } = subscription.metadata;
+                const { userId, planType, amount } = subscription.metadata || {};
                 
                 if (userId && planType && amount) {
                     console.log(`Processing subscription renewal for user ${userId}: plan ${planType}, amount ${amount}`);
                     
-                    const { createClient } = require('@supabase/supabase-js');
-                    const supabaseUrl = process.env.SUPABASE_URL;
-                    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-                    
-                    if (supabaseUrl && supabaseServiceKey) {
-                        const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+                    if (supabaseAdmin) {
+                        // Idempotency: log webhook transaction
+                        const { error: insertErr } = await supabaseAdmin
+                            .from('processed_payments')
+                            .insert({
+                                session_id: invoice.id || invoice.payment_intent || subscription.id,
+                                user_id: userId,
+                                amount: parseInt(amount, 10)
+                            });
+                        if (insertErr) {
+                            if (insertErr.code === '23505') {
+                                console.log(`[Stripe Webhook] Replay detected: event already processed.`);
+                                return res.json({ received: true });
+                            }
+                            throw insertErr;
+                        }
+
                         const { data: profile, error: fetchErr } = await supabaseAdmin
                             .from('profiles')
                             .select('credits, byok_credits')
@@ -118,8 +212,7 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                         if (planType === 'byok') {
                             updateFields = { byok_credits: amt };
                         } else {
-                            const isAnnual = (amt === 8000 || amt === 20000);
-                            const baseCredits = isAnnual ? 0 : (profile.credits || 0);
+                            const baseCredits = profile.credits || 0;
                             updateFields = { credits: baseCredits + amt };
                         }
                         
@@ -131,7 +224,7 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                         if (updateErr) throw updateErr;
                         console.log(`Successfully credited ${amt} pages to user ${userId} via webhook.`);
                     } else {
-                        console.warn("Supabase Service Role Key or URL not configured on backend. Webhook renewal skipped.");
+                        console.warn("Supabase Admin not configured. Webhook renewal skipped.");
                     }
                 }
             } catch (err) {
@@ -146,14 +239,8 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
             try {
                 console.log(`Processing subscription termination for user ${userId}: plan ${planType}`);
                 
-                const { createClient } = require('@supabase/supabase-js');
-                const supabaseUrl = process.env.SUPABASE_URL;
-                const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-                
-                if (supabaseUrl && supabaseServiceKey) {
-                    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+                if (supabaseAdmin) {
                     let updateFields = {};
-                    
                     if (planType === 'byok') {
                         updateFields = { byok_credits: 0 };
                     } else {
@@ -166,9 +253,9 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                         .eq('id', userId);
                         
                     if (updateErr) throw updateErr;
-                    console.log(`Successfully reset credits to 0 for user ${userId} via webhook due to cancellation/failure.`);
+                    console.log(`Successfully reset credits to 0 for user ${userId} via webhook.`);
                 } else {
-                    console.warn("Supabase Service Role Key or URL not configured on backend. Webhook reset skipped.");
+                    console.warn("Supabase Admin not configured. Webhook reset skipped.");
                 }
             } catch (err) {
                 console.error("Error processing subscription deletion webhook:", err);
@@ -194,7 +281,7 @@ app.get('/api/config', (req, res) => {
 
 
 // Route to handle dynamic LLM provider extraction proxy
-app.post('/api/audit', async (req, res) => {
+app.post('/api/audit', requireAuth, async (req, res) => {
     try {
         const { text, images, docType, connectionMode, provider, model, apiKey: userKey, systemPromptOverride, userPromptOverride } = req.body;
         
@@ -202,46 +289,32 @@ app.post('/api/audit', async (req, res) => {
             return res.status(400).json({ error: "Missing required fields: text or images, and docType" });
         }
 
-        // Determine which API key to use
+        // Calculate page count on the server side to prevent client-side bypass/cheating
+        let pageCount = 1;
+        if (images && Array.isArray(images) && images.length > 0) {
+            pageCount = images.length;
+        } else if (text && typeof text === 'string') {
+            const matches = text.match(/---\s*(?:\[PAGE\s*\d+\]|PAGE\s*\d+)\s*---/gi);
+            if (matches && matches.length > 0) {
+                pageCount = matches.length;
+            } else {
+                pageCount = Math.max(1, Math.ceil(text.length / 3000));
+            }
+        }
+
+        // Determine which API key and models to use
         let activeKey;
         let activeProvider = provider || 'openai';
         let activeModel = model || 'gpt-4o-mini';
+        let currentCredits = 0;
 
         if (connectionMode === 'hosted') {
-            // Validate that the request comes from an authenticated session with positive credit balance
             if (supabaseAdmin) {
-                const authHeader = req.headers['authorization'];
-                if (!authHeader || !authHeader.startsWith('Bearer ')) {
-                    return res.status(401).json({ error: "Unauthorized: Missing or invalid session token." });
-                }
-                const token = authHeader.substring(7).trim();
-                if (!token) {
-                    return res.status(401).json({ error: "Unauthorized: Empty session token." });
-                }
-                
-                // Retrieve user details using token
-                const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-                if (authError || !user) {
-                    console.error("[Auth Failure] Token verification failed:", authError?.message || "No user returned");
-                    return res.status(401).json({ error: "Unauthorized: Invalid or expired session token." });
-                }
-                
-                // Verify active session for single-seat restriction using auth user metadata
-                const clientSessionId = req.headers['x-session-id'];
-                const activeSessionId = user.user_metadata?.active_session_id;
-                if (activeSessionId && clientSessionId && activeSessionId !== clientSessionId) {
-                    console.warn(`[Blocked] Session mismatch for user ${user.email}. Auth Metadata: ${activeSessionId}, Header: ${clientSessionId}`);
-                    return res.status(403).json({
-                        error: "session_mismatch",
-                        message: "Your account is logged in on another device. This subscription is limited to 1 active seat."
-                    });
-                }
-
                 // Query user's credit balance
                 const { data: profile, error: profileErr } = await supabaseAdmin
                     .from('profiles')
                     .select('credits')
-                    .eq('id', user.id)
+                    .eq('id', req.user.id)
                     .single();
                      
                 if (profileErr) {
@@ -249,20 +322,19 @@ app.post('/api/audit', async (req, res) => {
                     return res.status(500).json({ error: "Internal Server Error: Failed to retrieve page credits balance." });
                 }
                 
-                if (!profile || typeof profile.credits === 'undefined' || profile.credits <= 0) {
-                    console.warn(`[Blocked] User ${user.email} attempted hosted audit with insufficient credits: ${profile ? profile.credits : 'No profile'}`);
-                    return res.status(403).json({ error: "Forbidden: Insufficient page credits. Please top up your account." });
+                currentCredits = profile ? (profile.credits || 0) : 0;
+                if (currentCredits < pageCount) {
+                    console.warn(`[Blocked] User ${req.user.email} attempted hosted audit with insufficient credits. Required: ${pageCount}, Has: ${currentCredits}`);
+                    return res.status(403).json({ error: `Forbidden: Insufficient page credits. This audit requires ${pageCount} pages, but you only have ${currentCredits} remaining.` });
                 }
                 
-                console.log(`[Authorized] Hosted audit request by ${user.email} (${profile.credits} credits remaining)`);
-            } else {
-                console.warn("[Security Bypass] Supabase Admin client not configured. Proceeding without auth validation.");
+                console.log(`[Authorized] Hosted audit request by ${req.user.email} (${currentCredits} credits remaining, needs ${pageCount})`);
             }
 
             // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet
             activeKey = process.env.ANTHROPIC_API_KEY;
             activeProvider = 'anthropic';
-            activeModel = 'claude-sonnet-4-5-20250929'; // Server is configured to run Claude Sonnet as default
+            activeModel = 'claude-sonnet-4-5-20250929';
             
             if (!activeKey) {
                 return res.status(500).json({ 
@@ -358,8 +430,7 @@ Please extract the required fields and return the JSON.`;
             }
 
             const data = await response.json();
-            const extractedData = extractAndParseJSON(data.choices[0].message.content);
-            return res.json(extractedData);
+            extractedData = extractAndParseJSON(data.choices[0].message.content);
         } 
         
         else if (activeProvider === 'anthropic') {
@@ -413,8 +484,7 @@ Please extract the required fields and return the JSON.`;
 
             const data = await response.json();
             const rawContent = data.content[0].text;
-            const extractedData = extractAndParseJSON(rawContent);
-            return res.json(extractedData);
+            extractedData = extractAndParseJSON(rawContent);
         } 
         
         else if (activeProvider === 'gemini') {
@@ -463,8 +533,7 @@ Please extract the required fields and return the JSON.`;
 
             const data = await response.json();
             const rawText = data.candidates[0].content.parts[0].text;
-            const extractedData = extractAndParseJSON(rawText);
-            return res.json(extractedData);
+            extractedData = extractAndParseJSON(rawText);
         } 
         
         else if (activeProvider === 'deepseek') {
@@ -495,12 +564,31 @@ Please extract the required fields and return the JSON.`;
             }
 
             const data = await response.json();
-            const extractedData = extractAndParseJSON(data.choices[0].message.content);
-            return res.json(extractedData);
+            extractedData = extractAndParseJSON(data.choices[0].message.content);
         } 
         
         else {
             return res.status(400).json({ error: `Unsupported AI provider: ${activeProvider}` });
+        }
+
+        // Deduct page credits from user profile for Hosted mode after successful extraction
+        if (connectionMode === 'hosted' && supabaseAdmin && extractedData) {
+            const newCredits = Math.max(0, currentCredits - pageCount);
+            const { error: deductErr } = await supabaseAdmin
+                .from('profiles')
+                .update({ credits: newCredits })
+                .eq('id', req.user.id);
+            if (deductErr) {
+                console.error("[DB Failure] Failed to deduct credits after successful audit:", deductErr.message);
+            } else {
+                console.log(`[Credits] Deducted ${pageCount} pages from user ${req.user.email}. Remaining: ${newCredits}`);
+            }
+        }
+
+        if (extractedData) {
+            return res.json(extractedData);
+        } else {
+            return res.status(500).json({ error: "Audit proxy failed: no data extracted." });
         }
 
     } catch (error) {
@@ -510,7 +598,7 @@ Please extract the required fields and return the JSON.`;
 });
 
 // Route to handle AI-assisted compliance comparison of lease vs estoppel
-app.post('/api/compare', async (req, res) => {
+app.post('/api/compare', requireAuth, async (req, res) => {
     try {
         const { leaseJson, estoppelJson, connectionMode, provider, model, apiKey: userKey } = req.body;
         
@@ -518,41 +606,13 @@ app.post('/api/compare', async (req, res) => {
             return res.status(400).json({ error: "Missing required fields: leaseJson and estoppelJson" });
         }
 
-        // Validate that the request comes from an authenticated session with positive credit balance
         if (connectionMode === 'hosted') {
             if (supabaseAdmin) {
-                const authHeader = req.headers['authorization'];
-                if (!authHeader || !authHeader.startsWith('Bearer ')) {
-                    return res.status(401).json({ error: "Unauthorized: Missing or invalid session token." });
-                }
-                const token = authHeader.substring(7).trim();
-                if (!token) {
-                    return res.status(401).json({ error: "Unauthorized: Empty session token." });
-                }
-                
-                // Retrieve user details using token
-                const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-                if (authError || !user) {
-                    console.error("[Auth Failure] Token verification failed on comparison:", authError?.message || "No user returned");
-                    return res.status(401).json({ error: "Unauthorized: Invalid or expired session token." });
-                }
-                
-                // Verify active session for single-seat restriction using auth user metadata
-                const clientSessionId = req.headers['x-session-id'];
-                const activeSessionId = user.user_metadata?.active_session_id;
-                if (activeSessionId && clientSessionId && activeSessionId !== clientSessionId) {
-                    console.warn(`[Blocked] Session mismatch for user ${user.email} on comparison. Auth Metadata: ${activeSessionId}, Header: ${clientSessionId}`);
-                    return res.status(403).json({
-                        error: "session_mismatch",
-                        message: "Your account is logged in on another device. This subscription is limited to 1 active seat."
-                    });
-                }
-
-                // Query user's credit balance
+                // Check if user has at least 1 credit remaining (compare uses very few tokens, we just require positive balance)
                 const { data: profile, error: profileErr } = await supabaseAdmin
                     .from('profiles')
                     .select('credits')
-                    .eq('id', user.id)
+                    .eq('id', req.user.id)
                     .single();
                      
                 if (profileErr) {
@@ -561,13 +621,9 @@ app.post('/api/compare', async (req, res) => {
                 }
                 
                 if (!profile || typeof profile.credits === 'undefined' || profile.credits <= 0) {
-                    console.warn(`[Blocked] User ${user.email} attempted hosted comparison with insufficient credits: ${profile ? profile.credits : 'No profile'}`);
+                    console.warn(`[Blocked] User ${req.user.email} attempted hosted comparison with insufficient credits.`);
                     return res.status(403).json({ error: "Forbidden: Insufficient page credits. Please top up your account." });
                 }
-                
-                console.log(`[Authorized] Hosted comparison request by ${user.email}`);
-            } else {
-                console.warn("[Security Bypass] Supabase Admin client not configured. Proceeding without auth validation.");
             }
         }
 
@@ -758,11 +814,16 @@ Please compare all fields and return the structured JSON report.`;
 
 
 // Stripe Checkout Session Creation
-app.post('/api/create-checkout-session', async (req, res) => {
+app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
     const { amount, planType, userId, price, packageName } = req.body;
     
     if (!amount || !planType || !userId || !price || !packageName) {
         return res.status(400).json({ error: "Missing required fields for checkout session" });
+    }
+
+    // Secure verification: client userId must match authentic authenticated userId
+    if (supabaseAdmin && userId !== req.user.id) {
+        return res.status(403).json({ error: "Forbidden: Authenticated user ID mismatch." });
     }
     
     const priceInCents = Math.round(price * 100);
@@ -775,8 +836,24 @@ app.post('/api/create-checkout-session', async (req, res) => {
         // Dynamically compute absolute URL based on request headers (Vercel-safe)
         const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
         
-        const isSubscription = (planType === 'byok') || (price === 999.00 || price === 2499.00);
-        const subscriptionInterval = (planType === 'byok' && price === 149.00) ? 'month' : 'year';
+        const amtVal = parseInt(amount, 10);
+        let isSubscription = false;
+        let subscriptionInterval = 'year';
+
+        if (planType === 'byok') {
+            isSubscription = true;
+            if (amtVal === 149) {
+                subscriptionInterval = 'month';
+            } else if (amtVal === 1299) {
+                subscriptionInterval = 'year';
+            }
+        } else if (planType === 'hosted') {
+            if (amtVal === 8000 || amtVal === 20000) {
+                isSubscription = true;
+                subscriptionInterval = 'year';
+            }
+        }
+
         const displayAmount = (parseInt(amount, 10) >= 900000) ? 'Unlimited' : amount;
         
         const sessionParams = {
@@ -842,6 +919,22 @@ app.get('/api/verify-checkout-session', async (req, res) => {
                 console.log(`[Stripe Verification] Processing purchase for user ${userId}: plan ${planType}, amount ${amount}`);
                 
                 if (supabaseAdmin) {
+                    // Idempotency: log webhook transaction
+                    const { error: insertErr } = await supabaseAdmin
+                        .from('processed_payments')
+                        .insert({
+                            session_id: session.id,
+                            user_id: userId,
+                            amount: parseInt(amount, 10)
+                        });
+                    if (insertErr) {
+                        if (insertErr.code === '23505') {
+                            console.log(`[Stripe Verification] Replay detected: Session ${session.id} already processed.`);
+                            return res.json({ success: true, metadata: session.metadata, already_processed: true });
+                        }
+                        throw insertErr;
+                    }
+
                     // Fetch user's current profile credits
                     const { data: profile, error: selectErr } = await supabaseAdmin
                         .from('profiles')
@@ -860,8 +953,7 @@ app.get('/api/verify-checkout-session', async (req, res) => {
                     if (planType === 'byok') {
                         updateFields = { byok_credits: amt };
                     } else {
-                        const isAnnual = (amt === 8000 || amt === 20000);
-                        const baseCredits = isAnnual ? 0 : (profile.credits || 0);
+                        const baseCredits = profile.credits || 0;
                         updateFields = { credits: baseCredits + amt };
                     }
                     
@@ -883,7 +975,6 @@ app.get('/api/verify-checkout-session', async (req, res) => {
                     
                     if (metadataErr) {
                         console.warn("[Stripe Verification User Metadata Warning]:", metadataErr.message);
-                        // Do not throw on metadata update failure, as credit balance is already saved successfully
                     }
                     
                     console.log(`[Stripe Verification] Successfully credited user ${userId} with ${amount} pages for plan ${planType}`);

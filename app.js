@@ -271,6 +271,10 @@ function initializeApp() {
         loginView.style.display = 'none';
         dashboardView.style.display = 'none';
 
+        if (viewId !== 'login') {
+            window.pendingPurchase = null; // Clear purchase queue on navigation away from login
+        }
+
         if (viewId === 'home') {
             homeView.style.display = 'block';
         } else if (viewId === 'login') {
@@ -492,23 +496,29 @@ function initializeApp() {
         historyListContainer.innerHTML = '';
         
         try {
-            // Cleanup: Delete records older than 30 days
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            // Cleanup: Delete expired records belonging to the current user
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - 30);
+            const cutoffIso = cutoffDate.toISOString();
+            
             try {
-                const cutoffDate = new Date();
-                cutoffDate.setDate(cutoffDate.getDate() - 30);
-                const cutoffIso = cutoffDate.toISOString();
-                
                 await supabase
                     .from('audits')
                     .delete()
+                    .eq('user_id', user.id)
                     .lt('created_at', cutoffIso);
             } catch (cleanupErr) {
                 console.error("Failed to delete expired audits:", cleanupErr);
             }
 
+            // Fetch history isolated strictly for the current user
             const { data, error } = await supabase
                 .from('audits')
                 .select('*')
+                .eq('user_id', user.id)
                 .order('created_at', { ascending: false });
                 
             historyLoadingMsg.style.display = 'none';
@@ -819,43 +829,40 @@ function initializeApp() {
     });
 
 
-    // Helper toggle binding function for login/signup link switcher
-    function setupAuthToggleListener() {
-        const toggleBtn = document.getElementById('auth-toggle-link');
-        if (toggleBtn) {
-            toggleBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                isSignUpMode = !isSignUpMode;
-                if (isSignUpMode) {
-                    loginTitle.textContent = "Create an Account";
-                    loginSubtitle.textContent = "Sign up for LeaseAlign AI to start auditing commercial leases.";
-                    loginSubmitBtn.textContent = "Register Account";
-                    
-                    document.querySelectorAll('.register-only').forEach(el => el.style.display = 'block');
-                    if (registerFirstName) registerFirstName.required = true;
-                    if (registerLastName) registerLastName.required = true;
-                    if (registerCompany) registerCompany.required = true;
-                    
-                    authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
-                } else {
-                    loginTitle.textContent = "Sign In to LeaseAlign AI";
-                    loginSubtitle.textContent = "Enter your credentials to access your transaction dashboard";
-                    loginSubmitBtn.textContent = "Sign In";
-                    
-                    document.querySelectorAll('.register-only').forEach(el => el.style.display = 'none');
-                    if (registerFirstName) registerFirstName.required = false;
-                    if (registerLastName) registerLastName.required = false;
-                    if (registerCompany) registerCompany.required = false;
-                    
-                    authToggleContainer.innerHTML = 'Don\'t have an account? <a href="#" id="auth-toggle-link">Sign Up</a>';
-                }
-                setupAuthToggleListener(); // Recursively re-bind click listener on the new link
-            });
-        }
+    // Event delegation on authToggleContainer to prevent listeners leak
+    if (authToggleContainer) {
+        authToggleContainer.addEventListener('click', (e) => {
+            const toggleLink = e.target.closest('#auth-toggle-link');
+            if (!toggleLink) return;
+            
+            e.preventDefault();
+            isSignUpMode = !isSignUpMode;
+            
+            if (isSignUpMode) {
+                loginTitle.textContent = "Create an Account";
+                loginSubtitle.textContent = "Sign up for LeaseAlign AI to start auditing commercial leases.";
+                loginSubmitBtn.textContent = "Register Account";
+                
+                document.querySelectorAll('.register-only').forEach(el => el.style.display = 'block');
+                if (registerFirstName) registerFirstName.required = true;
+                if (registerLastName) registerLastName.required = true;
+                if (registerCompany) registerCompany.required = true;
+                
+                authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
+            } else {
+                loginTitle.textContent = "Sign In to LeaseAlign AI";
+                loginSubtitle.textContent = "Enter your credentials to access your transaction dashboard";
+                loginSubmitBtn.textContent = "Sign In";
+                
+                document.querySelectorAll('.register-only').forEach(el => el.style.display = 'none');
+                if (registerFirstName) registerFirstName.required = false;
+                if (registerLastName) registerLastName.required = false;
+                if (registerCompany) registerCompany.required = false;
+                
+                authToggleContainer.innerHTML = 'Don\'t have an account? <a href="#" id="auth-toggle-link">Sign Up</a>';
+            }
+        });
     }
-    
-    // Call initial binding
-    setupAuthToggleListener();
 
     if (loginForm) {
         loginForm.addEventListener('submit', async (e) => {
@@ -1448,6 +1455,13 @@ function initializeApp() {
             return;
         }
 
+        // Limit upload size to 10MB to protect memory
+        const MAX_FILE_SIZE = 10 * 1024 * 1024;
+        if (file.size > MAX_FILE_SIZE) {
+            alert(`🚫 File size exceeds 10MB limit (${formatBytes(file.size)}). Please upload a smaller file.`);
+            return;
+        }
+
         filesState[fileKey] = file;
         zoneEl.classList.add('file-selected');
         
@@ -1524,6 +1538,11 @@ function initializeApp() {
     // --- Scanned PDF (OCR) and Multi-Pass Parsing Utilities ---
     function isScannedPDF(pages) {
         if (!pages || pages.length === 0) return true;
+        
+        // If any page has >100 characters of text, it is likely a text PDF, not scanned.
+        const hasTextPage = pages.some(p => p.text && p.text.trim().length > 100);
+        if (hasTextPage) return false;
+        
         const totalTextLen = pages.reduce((sum, p) => sum + (p.text ? p.text.trim().length : 0), 0);
         const avgTextLen = totalTextLen / pages.length;
         console.log(`[OCR Check] Average characters per page: ${avgTextLen.toFixed(1)}`);
@@ -1992,24 +2011,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             showLoader("Auditing discrepancies...");
             await performAILinkedAudit(leaseExtraction, estoppelExtraction);
             
-            // Deduct credits and log audit to Database
+            // Log audit to Database and reload profile
             try {
                 if (supabase) {
-                    const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+                    const { data: { user } } = await supabase.auth.getUser();
                     
-                    // Only deduct credits if NOT in BYOK (BYOB) mode
-                    if (connectionMode !== 'byok') {
-                        const isUnlimited = hostedCredits >= 900000;
-                        if (!isUnlimited) {
-                            const { error: deductErr } = await supabase.rpc('deduct_credits', { 
-                                pages_to_deduct: totalPagesNeeded,
-                                plan_mode: 'hosted'
-                            });
-                            if (deductErr) throw deductErr;
-                        }
-                    }
-
                     const { error: logErr } = await supabase.from('audits').insert({
+                        user_id: user ? user.id : null,
                         tenant_name: auditData.metadata.tenantName,
                         lease_file: auditData.metadata.leaseFile,
                         estoppel_file: auditData.metadata.estoppelFile,
@@ -2027,7 +2035,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 } else {
                     // Fallback mock mode
                     const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                    // Only deduct credits if NOT in BYOK (BYOB) mode
                     if (connectionMode !== 'byok') {
                         if (hostedCredits < 900000) {
                             hostedCredits -= totalPagesNeeded;
@@ -2086,15 +2093,15 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
     // --- API Calls Router (Secure CORS Proxy via Backend) ---
     async function callOpenAIToExtract(text, docType, connectionMode, provider, model, apiKey, images = null, systemPromptOverride = null, userPromptOverride = null) {
-        // Build payload based on mode. 
-        // In Hosted SaaS mode, we run OpenAI's high-tier 'gpt-4o' under our server key.
+        // Build payload based on mode.
+        // In Hosted SaaS mode, we run Claude Sonnet via server key.
         const payload = {
             text: text,
             images: images,
             docType: docType,
             connectionMode: connectionMode,
-            provider: connectionMode === 'hosted' ? 'openai' : provider,
-            model: connectionMode === 'hosted' ? 'gpt-4o' : model,
+            provider: connectionMode === 'hosted' ? 'anthropic' : provider,
+            model: connectionMode === 'hosted' ? 'claude-sonnet-4-5-20250929' : model,
             apiKey: connectionMode === 'hosted' ? null : apiKey,
             systemPromptOverride: systemPromptOverride,
             userPromptOverride: userPromptOverride
@@ -2177,7 +2184,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 const fillers = [
                     /per\s*month/g, /monthly\s*base\s*rent/g, /monthly\s*rent/g, /base\s*rent/g,
                     /rent/g, /monthly/g, /yearly/g, /annually/g, /annual/g, /per\s*annum/g,
-                    /suite/g, /unit/g, /room/g, /floor/g, /rentable/g, /approximately/g, /exactly/g
+                    /unit/g, /room/g, /rentable/g, /approximately/g, /exactly/g
                 ];
                 fillers.forEach(pattern => {
                     norm = norm.replace(pattern, '');
@@ -2216,8 +2223,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const isEMissing = eVal === 'notfound' || eVal === 'notmentioned' || eVal === '';
 
             if (isLMissing || isEMissing) {
-                status = "warning"; // Warning status if not found in one of the files
-            } else if (lVal === eVal || lVal.includes(eVal) || eVal.includes(lVal)) {
+                status = "warning";
+                warningCount++;
+            } else if (lVal === eVal) {
                 status = "match";
                 matchCount++;
             } else {
@@ -2238,8 +2246,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             });
         });
 
-        // Calculate baseline score
-        let score = Math.round((matchCount / terms.length) * 100);
+        // Calculate baseline score awarding 50% weight for warning entries
+        let score = Math.round(((matchCount + (warningCount * 0.5)) / terms.length) * 100);
 
         const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
         const apiProvider = localStorage.getItem('ta_api_provider') || 'openai';
@@ -2308,6 +2316,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     
                     let verifiedMatchCount = 0;
                     let verifiedRedFlags = 0;
+                    let verifiedWarningCount = 0;
                     
                     // Merge verified statuses
                     auditData.records = auditData.records.map(rec => {
@@ -2319,6 +2328,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                             
                             if (status === 'match') verifiedMatchCount++;
                             else if (status === 'mismatch') verifiedRedFlags++;
+                            else if (status === 'warning') verifiedWarningCount++;
                             
                             return {
                                 ...rec,
@@ -2328,11 +2338,12 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         } else {
                             if (rec.status === 'match') verifiedMatchCount++;
                             else if (rec.status === 'mismatch') verifiedRedFlags++;
+                            else if (rec.status === 'warning') verifiedWarningCount++;
                             return rec;
                         }
                     });
                     
-                    const verifiedScore = Math.round((verifiedMatchCount / terms.length) * 100);
+                    const verifiedScore = Math.round(((verifiedMatchCount + (verifiedWarningCount * 0.5)) / terms.length) * 100);
                     auditData.summary.matchScore = verifiedScore;
                     auditData.summary.redFlags = verifiedRedFlags;
                     

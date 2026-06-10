@@ -407,7 +407,7 @@ app.post('/api/audit', requireAuth, async (req, res) => {
             // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet
             activeKey = process.env.ANTHROPIC_API_KEY;
             activeProvider = 'anthropic';
-            activeModel = 'claude-3-5-sonnet-20241022';
+            activeModel = 'claude-3-5-sonnet-20240620';
             
             if (!activeKey) {
                 return res.status(500).json({ 
@@ -733,7 +733,7 @@ app.post('/api/compare', requireAuth, async (req, res) => {
             // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet as default
             activeKey = process.env.ANTHROPIC_API_KEY;
             activeProvider = 'anthropic';
-            activeModel = 'claude-3-5-sonnet-20241022';
+            activeModel = 'claude-3-5-sonnet-20240620';
             
             if (!activeKey) {
                 return res.status(500).json({ 

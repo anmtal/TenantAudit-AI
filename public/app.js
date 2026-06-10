@@ -2183,6 +2183,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         });
 
         if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || `Server returned error status ${response.status}`);
         }
 
@@ -2403,6 +2404,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     renderAuditResults();
                     console.log("[AI Verification] Compliance audit successfully verified & refined semantically.");
                 } else {
+                    const errData = await response.json().catch(() => ({}));
                     console.error("[AI Verification Failed] Backend returned status error:", errData.error || response.status);
                 }
             } catch (e) {

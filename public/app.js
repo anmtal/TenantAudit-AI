@@ -264,9 +264,9 @@ function initializeApp() {
             { value: 'gpt-4o', label: 'GPT-4o (Deep Legal Audit)' }
         ],
         anthropic: [
-            { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (Latest)' },
-            { value: 'claude-opus-4-8', label: 'Claude Opus 4.8 (Most Capable)' },
-            { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (Fast & Cheap)' }
+            { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet (Latest)' },
+            { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus (Most Capable)' },
+            { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (Fast & Cheap)' }
         ],
         gemini: [
             { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
@@ -2174,7 +2174,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             docType: docType,
             connectionMode: connectionMode,
             provider: connectionMode === 'hosted' ? 'anthropic' : provider,
-            model: connectionMode === 'hosted' ? 'claude-sonnet-4-6' : model,
+            model: connectionMode === 'hosted' ? 'claude-3-5-sonnet-20241022' : model,
             apiKey: connectionMode === 'hosted' ? null : apiKey,
             systemPromptOverride: systemPromptOverride,
             userPromptOverride: userPromptOverride
@@ -2358,7 +2358,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     estoppelJson,
                     connectionMode,
                     provider: connectionMode === 'hosted' ? 'anthropic' : apiProvider,
-                    model: connectionMode === 'hosted' ? 'claude-sonnet-4-6' : llmModel,
+                    model: connectionMode === 'hosted' ? 'claude-3-5-sonnet-20241022' : llmModel,
                     apiKey: connectionMode === 'hosted' ? null : apiKey
                 };
                 

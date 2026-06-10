@@ -736,6 +736,284 @@ function initializeApp() {
                             alert("Error initiating checkout: " + err.message);
                         }
                     }
+
+                        // --- Check for Stripe Redirect Success ---
+                        const urlParams = new URLSearchParams(window.location.search);
+                        if (urlParams.get('checkout_success') === 'true' && urlParams.get('session_id')) {
+                            const sessionId = urlParams.get('session_id');
+                            showLoader("Verifying Stripe payment...");
+                            try {
+                                const response = await fetch(`/api/verify-checkout-session?session_id=${sessionId}&t=` + Date.now());
+                                const data = await response.json();
+                                if (data.success) {
+                                    const { amount, planType } = data.metadata;
+                                    const amt = parseInt(amount, 10);
+                                    
+                                    // Reload user profile & credits (updated server-side)
+                                    await loadUserProfileAndCredits();
+                                    
+                                    // Clear URL parameters
+                                    window.history.replaceState({}, document.title, window.location.pathname);
+                                    
+                                    const displayAmt = amt >= 900000 ? "Unlimited" : `+${amount}`;
+                                    alert(`🎉 Payment Verified! Successfully activated your ${planType.toUpperCase()} plan with ${displayAmt} credits.`);
+                                } else {
+                                    alert("Stripe Checkout verification failed: " + (data.error || "Unknown error"));
+                                }
+                            } catch (err) {
+                                console.error("Redirect verification error:", err);
+                                alert("Failed to verify Stripe payment: " + err.message);
+                            } finally {
+                                hideLoader();
+                            }
+                        }
+
+                        // --- Check for Stripe Redirect Cancel ---
+                        if (urlParams.get('checkout_cancel') === 'true') {
+                            window.history.replaceState({}, document.title, window.location.pathname);
+                            alert("Payment canceled. No credits were added.");
+                        }
+                    } else {
+                        isLoggedIn = false;
+                        userEmail = '';
+                        showView('home');
+                        updateNavUI();
+                        resetAppSessionState();
+                    }
+                });
+            } else {
+                console.warn("Supabase configs not loaded. Running in local fallback mode.");
+                initializeAuthFallback();
+            }
+        } catch (e) {
+            console.error("Failed to initialize Supabase:", e);
+            initializeAuthFallback();
+        }
+    }
+
+    // Navigation triggers
+    if (homeLoginBtn) {
+        homeLoginBtn.addEventListener('click', () => {
+            if (isLoggedIn) {
+                showView('dashboard');
+            } else {
+                showView('login');
+            }
+        });
+    }
+    if (heroGetStartedBtn) {
+        heroGetStartedBtn.addEventListener('click', () => {
+            if (isLoggedIn) {
+                showView('dashboard');
+            } else {
+                showView('login');
+            }
+        });
+    }
+    if (loginToHomeLink) {
+        loginToHomeLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            showView('home');
+        });
+    }
+    const dashboardHomeBtn = document.getElementById('dashboard-home-btn');
+    if (dashboardHomeBtn) {
+        dashboardHomeBtn.addEventListener('click', () => {
+            showView('home');
+        });
+    }
+
+    // Pricing Switcher Tab Toggle Logic
+    const switchHostedBtn = document.getElementById('switch-hosted');
+    const switchByokBtn = document.getElementById('switch-byok');
+    const hostedGrid = document.getElementById('hosted-grid');
+    const byokGrid = document.getElementById('byok-grid');
+
+    if (switchHostedBtn && switchByokBtn && hostedGrid && byokGrid) {
+        switchHostedBtn.addEventListener('click', () => {
+            switchHostedBtn.classList.add('active');
+            switchByokBtn.classList.remove('active');
+            hostedGrid.style.display = 'grid';
+            byokGrid.style.display = 'none';
+            
+            // If logged in, sync connection mode as well
+            if (isLoggedIn) {
+                const currentMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+                if (currentMode !== 'hosted') {
+                    localStorage.setItem('ta_connection_mode', 'hosted');
+                    if (settingsMode) settingsMode.value = 'hosted';
+                    const savedKey = localStorage.getItem('ta_api_key') || '';
+                    updateSettingsUI('hosted', '');
+                    selectedTopupPlan = 'hosted';
+                    if (buyPlanHosted) buyPlanHosted.click();
+                    updateCreditsDisplay();
+                }
+            }
+        });
+
+        switchByokBtn.addEventListener('click', () => {
+            switchByokBtn.classList.add('active');
+            switchHostedBtn.classList.remove('active');
+            hostedGrid.style.display = 'none';
+            byokGrid.style.display = 'flex';
+            
+            // If logged in, sync connection mode as well
+            if (isLoggedIn) {
+                const currentMode = localStorage.getItem('ta_connection_mode') || 'hosted';
+                if (currentMode !== 'byok') {
+                    localStorage.setItem('ta_connection_mode', 'byok');
+                    if (settingsMode) settingsMode.value = 'byok';
+                    const savedKey = localStorage.getItem('ta_api_key') || '';
+                    updateSettingsUI('byok', savedKey);
+                    selectedTopupPlan = 'byok';
+                    if (buyPlanByok) buyPlanByok.click();
+                    updateCreditsDisplay();
+                }
+            }
+        });
+    }
+
+    // Dynamic Pricing CTA Button Listeners
+    const pricingCtaBtns = document.querySelectorAll('.pricing-cta-btn');
+    pricingCtaBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const plan = btn.getAttribute('data-plan');
+            const amount = btn.getAttribute('data-amount');
+            
+            if (!isLoggedIn) {
+                window.pendingPurchase = { plan, amount };
+                showView('login');
+            } else {
+                // Show credits modal
+                creditsModal.classList.add('active');
+                
+                // Trigger plan switch and dropdown option selection
+                if (plan === 'hosted') {
+                    if (buyPlanHosted) {
+                        buyPlanHosted.click();
+                        creditsAmount.value = amount;
+                    }
+                } else if (plan === 'byok') {
+                    if (buyPlanByok) {
+                        buyPlanByok.click();
+                        creditsAmount.value = amount;
+                    }
+                }
+            }
+        });
+    });
+
+
+    // Event delegation on authToggleContainer to prevent listeners leak
+    if (authToggleContainer) {
+        authToggleContainer.addEventListener('click', (e) => {
+            const toggleLink = e.target.closest('#auth-toggle-link');
+            if (!toggleLink) return;
+            
+            e.preventDefault();
+            isSignUpMode = !isSignUpMode;
+            
+            if (isSignUpMode) {
+                loginTitle.textContent = "Create an Account";
+                loginSubtitle.textContent = "Sign up for LeaseAlign AI to start auditing commercial leases.";
+                loginSubmitBtn.textContent = "Register Account";
+                
+                document.querySelectorAll('.register-only').forEach(el => el.style.display = 'block');
+                if (registerFirstName) registerFirstName.required = true;
+                if (registerLastName) registerLastName.required = true;
+                if (registerCompany) registerCompany.required = true;
+                
+                authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
+            } else {
+                loginTitle.textContent = "Sign In to LeaseAlign AI";
+                loginSubtitle.textContent = "Enter your credentials to access your transaction dashboard";
+                loginSubmitBtn.textContent = "Sign In";
+                
+                document.querySelectorAll('.register-only').forEach(el => el.style.display = 'none');
+                if (registerFirstName) registerFirstName.required = false;
+                if (registerLastName) registerLastName.required = false;
+                if (registerCompany) registerCompany.required = false;
+                
+                authToggleContainer.innerHTML = 'Don\'t have an account? <a href="#" id="auth-toggle-link">Sign Up</a>';
+            }
+        });
+    }
+
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = loginEmail.value.trim();
+            const password = loginPassword.value;
+
+            if (!email || !password) return;
+
+            loginErrorMsg.style.display = 'none';
+            loginSubmitBtn.disabled = true;
+            const originalText = loginSubmitBtn.textContent;
+            loginSubmitBtn.textContent = isSignUpMode ? "Registering..." : "Signing In...";
+
+            try {
+                if (supabase) {
+                    if (isSignUpMode) {
+                        const firstName = registerFirstName ? registerFirstName.value.trim() : '';
+                        const lastName = registerLastName ? registerLastName.value.trim() : '';
+                        const company = registerCompany ? registerCompany.value.trim() : '';
+
+                        localStorage.setItem('ta_fresh_login', 'true');
+                        const { data, error } = await supabase.auth.signUp({
+                            email: email,
+                            password: password,
+                            options: {
+                                data: {
+                                    first_name: firstName,
+                                    last_name: lastName,
+                                    company_name: company
+                                }
+                            }
+                        });
+                        if (error) {
+                            localStorage.removeItem('ta_fresh_login');
+                            throw error;
+                        }
+                        alert("🎉 Account created successfully! Please top up your page credits to begin auditing.");
+                    } else {
+                        localStorage.setItem('ta_fresh_login', 'true');
+                        const { data, error } = await supabase.auth.signInWithPassword({
+                            email: email,
+                            password: password
+                        });
+                        if (error) {
+                            localStorage.removeItem('ta_fresh_login');
+                            throw error;
+                        }
+                    }
+                } else {
+                    localStorage.setItem('ta_logged_in', 'true');
+                    localStorage.setItem('ta_user_email', email);
+                    isLoggedIn = true;
+                    userEmail = email;
+                    userEmailDisplay.textContent = userEmail;
+                    loginErrorMsg.style.display = 'none';
+                    showView('dashboard');
+                    updateNavUI();
+                    
+                    // Check if there was a pending package selection before login
+                    if (window.pendingPurchase) {
+                        const { plan, amount } = window.pendingPurchase;
+                        window.pendingPurchase = null; // Clear state
+                        
+                        creditsModal.classList.add('active');
+                        if (plan === 'hosted') {
+                            if (buyPlanHosted) {
+                                buyPlanHosted.click();
+                                creditsAmount.value = amount;
+                            }
+                        } else if (plan === 'byok') {
+                            if (buyPlanByok) {
+                                buyPlanByok.click();
+                                creditsAmount.value = amount;
+                            }
+                        }
                     }
                 }
             } catch (err) {

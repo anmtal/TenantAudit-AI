@@ -256,13 +256,17 @@ function initializeApp() {
             { value: 'gpt-4o', label: 'GPT-4o (Deep Legal Audit)' }
         ],
         anthropic: [
-            { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (Latest)' },
-            { value: 'claude-opus-4-8', label: 'Claude Opus 4.8 (Most Capable)' },
-            { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (Fast & Cheap)' }
+            { value: 'claude-sonnet-4-6', label: 'Claude 4.6 Sonnet (Latest)' },
+            { value: 'claude-sonnet-4-5-20250929', label: 'Claude 4.5 Sonnet' },
+            { value: 'claude-haiku-4-5-20251001', label: 'Claude 4.5 Haiku (Fast & Cheap)' },
+            { value: 'claude-opus-4-6', label: 'Claude 4.6 Opus' }
         ],
         gemini: [
             { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
             { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' }
+        ],
+        deepseek: [
+            { value: 'deepseek-chat', label: 'DeepSeek Chat (V3 / R1)' }
         ]
     };
 
@@ -438,7 +442,7 @@ function initializeApp() {
             activePlanType = planType;
             console.log("User plan type loaded from metadata:", activePlanType);
             
-            let activeSessionId = user.user_metadata?.active_session_id;
+            const activeSessionId = user.user_metadata?.active_session_id;
             
             // Fetch credits, byok_credits (bypassing session_id table column to avoid migrations mismatch)
             let profileData = null;
@@ -459,36 +463,6 @@ function initializeApp() {
             const isFreshLogin = localStorage.getItem('ta_fresh_login') === 'true';
             const sessionTimestampStr = localStorage.getItem('ta_session_timestamp');
             const sessionAge = sessionTimestampStr ? (Date.now() - parseInt(sessionTimestampStr, 10)) : Infinity;
-            // activeSessionId is already retrieved from metadata above
-            
-            // If there is an active session mismatch, retry fetching metadata up to 3 times to allow propagation
-            const maxRetries = 3;
-            if (activeSessionId && currentSessionId && activeSessionId !== currentSessionId && !isFreshLogin && sessionAge >= 10000) {
-                console.log(`[Seat Enforcement Mismatch Detection] Metadata Session (${activeSessionId}) !== Local Session (${currentSessionId}). Initiating propagation check...`);
-                for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                    console.log(`[Seat Enforcement Retry] Waiting 1000ms before re-fetching user metadata (Attempt ${attempt}/${maxRetries})...`);
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    try {
-                        const authRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
-                            headers: {
-                                'apikey': supabaseAnonKey,
-                                'Authorization': `Bearer ${session.access_token}`
-                            }
-                        });
-                        if (authRes.ok) {
-                            const freshUser = await authRes.json();
-                            activeSessionId = freshUser.user_metadata?.active_session_id;
-                            if (activeSessionId === currentSessionId) {
-                                console.log("[Seat Enforcement Sync Success] active_session_id matches after retry!");
-                                break;
-                            }
-                        }
-                    } catch (e) {
-                        console.warn("[Seat Enforcement Retry Error] Failed to fetch fresh metadata:", e);
-                    }
-                }
-            }
             
             if (isFreshLogin) {
                 console.log("[Seat Enforcement] Fresh login detected. Overriding active_session_id.");
@@ -496,7 +470,7 @@ function initializeApp() {
             } else if (sessionAge < 10000) {
                 console.log("[Seat Enforcement Grace] Session ID was generated recently (age under 10s). Bypassing mismatch check for metadata propagation.");
             } else if (activeSessionId && currentSessionId && activeSessionId !== currentSessionId) {
-                console.warn(`[Seat Enforcement Mismatch Confirmed] Auth Metadata Session: ${activeSessionId}, Local Session: ${currentSessionId}`);
+                console.warn(`[Seat Enforcement Mismatch] Auth Metadata Session: ${activeSessionId}, Local Session: ${currentSessionId}`);
                 alert("🚫 Multiple active sessions detected. Your account has been logged in on another device/browser.");
                 await handleLogout();
                 return;
@@ -756,7 +730,6 @@ function initializeApp() {
             console.error("Failed to initialize Supabase:", e);
             initializeAuthFallback();
         }
-        document.body.setAttribute('data-initialized', 'true');
     }
 
     // Navigation triggers
@@ -2290,8 +2263,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const lVal = normalizeVal(lease.value);
             const eVal = normalizeVal(estoppel.value);
 
-            const isLMissing = lVal === 'not found' || lVal === 'not mentioned' || lVal === '';
-            const isEMissing = eVal === 'not found' || eVal === 'not mentioned' || eVal === '';
+            const isLMissing = lVal === 'notfound' || lVal === 'notmentioned' || lVal === '';
+            const isEMissing = eVal === 'notfound' || eVal === 'notmentioned' || eVal === '';
 
             if (isLMissing || isEMissing) {
                 status = "warning";
@@ -2573,144 +2546,316 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
     // --- Export Audit to PDF report ---
     if (exportPdfBtn) {
-        exportPdfBtn.addEventListener('click', async () => {
+        exportPdfBtn.addEventListener('click', () => {
             if (!auditData) return;
             
-            showLoader("Generating PDF Report...");
-            
-            try {
-                const { jsPDF } = window.jspdf;
-                
-                // Create a temporary container for rendering
-                const tempDiv = document.createElement('div');
-                tempDiv.style.position = 'absolute';
-                tempDiv.style.left = '-9999px';
-                tempDiv.style.top = '-9999px';
-                tempDiv.style.width = '700px'; // fixed width for consistent scaling
-                tempDiv.style.backgroundColor = '#ffffff';
-                tempDiv.style.color = '#1f2937';
-                tempDiv.style.padding = '30px';
-                tempDiv.style.fontFamily = "'Outfit', 'Helvetica Neue', Helvetica, Arial, sans-serif";
-                tempDiv.style.boxSizing = 'border-box';
-                
-                // Inject the HTML report content
-                tempDiv.innerHTML = `
-                    <div style="border-bottom: 2px solid #e5e7eb; padding-bottom: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;">
-                        <div style="flex: 1;">
-                            <h1 style="font-size: 22px; font-weight: 800; color: #7c3aed; margin: 0; font-family: 'Outfit', sans-serif;">LeaseAlign AI</h1>
-                            <p style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #6b7280; margin: 2px 0 0 0;">Commercial Lease & Estoppel Due Diligence</p>
-                        </div>
-                        <div style="text-align: right; flex: 1;">
-                            <h2 style="font-size: 16px; font-weight: 700; margin: 0; color: #111827; font-family: 'Outfit', sans-serif;">Transaction Due Diligence Report</h2>
-                            <p style="font-size: 11px; color: #6b7280; margin: 4px 0 0 0;">Generated: ${new Date().toLocaleString()}</p>
-                        </div>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 25px; background: #f9fafb; padding: 14px; border-radius: 8px; border: 1px solid #f3f4f6; font-size: 12px;">
-                        <div><strong style="color: #374151;">Tenant Name:</strong> ${escapeHtml(auditData.metadata.tenantName)}</div>
-                        <div><strong style="color: #374151;">Audit Model:</strong> ${escapeHtml(auditData.metadata.auditModel)}</div>
-                        <div style="grid-column: span 2; margin-top: 4px;"><strong style="color: #374151;">Source Lease File:</strong> ${escapeHtml(auditData.metadata.leaseFile)}</div>
-                        <div style="grid-column: span 2; margin-top: 4px;"><strong style="color: #374151;">Source Estoppel File:</strong> ${escapeHtml(auditData.metadata.estoppelFile)}</div>
-                    </div>
-
-                    <h3 style="font-size: 14px; font-weight: 700; color: #111827; margin: 0 0 12px 0; border-left: 4px solid #7c3aed; padding-left: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Outfit', sans-serif;">Executive Audit Summary</h3>
-                    <div style="display: flex; gap: 10px; margin-bottom: 25px; width: 100%;">
-                        <div style="border: 1px solid #d8b4fe; border-radius: 8px; padding: 12px 8px; text-align: center; background: #faf5ff; flex: 1; min-width: 0;">
-                            <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; margin-bottom: 4px;">Match Score</div>
-                            <div style="font-size: 16px; font-weight: 800; color: #7c3aed;">${auditData.summary.matchScore}%</div>
-                        </div>
-                        <div style="border: 1px solid #fca5a5; border-radius: 8px; padding: 12px 8px; text-align: center; background: #fef2f2; flex: 1; min-width: 0;">
-                            <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; margin-bottom: 4px;">Red Flags</div>
-                            <div style="font-size: 16px; font-weight: 800; color: #dc2626;">${auditData.summary.redFlags}</div>
-                        </div>
-                        <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 8px; text-align: center; background: #ffffff; flex: 1; min-width: 0;">
-                            <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; margin-bottom: 4px;">Monthly Rent</div>
-                            <div style="font-size: 16px; font-weight: 800; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(auditData.summary.monthlyRent)}</div>
-                        </div>
-                        <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 8px; text-align: center; background: #ffffff; flex: 1; min-width: 0;">
-                            <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; margin-bottom: 4px;">Premises SF</div>
-                            <div style="font-size: 16px; font-weight: 800; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(auditData.summary.premisesSf)}</div>
-                        </div>
-                        <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 8px; text-align: center; background: #ffffff; flex: 1; min-width: 0;">
-                            <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; margin-bottom: 4px;">Expiry Date</div>
-                            <div style="font-size: 16px; font-weight: 800; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(auditData.summary.expiryDate)}</div>
-                        </div>
-                    </div>
-
-                    <h3 style="font-size: 14px; font-weight: 700; color: #111827; margin: 25px 0 12px 0; border-left: 4px solid #7c3aed; padding-left: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Outfit', sans-serif;">Lease vs. Estoppel Comparison Matrix</h3>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 25px;">
-                        <thead>
-                            <tr style="background: #f3f4f6;">
-                                <th style="width: 20%; text-align: left; padding: 8px 10px; border: 1px solid #e5e7eb; font-weight: 600; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; color: #374151;">Term Audited</th>
-                                <th style="width: 33%; text-align: left; padding: 8px 10px; border: 1px solid #e5e7eb; font-weight: 600; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; color: #374151;">Lease Agreement Value & Citation</th>
-                                <th style="width: 33%; text-align: left; padding: 8px 10px; border: 1px solid #e5e7eb; font-weight: 600; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; color: #374151;">Estoppel Certificate Value & Citation</th>
-                                <th style="width: 14%; text-align: center; padding: 8px 10px; border: 1px solid #e5e7eb; font-weight: 600; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; color: #374151;">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${auditData.records.map(r => {
-                                let badgeBg = '#fee2e2';
-                                let badgeColor = '#991b1b';
-                                let statusText = 'Mismatch';
-                                if (r.status === 'match') {
-                                    badgeBg = '#d1fae5';
-                                    badgeColor = '#065f46';
-                                    statusText = 'Verified';
-                                } else if (r.status === 'warning') {
-                                    badgeBg = '#ffedd5';
-                                    badgeColor = '#9a3412';
-                                    statusText = 'Warning';
-                                }
-                                return `
-                                <tr>
-                                    <td style="font-weight: 600; padding: 10px; border: 1px solid #e5e7eb; vertical-align: top; color: #111827;">${escapeHtml(r.term)}</td>
-                                    <td style="padding: 10px; border: 1px solid #e5e7eb; vertical-align: top;">
-                                        <div style="font-weight: 600; color: #1f2937;">${escapeHtml(r.leaseVal)}</div>
-                                        ${r.leaseCite ? `<div style="font-size: 9px; color: #4b5563; margin-top: 5px; padding-top: 5px; border-top: 1px dashed #e5e7eb; font-style: italic; line-height: 1.3;">Quote: "${escapeHtml(r.leaseCite)}"</div>` : ''}
-                                    </td>
-                                    <td style="padding: 10px; border: 1px solid #e5e7eb; vertical-align: top;">
-                                        <div style="font-weight: 600; color: #1f2937;">${escapeHtml(r.estoppelVal)}</div>
-                                        ${r.estoppelCite ? `<div style="font-size: 9px; color: #4b5563; margin-top: 5px; padding-top: 5px; border-top: 1px dashed #e5e7eb; font-style: italic; line-height: 1.3;">Quote: "${escapeHtml(r.estoppelCite)}"</div>` : ''}
-                                    </td>
-                                    <td style="text-align: center; vertical-align: middle; padding: 10px; border: 1px solid #e5e7eb;">
-                                        <span style="font-size: 8px; font-weight: 700; text-transform: uppercase; padding: 3px 6px; border-radius: 4px; display: inline-block; background: ${badgeBg}; color: ${badgeColor}; font-family: sans-serif;">${statusText}</span>
-                                    </td>
-                                </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                    </table>
-
-                    <div style="margin-top: 30px; border-top: 1px dashed #d1d5db; padding-top: 12px; font-size: 9px; color: #6b7280; text-align: center; line-height: 1.4; font-style: italic;">
-                        ⚠️ <strong>Legal Disclaimer:</strong> LeaseAlign AI is an LLM-assisted audit utility. All comparison results are for informational purposes only and must be verified by qualified legal counsel prior to closing.
-                    </div>
-                    <div style="text-align: center; font-size: 10px; color: #9ca3af; margin-top: 12px; border-top: 1px solid #e5e7eb; padding-top: 12px;">
-                        <p>CONFIDENTIAL — Prepared for B2B Transaction Due Diligence — Powered by LeaseAlign AI (leasealign.io)</p>
-                    </div>
-                `;
-                
-                document.body.appendChild(tempDiv);
-                
-                // Let jsPDF render the HTML element
-                const doc = new jsPDF('p', 'pt', 'a4');
-                const pdfName = `LeaseAlign_AI_Report_${auditData.metadata.tenantName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-                
-                await doc.html(tempDiv, {
-                    callback: function (pdf) {
-                        pdf.save(pdfName);
-                        document.body.removeChild(tempDiv);
-                        hideLoader();
-                    },
-                    margin: [30, 30, 30, 30],
-                    autoPaging: 'text',
-                    width: 535, // A4 printable width is 595 - margins (60 pt)
-                    windowWidth: 700 // element pixel width mapping
-                });
-            } catch (err) {
-                console.error("[PDF Export Error] Failed to generate PDF via jsPDF:", err);
-                alert("❌ Failed to generate PDF report. Please try again.");
-                hideLoader();
+            const printWindow = window.open('', '_blank');
+            if (!printWindow) {
+                alert("Please allow popups to export the PDF report.");
+                return;
             }
+            
+            printWindow.document.write(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>LeaseAlign AI Report - ${escapeHtml(auditData.metadata.tenantName)}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #1f2937;
+            background-color: #ffffff;
+            margin: 0;
+            padding: 40px;
+            line-height: 1.5;
+            font-size: 13px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .logo-text {
+            font-size: 24px;
+            font-weight: 800;
+            color: #7c3aed;
+            margin: 0;
+        }
+        .logo-tagline {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #6b7280;
+            margin: 0;
+        }
+        .report-title {
+            text-align: right;
+        }
+        .report-title h2 {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 0;
+            color: #111827;
+        }
+        .report-title p {
+            font-size: 12px;
+            color: #6b7280;
+            margin: 4px 0 0 0;
+        }
+        .meta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 30px;
+            background: #f9fafb;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #f3f4f6;
+        }
+        .meta-item {
+            font-size: 13px;
+        }
+        .meta-item strong {
+            color: #374151;
+        }
+        .summary-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 15px;
+            border-left: 4px solid #7c3aed;
+            padding-left: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .kpis-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 30px;
+        }
+        .kpi-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px 10px;
+            text-align: center;
+            background: #ffffff;
+        }
+        .kpi-card.score-card {
+            background: #faf5ff;
+            border-color: #d8b4fe;
+        }
+        .kpi-card.redflag-card {
+            background: #fef2f2;
+            border-color: #fca5a5;
+        }
+        .kpi-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #6b7280;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .kpi-value {
+            font-size: 18px;
+            font-weight: 800;
+            color: #111827;
+        }
+        .text-purple { color: #7c3aed; }
+        .text-red { color: #dc2626; }
+        
+        .table-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 15px;
+            margin-top: 30px;
+            border-left: 4px solid #7c3aed;
+            padding-left: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-bottom: 30px;
+        }
+        th {
+            background: #f3f4f6;
+            color: #374151;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.05em;
+            padding: 10px 12px;
+            border: 1px solid #e5e7eb;
+        }
+        td {
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+            vertical-align: top;
+        }
+        .status-badge {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+        .status-match {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .status-warning {
+            background: #ffedd5;
+            color: #9a3412;
+        }
+        .status-mismatch {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .citation {
+            font-size: 10px;
+            color: #4b5563;
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px dashed #e5e7eb;
+            font-style: italic;
+            line-height: 1.4;
+        }
+        .footer {
+            text-align: center;
+            font-size: 11px;
+            color: #9ca3af;
+            margin-top: 50px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 15px;
+        }
+        
+        @media print {
+            body {
+                padding: 0;
+            }
+            table {
+                page-break-inside: auto;
+            }
+            tr {
+                page-break-inside: avoid;
+                page-break-after: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1 class="logo-text">LeaseAlign AI</h1>
+            <p class="logo-tagline">Commercial Lease & Estoppel Due Diligence</p>
+        </div>
+        <div class="report-title">
+            <h2>Transaction Due Diligence Report</h2>
+            <p>Generated: ${new Date().toLocaleString()}</p>
+        </div>
+    </div>
+
+    <div class="meta-grid">
+        <div class="meta-item"><strong>Tenant Name:</strong> ${escapeHtml(auditData.metadata.tenantName)}</div>
+        <div class="meta-item"><strong>Audit Model:</strong> ${escapeHtml(auditData.metadata.auditModel)}</div>
+        <div class="meta-item" style="grid-column: span 2; margin-top: 4px;"><strong>Source Lease File:</strong> ${escapeHtml(auditData.metadata.leaseFile)}</div>
+        <div class="meta-item" style="grid-column: span 2; margin-top: 4px;"><strong>Source Estoppel File:</strong> ${escapeHtml(auditData.metadata.estoppelFile)}</div>
+    </div>
+
+    <h3 class="summary-title">Executive Audit Summary</h3>
+    <div class="kpis-grid">
+        <div class="kpi-card score-card">
+            <div class="kpi-label">Match Score</div>
+            <div class="kpi-value text-purple">${auditData.summary.matchScore}%</div>
+        </div>
+        <div class="kpi-card redflag-card">
+            <div class="kpi-label">Red Flags</div>
+            <div class="kpi-value text-red">${auditData.summary.redFlags}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Monthly Rent</div>
+            <div class="kpi-value">${escapeHtml(auditData.summary.monthlyRent)}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Premises SF</div>
+            <div class="kpi-value">${escapeHtml(auditData.summary.premisesSf)}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Expiry Date</div>
+            <div class="kpi-value">${escapeHtml(auditData.summary.expiryDate)}</div>
+        </div>
+    </div>
+
+    <h3 class="table-title">Lease vs. Estoppel Comparison Matrix</h3>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 20%; text-align: left;">Term Audited</th>
+                <th style="width: 33%; text-align: left;">Lease Agreement Value & Citation</th>
+                <th style="width: 33%; text-align: left;">Estoppel Certificate Value & Citation</th>
+                <th style="width: 14%; text-align: center;">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${auditData.records.map(r => {
+                let badgeClass = 'status-mismatch';
+                let statusText = 'Mismatch';
+                if (r.status === 'match') {
+                    badgeClass = 'status-match';
+                    statusText = 'Verified';
+                } else if (r.status === 'warning') {
+                    badgeClass = 'status-warning';
+                    statusText = 'Warning';
+                }
+                return `
+                <tr>
+                    <td style="font-weight: 600;">${escapeHtml(r.term)}</td>
+                    <td>
+                        <div><strong>${escapeHtml(r.leaseVal)}</strong></div>
+                        ${r.leaseCite ? `<div class="citation">Quote: "${escapeHtml(r.leaseCite)}"</div>` : ''}
+                    </td>
+                    <td>
+                        <div><strong>${escapeHtml(r.estoppelVal)}</strong></div>
+                        ${r.estoppelCite ? `<div class="citation">Quote: "${escapeHtml(r.estoppelCite)}"</div>` : ''}
+                    </td>
+                    <td style="text-align: center; vertical-align: middle;">
+                        <span class="status-badge ${badgeClass}">${statusText}</span>
+                    </td>
+                </tr>
+                `;
+            }).join('')}
+        </tbody>
+    </table>
+
+    <div class="legal-disclaimer" style="margin-top: 40px; border-top: 1px dashed #d1d5db; padding-top: 15px; font-size: 10px; color: #6b7280; text-align: center; line-height: 1.4; font-style: italic;">
+        ⚠️ <strong>Legal Disclaimer:</strong> LeaseAlign AI is an LLM-assisted audit utility. All comparison results are for informational purposes only and must be verified by qualified legal counsel prior to closing.
+    </div>
+    <div class="footer" style="margin-top: 15px;">
+        <p>CONFIDENTIAL — Prepared for B2B Transaction Due Diligence — Powered by LeaseAlign AI (leasealign.io)</p>
+    </div>
+</body>
+</html>
+            `);
+            printWindow.document.close();
+            
+            setTimeout(() => {
+                printWindow.focus();
+                printWindow.print();
+                printWindow.close();
+            }, 350);
         });
     }
 
@@ -2757,7 +2902,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 userEmail = '';
                 resetAppSessionState();
                 updateNavUI();
-                showView('login');
+                showView('auth-panel');
             } else {
                 // Session sync login
                 isLoggedIn = true;

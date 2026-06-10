@@ -795,7 +795,7 @@ function initializeApp() {
                 if (currentMode !== 'hosted') {
                     localStorage.setItem('ta_connection_mode', 'hosted');
                     if (settingsMode) settingsMode.value = 'hosted';
-                    const savedKey = localStorage.getItem('ta_api_key') || '';
+                    const savedKey = sessionStorage.getItem('ta_api_key') || '';
                     updateSettingsUI('hosted', '');
                     selectedTopupPlan = 'hosted';
                     if (buyPlanHosted) buyPlanHosted.click();
@@ -816,7 +816,7 @@ function initializeApp() {
                 if (currentMode !== 'byok') {
                     localStorage.setItem('ta_connection_mode', 'byok');
                     if (settingsMode) settingsMode.value = 'byok';
-                    const savedKey = localStorage.getItem('ta_api_key') || '';
+                    const savedKey = sessionStorage.getItem('ta_api_key') || '';
                     updateSettingsUI('byok', savedKey);
                     selectedTopupPlan = 'byok';
                     if (buyPlanByok) buyPlanByok.click();
@@ -1193,7 +1193,7 @@ function initializeApp() {
         
         settingsModeDropdown.value = targetMode;
         
-        const savedApiKey = localStorage.getItem('ta_api_key') || '';
+        const savedApiKey = sessionStorage.getItem('ta_api_key') || '';
         updateSettingsUI(targetMode, targetMode === 'byok' ? savedApiKey : '');
     }
 
@@ -1204,7 +1204,7 @@ function initializeApp() {
         const savedMode = localStorage.getItem('ta_connection_mode') || 'hosted';
         const savedProvider = localStorage.getItem('ta_api_provider') || 'openai';
         const savedModel = localStorage.getItem('ta_llm_model') || 'gpt-4o-mini';
-        const savedKey = localStorage.getItem('ta_api_key') || '';
+        const savedKey = sessionStorage.getItem('ta_api_key') || '';
         
         settingsMode.value = savedMode;
         settingsProvider.value = savedProvider;
@@ -1345,7 +1345,7 @@ function initializeApp() {
                 }
                 
                 // Sync settings UI and key states
-                const savedKey = localStorage.getItem('ta_api_key') || '';
+                const savedKey = sessionStorage.getItem('ta_api_key') || '';
                 updateSettingsUI(selectedMode, selectedMode === 'byok' ? savedKey : '');
                 
                 // Sync pricing grid display on landing page
@@ -1386,7 +1386,7 @@ function initializeApp() {
             localStorage.setItem('ta_connection_mode', settingsMode.value);
             localStorage.setItem('ta_api_provider', settingsProvider.value);
             localStorage.setItem('ta_llm_model', settingsLlmModel.value);
-            localStorage.setItem('ta_api_key', settingsApiKey.value.trim());
+            sessionStorage.setItem('ta_api_key', settingsApiKey.value.trim());
             settingsModal.classList.remove('active');
             loadSettings();
             alert('🎉 Connection configurations saved successfully.');
@@ -1798,21 +1798,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         
                         try {
                             if (supabase) {
-                                const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                                
-                                // Only deduct credits if NOT in BYOK (BYOB) mode
-                                if (connectionMode !== 'byok') {
-                                    const isUnlimited = hostedCredits >= 900000;
-                                    if (!isUnlimited) {
-                                        const { data: { user } } = await supabase.auth.getUser();
-                                        const { error: deductErr } = await supabase.rpc('deduct_user_credits', { 
-                                            target_user_id: user.id,
-                                            pages_to_deduct: 1,
-                                            plan_mode: 'hosted'
-                                        });
-                                        if (deductErr) throw deductErr;
-                                    }
-                                }
 
                                 // Log audit record to audits table
                                 const { error: logErr } = await supabase.from('audits').insert({
@@ -1831,20 +1816,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                                 await loadUserProfileAndCredits();
                                 await loadAuditHistory();
                             } else {
-                                const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                                if (connectionMode !== 'byok') {
-                                    hostedCredits -= 1;
-                                    localStorage.setItem('ta_hosted_credits', hostedCredits);
-                                }
                                 updateCreditsDisplay();
                             }
                             
-                            const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                            if (connectionMode === 'byok') {
-                                alert("🚀 Simulated audit completed successfully!");
-                            } else {
-                                alert("✅ Simulated audit completed: Deducted 1 audit credit.");
-                            }
+                            alert("🚀 Simulated audit completed successfully!");
                         } catch (err) {
                             console.error("Demo logging/deduction error:", err);
                             alert(`🚫 Failed to log simulation: ${err.message}`);
@@ -1972,7 +1947,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
         const apiProvider = localStorage.getItem('ta_api_provider') || 'openai';
         const llmModel = localStorage.getItem('ta_llm_model') || 'gpt-4o-mini';
-        const apiKey = localStorage.getItem('ta_api_key');
+        const apiKey = sessionStorage.getItem('ta_api_key');
         
         if (connectionMode === 'byok' && !apiKey) {
             alert("⚙️ Please configure your connection API Key first. Click 'API Settings' in the header.");
@@ -2133,7 +2108,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     if (startAuditBtn) {
         startAuditBtn.addEventListener('click', () => {
             const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-            const apiKey = localStorage.getItem('ta_api_key');
+            const apiKey = sessionStorage.getItem('ta_api_key');
             
             if (connectionMode === 'byok' && !apiKey) {
                 alert("⚙️ Please configure your connection API Key first. Click 'API Settings' in the header.");
@@ -2336,7 +2311,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         renderAuditResults();
 
         // Perform semantic AI verification if connected
-        const apiKey = localStorage.getItem('ta_api_key');
+        const apiKey = sessionStorage.getItem('ta_api_key');
         const canVerify = connectionMode === 'hosted' || (connectionMode === 'byok' && apiKey);
 
         if (canVerify) {
@@ -2458,7 +2433,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
 
             tr.innerHTML = `
-                <td class="term-name-cell">${rec.term}</td>
+                <td class="term-name-cell">${escapeHtml(rec.term)}</td>
                 <td>
                     <div class="term-val-box">
                         <span class="term-val-title">${escapeHtml(rec.leaseVal)}</span>

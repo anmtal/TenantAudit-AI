@@ -126,7 +126,7 @@ DECLARE
   new_team_id UUID;
 BEGIN
   INSERT INTO public.teams (name, owner_id, audit_credits, seat_limit)
-  VALUES (COALESCE(new.raw_user_meta_data->>'first_name', 'Personal') || '''s Team', new.id, 2, 1)
+  VALUES (COALESCE(new.raw_user_meta_data->>'first_name', 'Personal') || '''s Team', new.id, 0, 1)
   RETURNING id INTO new_team_id;
 
   INSERT INTO public.profiles (id, email, credits, byok_credits, first_name, last_name, company_name, team_id)

@@ -75,45 +75,6 @@ app.use((req, res, next) => {
     next();
 });
 
-// Simple in-memory rate limiter middleware (max 200 requests per 15 minutes per IP)
-const rateLimitWindowMs = 15 * 60 * 1000;
-const rateLimitMax = 200;
-const ipHits = new Map();
-
-setInterval(() => {
-    const now = Date.now();
-    for (const [ip, entry] of ipHits.entries()) {
-        if (now - entry.resetTime > 0) ipHits.delete(ip);
-    }
-}, 5 * 60 * 1000);
-
-function rateLimiter(req, res, next) {
-    const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-    const now = Date.now();
-    
-    if (!ipHits.has(ip)) {
-        ipHits.set(ip, { hits: 1, resetTime: now + rateLimitWindowMs });
-        return next();
-    }
-    
-    const entry = ipHits.get(ip);
-    if (now - entry.resetTime > 0) {
-        entry.hits = 1;
-        entry.resetTime = now + rateLimitWindowMs;
-        return next();
-    }
-    
-    entry.hits++;
-    if (entry.hits > rateLimitMax) {
-        return res.status(429).json({
-            error: "Too Many Requests",
-            message: "Too many requests from this IP. Please try again after 15 minutes."
-        });
-    }
-    next();
-}
-
-app.use(rateLimiter);
 
 // Auth Middleware to authenticate user and check seat limits
 async function requireAuth(req, res, next) {
@@ -368,7 +329,13 @@ app.get('/api/config', (req, res) => {
 // Route to handle dynamic LLM provider extraction proxy
 app.post('/api/audit', requireAuth, async (req, res) => {
     try {
-        const { text, images, docType, connectionMode, provider, model, apiKey: userKey, systemPromptOverride, userPromptOverride } = req.body;
+        let { text, images, docType, connectionMode, provider, model, apiKey: userKey, systemPromptOverride, userPromptOverride } = req.body;
+        
+        // Security Fix: Strip overrides in hosted mode
+        if (connectionMode === 'hosted') {
+            systemPromptOverride = null;
+            userPromptOverride = null;
+        }
         
         if ((!text && !images) || !docType) {
             return res.status(400).json({ error: "Missing required fields: text or images, and docType" });
@@ -417,8 +384,6 @@ app.post('/api/audit', requireAuth, async (req, res) => {
             activeKey = process.env.ANTHROPIC_API_KEY;
             activeProvider = 'anthropic';
             activeModel = 'claude-sonnet-4-6';
-            
-            console.log(`[DEBUG] Hosted activeKey starts with: ${activeKey ? activeKey.substring(0, 15) : 'UNDEFINED'}...`);
             
             if (!activeKey) {
                 return res.status(500).json({ 

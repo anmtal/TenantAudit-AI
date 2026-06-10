@@ -499,26 +499,6 @@ function initializeApp() {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
-            // Cleanup: Delete expired records belonging to the current user (Run at most once per day)
-            const todayStr = new Date().toISOString().split('T')[0];
-            if (localStorage.getItem('ta_last_cleanup') !== todayStr) {
-                const cutoffDate = new Date();
-                cutoffDate.setDate(cutoffDate.getDate() - 30);
-                const cutoffIso = cutoffDate.toISOString();
-                
-                try {
-                    await supabase
-                        .from('audits')
-                        .delete()
-                        .eq('user_id', user.id)
-                        .lt('created_at', cutoffIso);
-                    localStorage.setItem('ta_last_cleanup', todayStr);
-                    console.log("[Cleanup] Expired audits cleanup completed for today.");
-                } catch (cleanupErr) {
-                    console.error("Failed to delete expired audits:", cleanupErr);
-                }
-            }
-
             // Fetch history isolated strictly for the current user
             const { data, error } = await supabase
                 .from('audits')
@@ -685,7 +665,8 @@ function initializeApp() {
                                     userId: user.id,
                                     price: parseInt(price, 10),
                                     seatCount: parseInt(seats, 10),
-                                    packageName: packageName
+                                    packageName: packageName,
+                                    isSubscription: true
                                 })
                             });
                             const sessionData = await response.json();
@@ -900,6 +881,35 @@ function initializeApp() {
                 if (registerCompany) registerCompany.required = false;
                 
                 authToggleContainer.innerHTML = 'Don\'t have an account? <a href="#" id="auth-toggle-link">Sign Up</a>';
+            }
+        });
+    }
+
+    const forgotPasswordLink = document.getElementById('forgot-password-link');
+    if (forgotPasswordLink) {
+        forgotPasswordLink.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const email = loginEmail ? loginEmail.value.trim() : '';
+            if (!email) {
+                alert("Please enter your email address in the Email field first, then click 'Forgot password?'.");
+                return;
+            }
+            if (supabase) {
+                const originalText = forgotPasswordLink.textContent;
+                forgotPasswordLink.textContent = "Sending...";
+                try {
+                    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                        redirectTo: window.location.origin
+                    });
+                    if (error) throw error;
+                    alert("Password reset email sent! Please check your inbox.");
+                } catch (err) {
+                    alert("Error resetting password: " + err.message);
+                } finally {
+                    forgotPasswordLink.textContent = originalText;
+                }
+            } else {
+                alert("Password reset is not available in mock mode.");
             }
         });
     }
@@ -1122,7 +1132,9 @@ function initializeApp() {
                             planType: selectedTopupPlan,
                             userId: user.id,
                             price,
-                            packageName
+                            packageName,
+                            seatCount: 1,
+                            isSubscription: false
                         })
                     });
 
@@ -1987,7 +1999,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
         try {
             currentAuditTransactionId = generateUUID();
-            showLoader("Assessing page count credits...");
+            showLoader("Initializing audit process...");
             
             const leasePagesCount = await getPDFPageCount(filesState.lease);
             const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);

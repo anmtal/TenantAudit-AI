@@ -596,6 +596,21 @@ Please extract the required fields and return the JSON.`;
 
 
         if (extractedData) {
+            // Asynchronously run 30-day purge for the user
+            if (supabaseAdmin && req.user && req.user.id) {
+                const cutoffDate = new Date();
+                cutoffDate.setDate(cutoffDate.getDate() - 30);
+                supabaseAdmin
+                    .from('audits')
+                    .delete()
+                    .eq('user_id', req.user.id)
+                    .lt('created_at', cutoffDate.toISOString())
+                    .then(({ error }) => {
+                        if (error) console.error(`[Purge] Failed to clean up old audits for ${req.user.email}:`, error);
+                        else console.log(`[Purge] Cleaned up old audits for ${req.user.email}`);
+                    });
+            }
+
             return res.json(extractedData);
         } else {
             return res.status(500).json({ error: "Audit proxy failed: no data extracted." });
@@ -819,7 +834,7 @@ Please compare all fields and return the structured JSON report.`;
 
 // Stripe Checkout Session Creation
 app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
-    const { amount, planType, userId, price, packageName, seatCount } = req.body;
+    const { amount, planType, userId, price, packageName, seatCount, isSubscription } = req.body;
     
     if (!amount || !planType || !userId || !price || !packageName) {
         return res.status(400).json({ error: "Missing required fields for checkout session" });
@@ -841,11 +856,11 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
         const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
         
         const amtVal = parseInt(amount, 10);
-        let isSubscription = true; // All plans are subscriptions now
+        const stripeIsSubscription = isSubscription === undefined ? true : isSubscription;
         let subscriptionInterval = 'month';
 
         if (planType === 'byok') {
-            if (amtVal === 1299) {
+            if (amtVal === 1299 || price === 1349 || price === 4499 || price === 7199 || price === 13499) {
                 subscriptionInterval = 'year';
             }
         } else if (planType === 'hosted') {
@@ -856,21 +871,26 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
 
         const displayAmount = (parseInt(amount, 10) >= 900000) ? 'Unlimited' : amount;
         
+        const priceData = {
+            currency: 'usd',
+            product_data: {
+                name: `${packageName} - LeaseAlign AI`,
+                description: planType === 'hosted' ? `Includes ${displayAmount} audits and ${seatCount || 1} seats` : 'Unlimited audits for BYOK connection mode',
+            },
+            unit_amount: priceInCents,
+        };
+
+        if (stripeIsSubscription) {
+            priceData.recurring = { interval: subscriptionInterval };
+        }
+
         const sessionParams = {
             payment_method_types: ['card'],
             line_items: [{
-                price_data: {
-                    currency: 'usd',
-                    product_data: {
-                        name: `${packageName} - LeaseAlign AI`,
-                        description: planType === 'hosted' ? `Includes ${displayAmount} audits and ${seatCount || 1} seats` : 'Unlimited audits for BYOK connection mode',
-                    },
-                    unit_amount: priceInCents,
-                    recurring: { interval: subscriptionInterval },
-                },
+                price_data: priceData,
                 quantity: 1,
             }],
-            mode: 'subscription',
+            mode: stripeIsSubscription ? 'subscription' : 'payment',
             metadata: {
                 userId: userId,
                 planType: planType,

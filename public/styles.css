@@ -1645,7 +1645,7 @@ select option {
 
 .pricing-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 24px;
     width: 100%;
     max-width: 1200px;
@@ -2181,3 +2181,30 @@ select option {
     flex-grow: 1;
     margin-bottom: 0;
 }
+
+/* --- Pricing Badges --- */
+.discount-badge {
+    display: inline-block;
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--color-emerald);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: -8px;
+    margin-bottom: 24px;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.info-badge {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-top: -8px;
+    margin-bottom: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+

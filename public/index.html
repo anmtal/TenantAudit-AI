@@ -678,6 +678,9 @@
                     <button class="settings-btn" id="open-settings-btn">
                         <i data-lucide="settings"></i> API Settings
                     </button>
+                    <button class="settings-btn" id="open-team-btn" style="margin-left: 8px;">
+                        <i data-lucide="users"></i> Manage Team
+                    </button>
                     
                     <!-- 4. Pages Left -->
                     <button class="credits-pill-btn" id="credits-topup-trigger" title="Click to view plans">
@@ -1027,6 +1030,34 @@
             </div>
         </div>
     </div>
+
+    <!-- Team Management Modal -->
+    <div class="modal-overlay" id="team-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title"><i data-lucide="users"></i> Manage Team</h3>
+                <button class="modal-close" id="close-team-btn"><i data-lucide="x"></i></button>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;">
+                Invite coworkers to share your audit credits and collaborate.
+            </p>
+            
+            <div class="team-member-list" id="team-member-list">
+                <!-- Populated by JS -->
+                <div style="text-align: center; color: var(--text-muted); padding: 20px;">Loading team members...</div>
+            </div>
+
+            <form class="team-invite-form" id="team-invite-form">
+                <div class="form-group">
+                    <input type="email" id="invite-email-input" class="form-control" placeholder="coworker@company.com" required>
+                </div>
+                <button type="submit" class="btn btn-primary" id="invite-submit-btn">Invite</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
 
     <script src="app.js?v=1.1.7"></script>
 </body>

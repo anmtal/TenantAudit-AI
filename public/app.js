@@ -4,56 +4,53 @@
 
 function initializeApp() {
 
-    // --- Custom Centered Alert Override ---
-    (function() {
-        const overlay = document.createElement('div');
-        overlay.className = 'custom-alert-overlay';
+    // --- Toast Notifications ---
+    window.showToast = function(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
         
-        const card = document.createElement('div');
-        card.className = 'custom-alert-card';
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
         
-        const logo = document.createElement('div');
-        logo.className = 'custom-alert-logo';
-        logo.innerHTML = '<i data-lucide="bell"></i>';
+        let iconHtml = '';
+        if (type === 'success') iconHtml = '<i data-lucide="check-circle" class="toast-icon"></i>';
+        else if (type === 'error') iconHtml = '<i data-lucide="alert-circle" class="toast-icon"></i>';
+        else iconHtml = '<i data-lucide="info" class="toast-icon"></i>';
         
-        const title = document.createElement('div');
-        title.className = 'custom-alert-title';
-        title.textContent = 'LeaseAlign AI';
+        const title = type.charAt(0).toUpperCase() + type.slice(1);
         
-        const message = document.createElement('div');
-        message.className = 'custom-alert-message';
+        toast.innerHTML = `
+            ${iconHtml}
+            <div class="toast-content">
+                <div class="toast-title">${title}</div>
+                <div class="toast-message">${message}</div>
+            </div>
+            <button class="toast-close"><i data-lucide="x" style="width: 14px; height: 14px;"></i></button>
+        `;
         
-        const btn = document.createElement('button');
-        btn.className = 'custom-alert-btn';
-        btn.textContent = 'OK';
+        container.appendChild(toast);
+        lucide.createIcons();
         
-        card.appendChild(logo);
-        card.appendChild(title);
-        card.appendChild(message);
-        card.appendChild(btn);
-        overlay.appendChild(card);
-        document.body.appendChild(overlay);
-        
-        const closeAlert = () => {
-            overlay.classList.remove('active');
-        };
-        
-        btn.addEventListener('click', closeAlert);
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) {
-                closeAlert();
-            }
+        // Trigger animation
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
         });
         
-        window.alert = function(msg) {
-            message.textContent = msg;
-            overlay.classList.add('active');
-            
-            if (window.lucide) {
-                lucide.createIcons();
+        // Close event
+        const closeBtn = toast.querySelector('.toast-close');
+        closeBtn.addEventListener('click', () => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 400);
+        });
+        
+        // Auto-dismiss after 4 seconds
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 400);
             }
-        };
-    })();
+        }, 4000);
+    };
 
     // Helper to generate or retrieve a unique session ID for single-seat login enforcement
     function getOrGenerateSessionId(forceNew = false) {
@@ -604,7 +601,7 @@ function initializeApp() {
         };
         
         renderAuditResults();
-        alert(`📂 Loaded audit for ${item.tenant_name} (${item.match_score}% compliance).`);
+        showToast(`📂 Loaded audit for ${item.tenant_name} (${item.match_score}% compliance).`, 'info');
     }
 
     // Initialize Supabase from Config
@@ -682,7 +679,7 @@ function initializeApp() {
                             }
                         } catch(err) {
                             hideLoader();
-                            alert("Error initiating checkout: " + err.message);
+                            showToast("Error initiating checkout: " + err.message, 'error');
                         }
                     }
 
@@ -708,13 +705,13 @@ function initializeApp() {
                                     window.history.replaceState({}, document.title, window.location.pathname);
                                     
                                     const displayAmt = amt >= 900000 ? "Unlimited" : `+${amount}`;
-                                    alert(`🎉 Payment Verified! Successfully activated your ${planType.toUpperCase()} plan with ${displayAmt} credits.`);
+                                    showToast(`🎉 Payment Verified! Successfully activated your ${planType.toUpperCase()} plan with ${displayAmt} credits.`, 'success');
                                 } else {
-                                    alert("Stripe Checkout verification failed: " + (data.error || "Unknown error"));
+                                    showToast("Stripe Checkout verification failed: " + (data.error || "Unknown error"), 'error');
                                 }
                             } catch (err) {
                                 console.error("Redirect verification error:", err);
-                                alert("Failed to verify Stripe payment: " + err.message);
+                                showToast("Failed to verify Stripe payment: " + err.message, 'error');
                             } finally {
                                 hideLoader();
                             }
@@ -723,7 +720,7 @@ function initializeApp() {
                         // --- Check for Stripe Redirect Cancel ---
                         if (urlParams.get('checkout_cancel') === 'true') {
                             window.history.replaceState({}, document.title, window.location.pathname);
-                            alert("Payment canceled. No credits were added.");
+                            showToast("Payment canceled. No credits were added.", 'info');
                         }
                     } else {
                         isLoggedIn = false;
@@ -869,7 +866,7 @@ function initializeApp() {
             e.preventDefault();
             const email = loginEmail ? loginEmail.value.trim() : '';
             if (!email) {
-                alert("Please enter your email address in the Email field first, then click 'Forgot password?'.");
+                showToast("Please enter your email address in the Email field first, then click 'Forgot password?'.", 'error');
                 return;
             }
             if (supabase) {
@@ -880,14 +877,14 @@ function initializeApp() {
                         redirectTo: window.location.origin
                     });
                     if (error) throw error;
-                    alert("Password reset email sent! Please check your inbox.");
+                    showToast("Password reset email sent! Please check your inbox.", 'info');
                 } catch (err) {
-                    alert("Error resetting password: " + err.message);
+                    showToast("Error resetting password: " + err.message, 'error');
                 } finally {
                     forgotPasswordLink.textContent = originalText;
                 }
             } else {
-                alert("Password reset is not available in mock mode.");
+                showToast("Password reset is not available in mock mode.", 'info');
             }
         });
     }
@@ -928,7 +925,7 @@ function initializeApp() {
                             localStorage.removeItem('ta_fresh_login');
                             throw error;
                         }
-                        alert("🎉 Account created successfully! Please top up your page credits to begin auditing.");
+                        showToast("🎉 Account created successfully! Please top up your page credits to begin auditing.", 'success');
                     } else {
                         localStorage.setItem('ta_fresh_login', 'true');
                         const { data, error } = await supabase.auth.signInWithPassword({
@@ -1148,11 +1145,11 @@ function initializeApp() {
                     
                     creditsModal.classList.remove('active');
                     const displayAmt = selectedTopupPlan === 'byok' ? "Unlimited" : `+${amount}`;
-                    alert(`🎉 Offline Demo Mode: Successfully activated your ${selectedTopupPlan.toUpperCase()} plan with ${displayAmt} credits!`);
+                    showToast(`🎉 Offline Demo Mode: Successfully activated your ${selectedTopupPlan.toUpperCase()} plan with ${displayAmt} credits!`, 'success');
                 }
             } catch (err) {
                 console.error("Top up error:", err);
-                alert(`🚫 Credit update failed: ${err.message}`);
+                showToast(`🚫 Credit update failed: ${err.message}`, 'error');
             }
         });
     }
@@ -1388,7 +1385,7 @@ function initializeApp() {
             sessionStorage.setItem('ta_api_key', settingsApiKey.value.trim());
             settingsModal.classList.remove('active');
             loadSettings();
-            alert('🎉 Connection configurations saved successfully.');
+            showToast('🎉 Connection configurations saved successfully.', 'success');
         });
     }
 
@@ -1398,7 +1395,7 @@ function initializeApp() {
             settingsApiKey.value = '';
             settingsModal.classList.remove('active');
             loadSettings();
-            alert('API key cleared.');
+            showToast('API key cleared.', 'info');
         });
     }
 
@@ -1498,14 +1495,14 @@ function initializeApp() {
         const isPdfType = file.type === 'application/pdf';
         const isPdfExtension = file.name && file.name.toLowerCase().endsWith('.pdf');
         if (!isPdfType && !isPdfExtension) {
-            alert('🚫 Only text-based PDF files are supported.');
+            showToast('🚫 Only text-based PDF files are supported.', 'error');
             return;
         }
 
         // Limit upload size to 10MB to protect memory
         const MAX_FILE_SIZE = 10 * 1024 * 1024;
         if (file.size > MAX_FILE_SIZE) {
-            alert(`🚫 File size exceeds 10MB limit (${formatBytes(file.size)}). Please upload a smaller file.`);
+            showToast(`🚫 File size exceeds 10MB limit (${formatBytes(file.size)}). Please upload a smaller file.`, 'error');
             return;
         }
 
@@ -1784,7 +1781,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         const apiKey = sessionStorage.getItem('ta_api_key');
         
         if (connectionMode === 'byok' && !apiKey) {
-            alert("⚙️ Please configure your connection API Key first. Click 'API Settings' in the header.");
+            showToast("⚙️ Please configure your connection API Key first. Click 'API Settings' in the header.", 'info');
             settingsModal.classList.add('active');
             return;
         }
@@ -1799,7 +1796,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             
             if (connectionMode !== 'byok' && pageCredits < 1) {
                 hideLoader();
-                alert(`🚫 Insufficient audit credits! This audit requires 1 audit credit, but you only have ${pageCredits} credits left. Please top up your credits.`);
+                showToast(`🚫 Insufficient audit credits! This audit requires 1 audit credit, but you only have ${pageCredits} credits left. Please top up your credits.`, 'error');
                 creditsModal.classList.add('active');
                 return;
             }
@@ -1920,22 +1917,22 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 hideLoader();
                 const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
                 if (connectionMode === 'byok') {
-                    alert(`🎉 Audit completed successfully using your custom API Key!`);
+                    showToast(`🎉 Audit completed successfully using your custom API Key!`, 'success');
                 } else {
                     const isUnlimited = hostedCredits >= 900000;
                     const deductMsg = isUnlimited ? "" : ` Deducted 1 audit credit.`;
-                    alert(`🎉 Audit completed successfully!${deductMsg}`);
+                    showToast(`🎉 Audit completed successfully!${deductMsg}`, 'success');
                 }
             } catch (err) {
                 console.error("Deduction/Logging error:", err);
                 hideLoader();
-                alert(`🚫 Audit finished, but database update failed: ${err.message}`);
+                showToast(`🚫 Audit finished, but database update failed: ${err.message}`, 'error');
             }
             
         } catch (err) {
             console.error(err);
             hideLoader();
-            alert(`🚫 AI Extraction Error: ${err.message}\n\nPlease check your configuration, network, or server status.`);
+            showToast(`🚫 AI Extraction Error: ${err.message}\n\nPlease check your configuration, network, or server status.`, 'error');
         }
     }
 
@@ -1945,7 +1942,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const apiKey = sessionStorage.getItem('ta_api_key');
             
             if (connectionMode === 'byok' && !apiKey) {
-                alert("⚙️ Please configure your connection API Key first. Click 'API Settings' in the header.");
+                showToast("⚙️ Please configure your connection API Key first. Click 'API Settings' in the header.", 'info');
                 settingsModal.classList.add('active');
                 return;
             }
@@ -2503,7 +2500,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 });
             } catch (err) {
                 console.error("[PDF Export Error] Failed to generate PDF via jsPDF:", err);
-                alert("❌ Failed to generate PDF report. Please try again.");
+                showToast("❌ Failed to generate PDF report. Please try again.", 'error');
                 hideLoader();
             }
         });
@@ -2661,7 +2658,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
 
             if (!supabase) {
-                alert("Cannot connect to checkout service right now.");
+                showToast("Cannot connect to checkout service right now.", 'error');
                 return;
             }
 
@@ -2694,12 +2691,130 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 else throw new Error('No checkout URL returned');
             } catch (err) {
                 console.error("Checkout Error:", err);
-                alert("Error initiating checkout: " + err.message);
+                showToast("Error initiating checkout: " + err.message, 'error');
             } finally {
                 hideLoader();
             }
         });
     });
+
+    // --- Team Management UI Logic ---
+    const teamModal = document.getElementById('team-modal');
+    const openTeamBtn = document.getElementById('open-team-btn');
+    const closeTeamBtn = document.getElementById('close-team-btn');
+    const teamMemberList = document.getElementById('team-member-list');
+    const teamInviteForm = document.getElementById('team-invite-form');
+    const inviteEmailInput = document.getElementById('invite-email-input');
+
+    if (openTeamBtn && teamModal) {
+        openTeamBtn.addEventListener('click', async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                showToast("Please log in to manage your team.", 'error');
+                return;
+            }
+            teamModal.classList.add('active');
+            loadTeamMembers();
+        });
+        
+        closeTeamBtn.addEventListener('click', () => {
+            teamModal.classList.remove('active');
+        });
+        
+        // Close modal on outside click
+        teamModal.addEventListener('click', (e) => {
+            if (e.target === teamModal) teamModal.classList.remove('active');
+        });
+    }
+
+    async function loadTeamMembers() {
+        if (!teamMemberList) return;
+        teamMemberList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">Loading team members...</div>';
+        
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            
+            // Get user's team ID
+            const { data: profile } = await supabase.from('profiles').select('team_id').eq('id', user.id).single();
+            if (!profile || !profile.team_id) {
+                teamMemberList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">You are not part of a team.</div>';
+                return;
+            }
+            
+            // Get all profiles on this team
+            const { data: members, error } = await supabase.from('profiles').select('email, first_name, last_name, id').eq('team_id', profile.team_id);
+            if (error) throw error;
+            
+            if (!members || members.length === 0) {
+                teamMemberList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">No other members on this team.</div>';
+                return;
+            }
+            
+            teamMemberList.innerHTML = '';
+            members.forEach(member => {
+                const name = member.first_name ? `${member.first_name} ${member.last_name || ''}`.trim() : 'Team Member';
+                const initial = name.charAt(0).toUpperCase();
+                const isYou = member.id === user.id ? ' (You)' : '';
+                
+                teamMemberList.innerHTML += `
+                    <div class="team-member-item">
+                        <div class="team-member-info">
+                            <div class="team-member-avatar">${initial}</div>
+                            <div class="team-member-details">
+                                <span class="team-member-name">${name}${isYou}</span>
+                                <span class="team-member-email">${member.email}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+        } catch (err) {
+            console.error("Error loading team members:", err);
+            teamMemberList.innerHTML = `<div style="text-align: center; color: var(--color-red); padding: 20px;">Error loading team: ${err.message}</div>`;
+        }
+    }
+
+    if (teamInviteForm) {
+        teamInviteForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const emailToInvite = inviteEmailInput.value.trim();
+            if (!emailToInvite) return;
+            
+            const submitBtn = document.getElementById('invite-submit-btn');
+            const originalText = submitBtn.textContent;
+            submitBtn.textContent = 'Inviting...';
+            submitBtn.disabled = true;
+            
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) throw new Error("Not logged in");
+                
+                const { data, error } = await supabase.rpc('invite_user_to_team', {
+                    target_email: emailToInvite,
+                    inviter_id: user.id
+                });
+                
+                if (error) throw error;
+                
+                if (data) {
+                    showToast(`Successfully invited ${emailToInvite} to your team!`, 'success');
+                    inviteEmailInput.value = '';
+                    loadTeamMembers();
+                } else {
+                    throw new Error("You must be the team owner to invite members.");
+                }
+            } catch (err) {
+                console.error("Invite error:", err);
+                showToast(err.message, 'error');
+            } finally {
+                submitBtn.textContent = originalText;
+                submitBtn.disabled = false;
+            }
+        });
+    }
+
 }
 
 // Conditional execution wrapper to ensure app.js runs even if loaded asynchronously or after DOMContentLoaded

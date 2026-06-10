@@ -2016,3 +2016,168 @@ select option {
         color: #000000 !important;
     }
 }
+
+/* ==========================================================================
+   Toast Notifications
+   ========================================================================== */
+#toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.toast {
+    background: white;
+    color: var(--text-main);
+    padding: 16px 20px;
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    min-width: 300px;
+    max-width: 400px;
+    transform: translateX(120%);
+    opacity: 0;
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.4s ease;
+    pointer-events: auto;
+    border-left: 4px solid var(--color-blue);
+}
+
+.toast.show {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.toast-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.toast-content {
+    flex-grow: 1;
+}
+
+.toast-title {
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 4px;
+}
+
+.toast-message {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    margin-left: 8px;
+    transition: color 0.2s;
+}
+
+.toast-close:hover {
+    color: var(--text-main);
+}
+
+/* Toast Variants */
+.toast.success {
+    border-left-color: var(--color-emerald);
+}
+.toast.success .toast-icon {
+    color: var(--color-emerald);
+}
+
+.toast.error {
+    border-left-color: var(--color-red);
+}
+.toast.error .toast-icon {
+    color: var(--color-red);
+}
+
+.toast.info {
+    border-left-color: var(--color-blue);
+}
+.toast.info .toast-icon {
+    color: var(--color-blue);
+}
+
+/* ==========================================================================
+   Team Management UI
+   ========================================================================== */
+.team-member-list {
+    margin-top: 20px;
+    margin-bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.team-member-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+}
+
+.team-member-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.team-member-avatar {
+    width: 32px;
+    height: 32px;
+    background: var(--color-purple);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.team-member-details {
+    display: flex;
+    flex-direction: column;
+}
+
+.team-member-name {
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--text-main);
+}
+
+.team-member-email {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.team-invite-form {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 20px;
+}
+
+.team-invite-form .form-group {
+    flex-grow: 1;
+    margin-bottom: 0;
+}

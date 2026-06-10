@@ -387,12 +387,14 @@ app.post('/api/audit', requireAuth, async (req, res) => {
 
         if (connectionMode === 'hosted') {
             if (supabaseAdmin) {
-                // Atomic pre-deduction of 1 audit credit via RPC
+                const transactionId = req.headers['x-transaction-id'] || null;
+                // Atomic pre-deduction of 1 audit credit via RPC (idempotent per transaction)
                 const { data: success, error: deductErr } = await supabaseAdmin
                     .rpc('deduct_user_credits', { 
                         target_user_id: req.user.id, 
                         pages_to_deduct: 1, 
-                        plan_mode: 'hosted' 
+                        plan_mode: 'hosted',
+                        p_transaction_id: transactionId
                     });
 
                 if (deductErr || !success) {
@@ -683,12 +685,14 @@ app.post('/api/compare', requireAuth, async (req, res) => {
 
         if (connectionMode === 'hosted') {
             if (supabaseAdmin) {
-                // Atomic pre-deduction of 1 audit credit via RPC
+                const transactionId = req.headers['x-transaction-id'] || null;
+                // Atomic pre-deduction of 1 audit credit via RPC (idempotent per transaction)
                 const { data: success, error: deductErr } = await supabaseAdmin
                     .rpc('deduct_user_credits', { 
                         target_user_id: req.user.id, 
                         pages_to_deduct: 1, 
-                        plan_mode: 'hosted' 
+                        plan_mode: 'hosted',
+                        p_transaction_id: transactionId
                     });
 
                 if (deductErr || !success) {

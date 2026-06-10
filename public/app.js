@@ -144,6 +144,7 @@ function initializeApp() {
     };
 
     let auditData = null;
+    let currentAuditTransactionId = null;
     let isLoggedIn = false;
     let pageCredits = 0;
     let hostedCredits = 0;
@@ -1778,9 +1779,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     // --- Mock Demo Mode Dataset (Try with Sample Data) ---
     if (demoBtn) {
         demoBtn.addEventListener('click', async () => {
-            const pagesNeeded = 5;
-            if (pageCredits < pagesNeeded) {
-                alert(`🚫 Insufficient page credits! The simulation requires 5 pages, but you only have ${pageCredits} pages left. Please top up your credits.`);
+            if (pageCredits < 1) {
+                alert(`🚫 Insufficient audit credits! The simulation requires 1 audit credit, but you have 0 credits left. Please top up your credits.`);
                 creditsModal.classList.add('active');
                 return;
             }
@@ -1804,8 +1804,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                                 if (connectionMode !== 'byok') {
                                     const isUnlimited = hostedCredits >= 900000;
                                     if (!isUnlimited) {
-                                        const { error: deductErr } = await supabase.rpc('deduct_credits', { 
-                                            pages_to_deduct: pagesNeeded,
+                                        const { data: { user } } = await supabase.auth.getUser();
+                                        const { error: deductErr } = await supabase.rpc('deduct_user_credits', { 
+                                            target_user_id: user.id,
+                                            pages_to_deduct: 1,
                                             plan_mode: 'hosted'
                                         });
                                         if (deductErr) throw deductErr;
@@ -1831,7 +1833,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                             } else {
                                 const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
                                 if (connectionMode !== 'byok') {
-                                    hostedCredits -= pagesNeeded;
+                                    hostedCredits -= 1;
                                     localStorage.setItem('ta_hosted_credits', hostedCredits);
                                 }
                                 updateCreditsDisplay();
@@ -1841,7 +1843,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                             if (connectionMode === 'byok') {
                                 alert("🚀 Simulated audit completed successfully!");
                             } else {
-                                alert("🚀 Simulated audit completed: Deducted 5 page credits.");
+                                alert("✅ Simulated audit completed: Deducted 1 audit credit.");
                             }
                         } catch (err) {
                             console.error("Demo logging/deduction error:", err);
@@ -1979,6 +1981,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         }
 
         try {
+            currentAuditTransactionId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'txn_' + Date.now();
             showLoader("Assessing page count credits...");
             
             const leasePagesCount = await getPDFPageCount(filesState.lease);
@@ -2170,7 +2173,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
         const headers = {
             "Content-Type": "application/json",
-            "X-Session-ID": getOrGenerateSessionId()
+            "X-Session-ID": getOrGenerateSessionId(),
+            "X-Transaction-ID": currentAuditTransactionId
         };
 
         if (supabase) {
@@ -2351,7 +2355,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 
                 const headers = {
                     "Content-Type": "application/json",
-                    "X-Session-ID": getOrGenerateSessionId()
+                    "X-Session-ID": getOrGenerateSessionId(),
+                    "X-Transaction-ID": currentAuditTransactionId
                 };
 
                 if (supabase) {

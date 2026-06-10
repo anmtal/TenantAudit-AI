@@ -693,7 +693,10 @@ function initializeApp() {
                             const sessionId = urlParams.get('session_id');
                             showLoader("Verifying Stripe payment...");
                             try {
-                                const response = await fetch(`/api/verify-checkout-session?session_id=${sessionId}&t=` + Date.now());
+                                const { data: { session } } = await supabase.auth.getSession();
+                                const response = await fetch(`/api/verify-checkout-session?session_id=${sessionId}&t=` + Date.now(), {
+                                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                                });
                                 const data = await response.json();
                                 if (data.success) {
                                     const { amount, planType } = data.metadata;
@@ -823,35 +826,7 @@ function initializeApp() {
         });
     }
 
-    // Dynamic Pricing CTA Button Listeners
-    const pricingCtaBtns = document.querySelectorAll('.pricing-cta-btn');
-    pricingCtaBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const plan = btn.getAttribute('data-plan');
-            const amount = btn.getAttribute('data-amount');
-            
-            if (!isLoggedIn) {
-                window.pendingPurchase = { plan, amount };
-                showView('login');
-            } else {
-                // Show credits modal
-                creditsModal.classList.add('active');
-                
-                // Trigger plan switch and dropdown option selection
-                if (plan === 'hosted') {
-                    if (buyPlanHosted) {
-                        buyPlanHosted.click();
-                        creditsAmount.value = amount;
-                    }
-                } else if (plan === 'byok') {
-                    if (buyPlanByok) {
-                        buyPlanByok.click();
-                        creditsAmount.value = amount;
-                    }
-                }
-            }
-        });
-    });
+
 
 
     // Event delegation on authToggleContainer to prevent listeners leak

@@ -2536,6 +2536,121 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             loadUserProfileAndCredits();
         }
     });
+
+    // --- Pricing Toggles & Grid Logic ---
+    const btnMonthly = document.getElementById('toggle-monthly');
+    const btnAnnual = document.getElementById('toggle-annual');
+    const btnHosted = document.getElementById('switch-hosted');
+    const btnByok = document.getElementById('switch-byok');
+    
+    const hostedMonthly = document.getElementById('hosted-grid-monthly');
+    const hostedAnnual = document.getElementById('hosted-grid-annual');
+    const byokMonthly = document.getElementById('byok-grid-monthly');
+    const byokAnnual = document.getElementById('byok-grid-annual');
+
+    let currentPeriod = 'monthly';
+    let currentMode = 'hosted';
+
+    function updateGrids() {
+        if (!hostedMonthly || !hostedAnnual || !byokMonthly || !byokAnnual) return;
+        hostedMonthly.style.display = 'none';
+        hostedAnnual.style.display = 'none';
+        byokMonthly.style.display = 'none';
+        byokAnnual.style.display = 'none';
+
+        if (currentMode === 'hosted') {
+            if (currentPeriod === 'monthly') hostedMonthly.style.display = 'grid';
+            else hostedAnnual.style.display = 'grid';
+        } else {
+            if (currentPeriod === 'monthly') byokMonthly.style.display = 'grid';
+            else byokAnnual.style.display = 'grid';
+        }
+    }
+
+    if (btnMonthly && btnAnnual) {
+        btnMonthly.addEventListener('click', () => {
+            currentPeriod = 'monthly';
+            btnMonthly.classList.add('active');
+            btnAnnual.classList.remove('active');
+            updateGrids();
+        });
+        btnAnnual.addEventListener('click', () => {
+            currentPeriod = 'annual';
+            btnAnnual.classList.add('active');
+            btnMonthly.classList.remove('active');
+            updateGrids();
+        });
+    }
+
+    if (btnHosted && btnByok) {
+        btnHosted.addEventListener('click', () => {
+            currentMode = 'hosted';
+            btnHosted.classList.add('active');
+            btnByok.classList.remove('active');
+            updateGrids();
+        });
+        btnByok.addEventListener('click', () => {
+            currentMode = 'byok';
+            btnByok.classList.add('active');
+            btnHosted.classList.remove('active');
+            updateGrids();
+        });
+    }
+
+    // --- Pricing CTA Checkout Listener ---
+    const pricingBtns = document.querySelectorAll('.pricing-cta-btn');
+    pricingBtns.forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const plan = e.target.getAttribute('data-plan'); 
+            const amount = e.target.getAttribute('data-amount');
+            const price = e.target.getAttribute('data-price');
+            const seats = e.target.getAttribute('data-seats');
+            const pack = e.target.getAttribute('data-pack');
+
+            const purchaseData = { plan, amount, price, seats, packageName: pack };
+
+            if (!isLoggedIn) {
+                window.pendingPurchase = purchaseData;
+                showView('login');
+                return;
+            }
+
+            if (!supabase) {
+                alert("Cannot connect to checkout service right now.");
+                return;
+            }
+
+            showLoader("Connecting to checkout...");
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user) throw new Error("Not authenticated");
+
+                const response = await fetch('/api/create-checkout-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: user.id,
+                        userEmail: user.email,
+                        planType: plan,
+                        auditAmount: parseInt(amount, 10),
+                        priceAmount: parseInt(price, 10),
+                        seats: parseInt(seats, 10),
+                        packageName: pack
+                    })
+                });
+                
+                const resData = await response.json();
+                if (!response.ok) throw new Error(resData.error || 'Failed to create checkout session');
+                if (resData.url) window.location.href = resData.url;
+                else throw new Error('No checkout URL returned');
+            } catch (err) {
+                console.error("Checkout Error:", err);
+                alert("Error initiating checkout: " + err.message);
+            } finally {
+                hideLoader();
+            }
+        });
+    });
 }
 
 // Conditional execution wrapper to ensure app.js runs even if loaded asynchronously or after DOMContentLoaded

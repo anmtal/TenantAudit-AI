@@ -656,9 +656,13 @@ function initializeApp() {
                         showLoader("Connecting to payment checkout...");
                         try {
                             const { data: { user } } = await supabase.auth.getUser();
+                            const { data: { session } } = await supabase.auth.getSession();
                             const response = await fetch('/api/create-checkout-session', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
+                                headers: { 
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${session.access_token}`
+                                },
                                 body: JSON.stringify({
                                     amount: parseInt(amount, 10),
                                     planType: plan,
@@ -1123,10 +1127,14 @@ function initializeApp() {
 
                     creditsModal.classList.remove('active');
                     showLoader("Connecting to payment checkout...");
+                    const { data: { session } } = await supabase.auth.getSession();
 
                     const response = await fetch('/api/create-checkout-session', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${session.access_token}`
+                        },
                         body: JSON.stringify({
                             amount: checkoutAmount,
                             planType: selectedTopupPlan,
@@ -2877,10 +2885,14 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             try {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (!user) throw new Error("Not authenticated");
+                const { data: { session } } = await supabase.auth.getSession();
 
                 const response = await fetch('/api/create-checkout-session', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`
+                    },
                     body: JSON.stringify({
                         userId: user.id,
                         userEmail: user.email,

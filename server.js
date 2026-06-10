@@ -311,19 +311,28 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                 console.log(`Processing subscription termination for user ${userId}: plan ${planType}`);
                 
                 if (supabaseAdmin) {
-                    let updateFields = {};
                     if (planType === 'byok') {
-                        updateFields = { byok_credits: 0 };
+                        const { error: updateErr } = await supabaseAdmin
+                            .from('profiles')
+                            .update({ byok_credits: 0 })
+                            .eq('id', userId);
+                        if (updateErr) throw updateErr;
                     } else {
-                        updateFields = { credits: 0 };
+                        // Look up the user's team
+                        const { data: profile } = await supabaseAdmin
+                            .from('profiles')
+                            .select('team_id')
+                            .eq('id', userId)
+                            .single();
+                            
+                        if (profile && profile.team_id) {
+                            const { error: updateErr } = await supabaseAdmin
+                                .from('teams')
+                                .update({ audit_credits: 0 })
+                                .eq('id', profile.team_id);
+                            if (updateErr) throw updateErr;
+                        }
                     }
-                    
-                    const { error: updateErr } = await supabaseAdmin
-                        .from('profiles')
-                        .update(updateFields)
-                        .eq('id', userId);
-                        
-                    if (updateErr) throw updateErr;
                     console.log(`Successfully reset credits to 0 for user ${userId} via webhook.`);
                 } else {
                     console.warn("Supabase Admin not configured. Webhook reset skipped.");
@@ -901,14 +910,16 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
             cancel_url: `${origin}/?checkout_cancel=true`,
         };
 
-        sessionParams.subscription_data = {
-            metadata: {
-                userId: userId,
-                planType: planType,
-                amount: amount.toString(),
-                seatCount: (seatCount || 1).toString()
-            }
-        };
+        if (stripeIsSubscription) {
+            sessionParams.subscription_data = {
+                metadata: {
+                    userId: userId,
+                    planType: planType,
+                    amount: amount.toString(),
+                    seatCount: (seatCount || 1).toString()
+                }
+            };
+        }
 
         const session = await stripe.checkout.sessions.create(sessionParams);
         
@@ -961,10 +972,10 @@ app.get('/api/verify-checkout-session', requireAuth, async (req, res) => {
                         throw insertErr;
                     }
 
-                    // Fetch user's current profile credits
+                    // Fetch user's current profile and team
                     const { data: profile, error: selectErr } = await supabaseAdmin
                         .from('profiles')
-                        .select('credits, byok_credits')
+                        .select('credits, byok_credits, team_id, teams(audit_credits)')
                         .eq('id', userId)
                         .single();
                         
@@ -974,24 +985,24 @@ app.get('/api/verify-checkout-session', requireAuth, async (req, res) => {
                     }
                     
                     const amt = parseInt(amount, 10);
-                    let updateFields = {};
                     
                     if (planType === 'byok') {
-                        updateFields = { byok_credits: 999999 }; // Unlimited sentinel — matches DB threshold at 900000
+                        const { error: updateErr } = await supabaseAdmin
+                            .from('profiles')
+                            .update({ byok_credits: 999999 })
+                            .eq('id', userId);
+                        if (updateErr) throw updateErr;
                     } else {
-                        const baseCredits = profile.credits || 0;
-                        updateFields = { credits: baseCredits + amt };
-                    }
-                    
-                    // Update user's profile credits
-                    const { error: updateErr } = await supabaseAdmin
-                        .from('profiles')
-                        .update(updateFields)
-                        .eq('id', userId);
-                        
-                    if (updateErr) {
-                        console.error("[Stripe Verification DB Update Error]:", updateErr.message);
-                        throw updateErr;
+                        if (profile.team_id) {
+                            const baseCredits = profile.teams?.audit_credits || 0;
+                            const { error: updateErr } = await supabaseAdmin
+                                .from('teams')
+                                .update({ audit_credits: baseCredits + amt })
+                                .eq('id', profile.team_id);
+                            if (updateErr) throw updateErr;
+                        } else {
+                            console.warn(`[Stripe Verification] User ${userId} has no team assigned, cannot credit hosted account`);
+                        }
                     }
                     
                     // Update plan type in auth user metadata

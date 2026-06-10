@@ -862,12 +862,15 @@ h1, h2, h3, h4, h5, h6 {
 /* --- Footer --- */
 .app-footer {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    justify-content: center;
     align-items: center;
-    padding-top: 24px;
+    padding-top: 32px;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-muted);
+    gap: 16px;
+    text-align: center;
 }
 
 .footer-left {
@@ -1642,17 +1645,14 @@ select option {
 
 .pricing-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 16px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
     width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
-@media (max-width: 1400px) {
-    .pricing-grid {
-        grid-template-columns: repeat(3, 1fr);
-        gap: 20px;
-    }
-}
+
 
 @media (max-width: 1024px) {
     .pricing-grid {

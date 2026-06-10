@@ -182,7 +182,7 @@
                     <button class="btn btn-primary" id="toggle-monthly" style="margin-right: 10px;">Monthly Billing</button>
                     <button class="btn btn-secondary" id="toggle-annual">Annual Billing</button>
                 </div>
-                <div class="pricing-grid" id="hosted-grid-monthly" style="display: flex; flex-flow: row wrap; justify-content: center; gap: 30px; margin: 0 auto; width: 100%;">
+                <div class="pricing-grid" id="hosted-grid-monthly" style="display: grid; max-width: 1200px; margin: 0 auto; width: 100%;">
                     <!-- Monthly Pack 1 -->
                     <div class="pricing-card">
                         <span class="pricing-tier">Starter Monthly</span>
@@ -263,7 +263,7 @@
                     </div>
                 </div>
 
-                <div class="pricing-grid" id="hosted-grid-annual" style="display: none; flex-flow: row wrap; justify-content: center; gap: 30px; margin: 0 auto; width: 100%;">
+                <div class="pricing-grid" id="hosted-grid-annual" style="display: none; max-width: 1200px; margin: 0 auto; width: 100%;">
                     <!-- Annual Pack 1 -->
                     <div class="pricing-card">
                         <span class="pricing-tier">Starter Annual</span>
@@ -354,13 +354,13 @@
                             btnMonthly.addEventListener('click', () => {
                                 btnMonthly.className = 'btn btn-primary';
                                 btnAnnual.className = 'btn btn-secondary';
-                                gridMonthly.style.display = 'flex';
+                                gridMonthly.style.display = 'grid';
                                 gridAnnual.style.display = 'none';
                             });
                             btnAnnual.addEventListener('click', () => {
                                 btnAnnual.className = 'btn btn-primary';
                                 btnMonthly.className = 'btn btn-secondary';
-                                gridAnnual.style.display = 'flex';
+                                gridAnnual.style.display = 'grid';
                                 gridMonthly.style.display = 'none';
                             });
                         }
@@ -428,9 +428,9 @@
             <!-- Landing Page Footer -->
             <footer id="contact-footer" class="app-footer" style="margin-top: 64px; width: 100%; display: flex; flex-direction: column; gap: 1rem; align-items: center; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
                 <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-                    <div class="footer-left">
-                        <p>&copy; 2026 LeaseAlign AI Inc. All rights reserved.</p>
-                        <div class="footer-contact">
+                    <div class="footer-left" style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+                        <p style="text-align: center;">&copy; 2026 LeaseAlign AI Inc. All rights reserved.</p>
+                        <div class="footer-contact" style="justify-content: center; margin-top: 8px;">
                             <a href="mailto:contact@leasealign.io" class="footer-contact-item">
                                 <i data-lucide="mail" class="inline-icon"></i> contact@leasealign.io
                             </a>
@@ -439,7 +439,7 @@
                             </a>
                         </div>
                     </div>
-                    <div class="footer-links">
+                    <div class="footer-links" style="width: 100%; text-align: center; margin-top: 16px;">
                         <span class="status-indicator-footer"><span class="dot bg-emerald"></span> B2B Transaction Due Diligence Workspace</span>
                     </div>
                 </div>
@@ -735,9 +735,9 @@
             <!-- Footer -->
             <footer class="app-footer" style="display: flex; flex-direction: column; gap: 1rem; align-items: center; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
                 <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-                    <div class="footer-left">
-                        <p>&copy; 2026 LeaseAlign AI Inc. All rights reserved.</p>
-                        <div class="footer-contact">
+                    <div class="footer-left" style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+                        <p style="text-align: center;">&copy; 2026 LeaseAlign AI Inc. All rights reserved.</p>
+                        <div class="footer-contact" style="justify-content: center; margin-top: 8px;">
                             <a href="mailto:contact@leasealign.io" class="footer-contact-item">
                                 <i data-lucide="mail" class="inline-icon"></i> contact@leasealign.io
                             </a>
@@ -746,7 +746,7 @@
                             </a>
                         </div>
                     </div>
-                    <div class="footer-links">
+                    <div class="footer-links" style="width: 100%; text-align: center; margin-top: 16px;">
                         <span class="status-indicator-footer"><span class="dot bg-emerald"></span> B2B Transaction Due Diligence Workspace</span>
                     </div>
                 </div>

@@ -59,13 +59,20 @@ function initializeApp() {
     function getOrGenerateSessionId(forceNew = false) {
         let sid = localStorage.getItem('ta_session_id');
         if (!sid || forceNew) {
-            sid = (window.crypto && crypto.randomUUID) 
-                ? crypto.randomUUID() 
-                : 'sid_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
+            sid = generateUUID();
             localStorage.setItem('ta_session_id', sid);
             localStorage.setItem('ta_session_timestamp', Date.now().toString());
         }
         return sid;
+    }
+
+    // Helper to generate a valid UUID v4 (fallback for non-secure contexts)
+    function generateUUID() {
+        if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
     }
 
     // Helper to completely clear user state, files, and auth inputs on logout
@@ -486,10 +493,11 @@ function initializeApp() {
         const historyEmptyMsg = document.getElementById('history-empty-msg');
         const historyListContainer = document.getElementById('history-list-container');
         
-        historyLoadingMsg.style.display = 'block';
-        historyEmptyMsg.style.display = 'none';
-        historyListContainer.style.display = 'none';
-        historyListContainer.innerHTML = '';
+        if (historyListContainer.innerHTML.trim() === '') {
+            historyLoadingMsg.style.display = 'block';
+            historyEmptyMsg.style.display = 'none';
+            historyListContainer.style.display = 'none';
+        }
         
         try {
             const { data: { user } } = await supabase.auth.getUser();
@@ -531,6 +539,7 @@ function initializeApp() {
                 return;
             }
             
+            historyListContainer.innerHTML = '';
             if (!data || data.length === 0) {
                 historyEmptyMsg.innerHTML = `
                     <div style="text-align: center; padding: 30px;">
@@ -1981,7 +1990,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         }
 
         try {
-            currentAuditTransactionId = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'txn_' + Date.now();
+            currentAuditTransactionId = generateUUID();
             showLoader("Assessing page count credits...");
             
             const leasePagesCount = await getPDFPageCount(filesState.lease);

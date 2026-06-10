@@ -407,7 +407,7 @@ app.post('/api/audit', requireAuth, async (req, res) => {
             // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet
             activeKey = process.env.ANTHROPIC_API_KEY;
             activeProvider = 'anthropic';
-            activeModel = 'claude-3-5-sonnet-latest';
+            activeModel = 'claude-sonnet-4-6';
             
             console.log(`[DEBUG] Hosted activeKey starts with: ${activeKey ? activeKey.substring(0, 15) : 'UNDEFINED'}...`);
             
@@ -735,7 +735,7 @@ app.post('/api/compare', requireAuth, async (req, res) => {
             // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet as default
             activeKey = process.env.ANTHROPIC_API_KEY;
             activeProvider = 'anthropic';
-            activeModel = 'claude-3-5-sonnet-latest';
+            activeModel = 'claude-sonnet-4-6';
             
             if (!activeKey) {
                 return res.status(500).json({ 
@@ -1089,6 +1089,6 @@ app.listen(PORT, () => {
     console.log(`================================================================`);
     console.log(`🚀 LeaseAlign AI is running in dual connection mode!`);
     console.log(`👉 Local URL: http://localhost:${PORT}`);
-    console.log(`🔑 Server API Key: ${process.env.OPENAI_API_KEY ? "CONFIGURED (SaaS Mode Active)" : "NOT SET (Only BYOK & Simulation Active)"}`);
+    console.log(`📡 Server API Key: ${process.env.ANTHROPIC_API_KEY ? "CONFIGURED (SaaS Mode Active)" : "NOT SET (Only BYOK & Simulation Active)"}`);
     console.log(`================================================================`);
 });

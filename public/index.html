@@ -12,21 +12,21 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     
     <!-- PDF.js library to parse text layers on client side -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
     <script>
         // Set workerSrc for PDF.js to function correctly on client side
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     </script>
     
     <!-- Supabase JS Client SDK Library -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" integrity="sha384-UQ9Ztz63gzT2JZCuDRkNXV8RP/gXxdPUuM9LKlz2BzqGx9xFYNAK8yAEgbfZHs7P" crossorigin="anonymous"></script>
 
     <!-- jsPDF and html2canvas libraries for client-side PDF generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
 
     <!-- Lucide Icons Library for Premium SVG Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@latest" integrity="sha384-bdZtphetAEBgkGZvhZXOFDWc55tHGLqaSo1f4qZtgvEiolEBqlJ9u6FTk+CoLfj0" crossorigin="anonymous"></script>
 
     <!-- Stylesheet -->
     <link rel="stylesheet" href="styles.css?v=1.0.9">
@@ -853,26 +853,29 @@
         </div>
     </div>
 
-    <!-- 5. CREDITS TOP UP MODAL OVERLAY -->
-    <div class="modal-overlay" id="credits-modal">
-        <div class="modal-card">
-            <button class="modal-close-btn" id="close-credits-btn">&times;</button>
-            <div class="modal-title-wrapper">
-                <h3>Top Up Account Audit Credits</h3>
-                <p>Secure checkout via Stripe to add audit credits to your account for live document auditing.</p>
-            </div>
-            
-            <form id="credits-form" onsubmit="return false;">
-                <div class="form-group">
-                    <label>Select Plan Type</label>
-                    <div class="pricing-switcher-wrapper" style="display: flex; width: 100%; margin-top: 4px; margin-bottom: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); padding: 4px; border-radius: 30px;">
-                        <button type="button" class="pricing-switch-btn active" id="buy-plan-hosted" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">Hosted SaaS Plan</button>
-                        <button type="button" class="pricing-switch-btn" id="buy-plan-byok" style="flex: 1; text-align: center; border-radius: 24px; font-size: 12px; padding: 8px 16px;">BYOK Plan (Unlimited Pages)</button>
-                    </div>
-                    <div id="topup-current-balance-display" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 15px; text-align: center; background: rgba(255,255,255,0.02); padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.04);">
-                        Current Balance: <strong style="color: var(--color-purple);" id="topup-balance-value">0 Hosted SaaS Pages</strong>
-                    </div>
-                </div>
+    <!-- 5. PASSWORD RECOVERY MODAL -->
+      <div class="modal-overlay" id="password-recovery-modal">
+          <div class="modal-card">
+              <button class="modal-close-btn" id="close-recovery-btn">&times;</button>
+              <div class="modal-title-wrapper">
+                  <h3>Set New Password</h3>
+                  <p>Please enter your new password below.</p>
+              </div>
+              <form id="password-recovery-form" onsubmit="return false;">
+                  <div class="form-group">
+                      <label for="recovery-password">New Password</label>
+                      <input type="password" id="recovery-password" placeholder="At least 6 characters" required>
+                  </div>
+                  <div class="form-group">
+                      <label for="recovery-password-confirm">Confirm Password</label>
+                      <input type="password" id="recovery-password-confirm" placeholder="At least 6 characters" required>
+                  </div>
+                  <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 15px;">
+                      <button type="submit" class="btn btn-emerald" id="save-recovery-btn">Update Password</button>
+                  </div>
+              </form>
+          </div>
+      </div>
 
                 <div class="form-group">
                     <label for="credits-amount">Select Page Package</label>

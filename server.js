@@ -834,11 +834,11 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
         let subscriptionInterval = 'month';
 
         if (planType === 'byok') {
-            if (amtVal === 1299 || price === 1349 || price === 4499 || price === 7199 || price === 13499) {
+            if (price === 1068 || price === 1908 || price === 4788) {
                 subscriptionInterval = 'year';
             }
         } else if (planType === 'hosted') {
-            if (price === 449 || price === 1799 || price === 4499 || price === 8999 || price === 22499 || price === 44999) {
+            if (price === 1188 || price === 2868 || price === 4788 || price === 9588) {
                 subscriptionInterval = 'year';
             }
         }

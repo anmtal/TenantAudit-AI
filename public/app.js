@@ -22,11 +22,13 @@ function initializeApp() {
         toast.innerHTML = `
             ${iconHtml}
             <div class="toast-content">
-                <div class="toast-title">${title}</div>
-                <div class="toast-message">${message}</div>
+                <div class="toast-title"></div>
+                <div class="toast-message"></div>
             </div>
             <button class="toast-close"><i data-lucide="x" style="width: 14px; height: 14px;"></i></button>
         `;
+        toast.querySelector('.toast-title').textContent = title;
+        toast.querySelector('.toast-message').textContent = message;
         
         container.appendChild(toast);
         lucide.createIcons();
@@ -190,14 +192,7 @@ function initializeApp() {
     const userEmailDisplay = document.getElementById('user-email-display');
     const creditsCountDisplay = document.getElementById('credits-count-display');
     const creditsTopupTrigger = document.getElementById('credits-topup-trigger');
-    const creditsModal = document.getElementById('credits-modal');
-    const closeCreditsBtn = document.getElementById('close-credits-btn');
-    const saveCreditsBtn = document.getElementById('save-credits-btn');
-    const creditsForm = document.getElementById('credits-form');
-    const creditsAmount = document.getElementById('credits-amount');
-    const buyPlanHosted = document.getElementById('buy-plan-hosted');
-    const buyPlanByok = document.getElementById('buy-plan-byok');
-    let selectedTopupPlan = 'hosted';
+        let selectedTopupPlan = 'hosted';
 
     const leaseDropZone = document.getElementById('lease-drop-zone');
     const estoppelDropZone = document.getElementById('estoppel-drop-zone');
@@ -618,6 +613,9 @@ function initializeApp() {
                 // Set up auth state change listener
                 supabase.auth.onAuthStateChange(async (event, session) => {
                     console.log("Supabase Auth Event:", event);
+                    if (event === 'PASSWORD_RECOVERY') {
+                        passwordRecoveryModal.classList.add('active');
+                    }
                     if (session && session.user) {
                         isLoggedIn = true;
                         userEmail = session.user.email;
@@ -952,7 +950,7 @@ function initializeApp() {
                         const { plan, amount } = window.pendingPurchase;
                         window.pendingPurchase = null; // Clear state
                         
-                        creditsModal.classList.add('active');
+                        handleTopupClick();
                         if (plan === 'hosted') {
                             if (buyPlanHosted) {
                                 buyPlanHosted.click();
@@ -1797,7 +1795,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             if (connectionMode !== 'byok' && pageCredits < 1) {
                 hideLoader();
                 showToast(`🚫 Insufficient audit credits! This audit requires 1 audit credit, but you only have ${pageCredits} credits left. Please top up your credits.`, 'error');
-                creditsModal.classList.add('active');
+                handleTopupClick();
                 return;
             }
 

@@ -13,6 +13,12 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseAdmin = (supabaseUrl && supabaseServiceKey) ? createClient(supabaseUrl, supabaseServiceKey) : null;
 
+// SECURITY: Crash on startup if Supabase is not configured in production
+if (process.env.NODE_ENV === 'production' && !supabaseAdmin) {
+    console.error('FATAL: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured in production. Refusing to start with auth bypass enabled.');
+    process.exit(1);
+}
+
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 
 const allowedOrigins = [
@@ -202,8 +208,13 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
         const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
         if (webhookSecret && sig) {
             event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+        } else if (process.env.NODE_ENV === 'production') {
+            // SECURITY: Never accept unverified webhooks in production
+            console.error('[Webhook] STRIPE_WEBHOOK_SECRET is not set in production. Rejecting unverified payload.');
+            return res.status(400).json({ error: 'Webhook secret not configured. Cannot verify payload.' });
         } else {
-            // Fallback for local development
+            // Local development fallback only
+            console.warn('[Webhook] Accepting unverified payload (dev mode only)');
             event = JSON.parse(req.body);
         }
     } catch (err) {
@@ -216,10 +227,10 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
         if (invoice.subscription) {
             try {
                 const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
-                const { userId, planType, amount } = subscription.metadata || {};
+                const { userId, planType, amount, seatCount } = subscription.metadata || {};
                 
                 if (userId && planType && amount) {
-                    console.log(`Processing subscription renewal for user ${userId}: plan ${planType}, amount ${amount}`);
+                    console.log(`Processing subscription renewal for user ${userId}: plan ${planType}, amount ${amount}, seats ${seatCount}`);
                     
                     if (supabaseAdmin) {
                         // Idempotency: log webhook transaction
@@ -238,31 +249,59 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                             throw insertErr;
                         }
 
-                        const { data: profile, error: fetchErr } = await supabaseAdmin
-                            .from('profiles')
-                            .select('credits, byok_credits')
-                            .eq('id', userId)
-                            .single();
-                            
-                        if (fetchErr) throw fetchErr;
-                        
                         const amt = parseInt(amount, 10);
-                        let updateFields = {};
+                        const seats = parseInt(seatCount || '1', 10);
                         
                         if (planType === 'byok') {
-                            updateFields = { byok_credits: amt };
-                        } else {
-                            const baseCredits = profile.credits || 0;
-                            updateFields = { credits: baseCredits + amt };
-                        }
-                        
-                        const { error: updateErr } = await supabaseAdmin
-                            .from('profiles')
-                            .update(updateFields)
-                            .eq('id', userId);
+                            const { error: updateErr } = await supabaseAdmin
+                                .from('profiles')
+                                .update({ byok_credits: 999999 })
+                                .eq('id', userId);
+                            if (updateErr) throw updateErr;
+                        } else if (planType === 'hosted') {
+                            // Find the user's team and update it, or create if missing? 
+                            // The user should already have a team created on signup, just update it based on owner_id.
+                            const { data: team, error: teamFetchErr } = await supabaseAdmin
+                                .from('teams')
+                                .select('id')
+                                .eq('owner_id', userId)
+                                .single();
+                                
+                            if (teamFetchErr && teamFetchErr.code !== 'PGRST116') {
+                                throw teamFetchErr;
+                            }
                             
-                        if (updateErr) throw updateErr;
-                        console.log(`Successfully credited ${amt} pages to user ${userId} via webhook.`);
+                            if (team) {
+                                // Update existing team
+                                const { error: updateTeamErr } = await supabaseAdmin
+                                    .from('teams')
+                                    .update({ 
+                                        audit_credits: amt,
+                                        seat_limit: seats,
+                                        stripe_subscription_id: subscription.id,
+                                        plan_tier: `hosted_${amt}`
+                                    })
+                                    .eq('id', team.id);
+                                if (updateTeamErr) throw updateTeamErr;
+                            } else {
+                                // Fallback: Team doesn't exist, create it (should be handled by signup trigger normally)
+                                const { data: newTeam, error: createTeamErr } = await supabaseAdmin
+                                    .from('teams')
+                                    .insert({
+                                        name: `Premium Team`,
+                                        owner_id: userId,
+                                        audit_credits: amt,
+                                        seat_limit: seats,
+                                        stripe_subscription_id: subscription.id,
+                                        plan_tier: `hosted_${amt}`
+                                    })
+                                    .select('id')
+                                    .single();
+                                if (createTeamErr) throw createTeamErr;
+                                
+                                await supabaseAdmin.from('profiles').update({ team_id: newTeam.id }).eq('id', userId);
+                            }
+                        }  console.log(`Successfully credited ${amt} pages to user ${userId} via webhook.`);
                     } else {
                         console.warn("Supabase Admin not configured. Webhook renewal skipped.");
                     }
@@ -308,8 +347,10 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
 
 app.use(express.json({ limit: '10mb' })); // Support larger text inputs
 
-// Serve static frontend files from current directory
-app.use(express.static(__dirname));
+// Serve static frontend files from /public directory only
+// SECURITY: Prevents .env, server.js, and other sensitive files from being downloadable
+const path = require('path');
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Route to serve public Supabase configuration parameters
 app.get('/api/config', (req, res) => {
@@ -354,18 +395,19 @@ app.post('/api/audit', requireAuth, async (req, res) => {
 
         if (connectionMode === 'hosted') {
             if (supabaseAdmin) {
-                // Atomic pre-deduction of credits via RPC
+                // Atomic pre-deduction of 1 audit credit via RPC
                 const { data: success, error: deductErr } = await supabaseAdmin
                     .rpc('deduct_user_credits', { 
                         target_user_id: req.user.id, 
-                        pages_to_deduct: pageCount, 
+                        pages_to_deduct: 1, 
                         plan_mode: 'hosted' 
                     });
+
                 if (deductErr || !success) {
-                    console.warn(`[Blocked] User ${req.user.email} attempted hosted audit with insufficient credits.`);
-                    return res.status(403).json({ error: `Forbidden: Insufficient page credits. This audit requires ${pageCount} pages.` });
+                    console.warn(`[Blocked] User ${req.user.email} attempted hosted audit with insufficient team audit credits. ${deductErr?.message || ''}`);
+                    return res.status(403).json({ error: "Forbidden: Insufficient audit credits. This audit requires 1 audit credit from your team balance." });
                 }
-                console.log(`[Authorized & Deducted] Hosted audit request by ${req.user.email} (needs ${pageCount} credits)`);
+                console.log(`[Authorized & Deducted] Hosted audit request by ${req.user.email} (needs 1 audit credit)`);
             }
 
             // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet
@@ -483,8 +525,12 @@ Please extract the required fields and return the JSON.`;
             });
 
             if (!response.ok) {
-                const errJson = await response.json().catch(() => ({}));
-                return res.status(response.status).json({ error: errJson.error?.message || `OpenAI returned status ${response.status}` });
+                let errMsg = `OpenAI returned status ${response.status}`;
+                try {
+                    const errJson = await response.json();
+                    errMsg = errJson.error?.message || errMsg;
+                } catch(e) {}
+                return res.status(response.status).json({ error: errMsg });
             }
 
             const data = await response.json();
@@ -536,8 +582,12 @@ Please extract the required fields and return the JSON.`;
             });
 
             if (!response.ok) {
-                const errJson = await response.json().catch(() => ({}));
-                return res.status(response.status).json({ error: errJson.error?.message || `Anthropic returned status ${response.status}` });
+                let errMsg = `Anthropic returned status ${response.status}`;
+                try {
+                    const errJson = await response.json();
+                    errMsg = errJson.error?.message || errJson.message || errMsg;
+                } catch(e) {}
+                return res.status(response.status).json({ error: errMsg });
             }
 
             const data = await response.json();
@@ -585,44 +635,17 @@ Please extract the required fields and return the JSON.`;
             });
 
             if (!response.ok) {
-                const errJson = await response.json().catch(() => ({}));
-                return res.status(response.status).json({ error: errJson.error?.message || `Gemini returned status ${response.status}` });
+                let errMsg = `Gemini returned status ${response.status}`;
+                try {
+                    const errJson = await response.json();
+                    errMsg = errJson.error?.message || errMsg;
+                } catch(e) {}
+                return res.status(response.status).json({ error: errMsg });
             }
 
             const data = await response.json();
             const rawText = data.candidates[0].content.parts[0].text;
             extractedData = extractAndParseJSON(rawText);
-        } 
-        
-        else if (activeProvider === 'deepseek') {
-            if (hasImages) {
-                return res.status(400).json({ error: "DeepSeek does not support vision/OCR audits. Please select OpenAI, Anthropic, or Gemini in settings." });
-            }
-            // DeepSeek OpenAI-compatible API proxy
-            const response = await fetchWithTimeout("https://api.deepseek.com/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${activeKey}`
-                },
-                body: JSON.stringify({
-                    model: activeModel,
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        { role: "user", content: userPrompt }
-                    ],
-                    response_format: { type: "json_object" },
-                    temperature: 0.1
-                })
-            });
-
-            if (!response.ok) {
-                const errJson = await response.json().catch(() => ({}));
-                return res.status(response.status).json({ error: errJson.error?.message || `DeepSeek returned status ${response.status}` });
-            }
-
-            const data = await response.json();
-            extractedData = extractAndParseJSON(data.choices[0].message.content);
         } 
         
         else {
@@ -642,10 +665,11 @@ Please extract the required fields and return the JSON.`;
         // Refund deducted page credits on failure
         if (connectionMode === 'hosted' && supabaseAdmin) {
             try {
-                await supabaseAdmin.rpc('refund_user_credits', {
-                    target_user_id: req.user.id,
-                    pages_to_refund: pageCount,
-                    plan_mode: 'hosted'
+                // Refund the single audit credit atomically via RPC
+                await supabaseAdmin.rpc('refund_user_credits', { 
+                    target_user_id: req.user.id, 
+                    pages_to_refund: 1, 
+                    plan_mode: 'hosted' 
                 });
                 console.log(`[Refund] Successfully refunded ${pageCount} credits to user ${req.user.email} due to error.`);
             } catch (refundErr) {
@@ -667,16 +691,17 @@ app.post('/api/compare', requireAuth, async (req, res) => {
 
         if (connectionMode === 'hosted') {
             if (supabaseAdmin) {
-                // Atomic pre-deduction of 1 credit for comparison
+                // Atomic pre-deduction of 1 audit credit via RPC
                 const { data: success, error: deductErr } = await supabaseAdmin
                     .rpc('deduct_user_credits', { 
                         target_user_id: req.user.id, 
                         pages_to_deduct: 1, 
                         plan_mode: 'hosted' 
                     });
+
                 if (deductErr || !success) {
                     console.warn(`[Blocked] User ${req.user.email} attempted hosted comparison with insufficient credits.`);
-                    return res.status(403).json({ error: "Forbidden: Insufficient page credits. This comparison requires 1 page credit." });
+                    return res.status(403).json({ error: "Forbidden: Insufficient audit credits. This comparison requires 1 audit credit." });
                 }
                 console.log(`[Authorized & Deducted] Hosted comparison request by ${req.user.email} (needs 1 credit)`);
             }
@@ -853,34 +878,6 @@ Please compare all fields and return the structured JSON report.`;
             return res.json(resultData);
         } 
         
-        else if (activeProvider === 'deepseek') {
-            const response = await fetchWithTimeout("https://api.deepseek.com/chat/completions", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${activeKey}`
-                },
-                body: JSON.stringify({
-                    model: activeModel,
-                    messages: [
-                        { role: "system", content: systemPrompt },
-                        { role: "user", content: userPrompt }
-                    ],
-                    response_format: { type: "json_object" },
-                    temperature: 0.1
-                })
-            });
-
-            if (!response.ok) {
-                const errJson = await response.json().catch(() => ({}));
-                return res.status(response.status).json({ error: errJson.error?.message || `DeepSeek returned status ${response.status}` });
-            }
-
-            const data = await response.json();
-            const resultData = extractAndParseJSON(data.choices[0].message.content);
-            return res.json(resultData);
-        } 
-        
         else {
             return res.status(400).json({ error: `Unsupported AI provider: ${activeProvider}` });
         }
@@ -907,7 +904,7 @@ Please compare all fields and return the structured JSON report.`;
 
 // Stripe Checkout Session Creation
 app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
-    const { amount, planType, userId, price, packageName } = req.body;
+    const { amount, planType, userId, price, packageName, seatCount } = req.body;
     
     if (!amount || !planType || !userId || !price || !packageName) {
         return res.status(400).json({ error: "Missing required fields for checkout session" });
@@ -929,19 +926,15 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
         const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
         
         const amtVal = parseInt(amount, 10);
-        let isSubscription = false;
-        let subscriptionInterval = 'year';
+        let isSubscription = true; // All plans are subscriptions now
+        let subscriptionInterval = 'month';
 
         if (planType === 'byok') {
-            isSubscription = true;
-            if (amtVal === 149) {
-                subscriptionInterval = 'month';
-            } else if (amtVal === 1299) {
+            if (amtVal === 1299) {
                 subscriptionInterval = 'year';
             }
         } else if (planType === 'hosted') {
-            if (amtVal === 8000 || amtVal === 20000) {
-                isSubscription = true;
+            if (price === 449 || price === 1799 || price === 4499 || price === 8999 || price === 22499 || price === 44999) {
                 subscriptionInterval = 'year';
             }
         }
@@ -955,32 +948,32 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
                     currency: 'usd',
                     product_data: {
                         name: `${packageName} - LeaseAlign AI`,
-                        description: displayAmount === 'Unlimited' ? 'Unlimited pages subscription for BYOK connection mode' : `Purchase of ${amount} page credits for Hosted SaaS connection mode`,
+                        description: planType === 'hosted' ? `Includes ${displayAmount} audits and ${seatCount || 1} seats` : 'Unlimited audits for BYOK connection mode',
                     },
                     unit_amount: priceInCents,
+                    recurring: { interval: subscriptionInterval },
                 },
                 quantity: 1,
             }],
-            mode: isSubscription ? 'subscription' : 'payment',
+            mode: 'subscription',
             metadata: {
                 userId: userId,
                 planType: planType,
-                amount: amount.toString()
+                amount: amount.toString(),
+                seatCount: (seatCount || 1).toString()
             },
             success_url: `${origin}/?checkout_success=true&session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${origin}/?checkout_cancel=true`,
         };
 
-        if (isSubscription) {
-            sessionParams.line_items[0].price_data.recurring = { interval: subscriptionInterval };
-            sessionParams.subscription_data = {
-                metadata: {
-                    userId: userId,
-                    planType: planType,
-                    amount: amount.toString()
-                }
-            };
-        }
+        sessionParams.subscription_data = {
+            metadata: {
+                userId: userId,
+                planType: planType,
+                amount: amount.toString(),
+                seatCount: (seatCount || 1).toString()
+            }
+        };
 
         const session = await stripe.checkout.sessions.create(sessionParams);
         
@@ -992,7 +985,7 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
 });
 
 // Stripe Session Verification
-app.get('/api/verify-checkout-session', async (req, res) => {
+app.get('/api/verify-checkout-session', requireAuth, async (req, res) => {
     const { session_id } = req.query;
     if (!session_id) {
         return res.status(400).json({ error: "Missing session_id query parameter" });
@@ -1006,6 +999,12 @@ app.get('/api/verify-checkout-session', async (req, res) => {
         const session = await stripe.checkout.sessions.retrieve(session_id);
         if (session.payment_status === 'paid') {
             const { userId, planType, amount } = session.metadata || {};
+            
+            // SECURITY: Verify the authenticated user matches the session's userId
+            if (userId && req.user && req.user.id !== userId) {
+                console.warn(`[Stripe Verification] User ${req.user.id} attempted to verify session belonging to ${userId}`);
+                return res.status(403).json({ error: 'Forbidden: Session does not belong to authenticated user.' });
+            }
             
             if (userId && planType && amount) {
                 console.log(`[Stripe Verification] Processing purchase for user ${userId}: plan ${planType}, amount ${amount}`);
@@ -1043,7 +1042,7 @@ app.get('/api/verify-checkout-session', async (req, res) => {
                     let updateFields = {};
                     
                     if (planType === 'byok') {
-                        updateFields = { byok_credits: amt };
+                        updateFields = { byok_credits: 999999 }; // Unlimited sentinel — matches DB threshold at 900000
                     } else {
                         const baseCredits = profile.credits || 0;
                         updateFields = { credits: baseCredits + amt };
@@ -1085,278 +1084,7 @@ app.get('/api/verify-checkout-session', async (req, res) => {
     }
 });
 
-// ====================================================================
-// LEADS GENERATION API
-// Target: Commercial Real Estate firms (brokers, property managers,
-//         acquisition groups, legal/title firms) for LeaseAlign AI outreach
-// Uses: Google Places API (Text Search + Place Details)
-// ====================================================================
 
-// Helper: derive a clean domain from a website URL
-function extractDomain(websiteUrl) {
-    if (!websiteUrl) return null;
-    try {
-        const url = new URL(websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`);
-        return url.hostname.replace(/^www\./, '').toLowerCase();
-    } catch {
-        return null;
-    }
-}
-
-// Helper: generate the most probable generic firm email formats from domain
-function generateFirmEmails(domain) {
-    if (!domain) return [];
-    return [
-        `info@${domain}`,
-        `contact@${domain}`,
-        `hello@${domain}`,
-        `leasing@${domain}`
-    ];
-}
-
-// Helper: generate probable person-level email patterns
-function generatePersonEmails(firstName, lastName, domain) {
-    if (!domain || !firstName || !lastName) return [];
-    const f = firstName.toLowerCase().replace(/[^a-z]/g, '');
-    const l = lastName.toLowerCase().replace(/[^a-z]/g, '');
-    if (!f || !l) return [];
-    return [
-        `${f}.${l}@${domain}`,
-        `${f[0]}${l}@${domain}`,
-        `${f}@${domain}`,
-        `${f}${l}@${domain}`
-    ];
-}
-
-// Helper: fetch a page of Google Places Text Search results
-async function searchGooglePlaces(query, apiKey, pageToken = null) {
-    const baseUrl = 'https://maps.googleapis.com/maps/api/place/textsearch/json';
-    const params = new URLSearchParams({ query, key: apiKey, type: 'establishment' });
-    if (pageToken) params.set('pagetoken', pageToken);
-    const response = await fetchWithTimeout(`${baseUrl}?${params.toString()}`, {}, 15000);
-    if (!response.ok) throw new Error(`Google Places API returned ${response.status}`);
-    return response.json();
-}
-
-// Helper: fetch detailed Place info (website, phone, formatted address)
-async function getPlaceDetails(placeId, apiKey) {
-    const fields = 'name,website,formatted_phone_number,formatted_address,international_phone_number';
-    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&key=${apiKey}`;
-    const response = await fetchWithTimeout(url, {}, 10000);
-    if (!response.ok) return null;
-    const data = await response.json();
-    return data.result || null;
-}
-
-// CRE search query templates — covers the primary buyer personas for LeaseAlign AI
-const CRE_QUERY_TEMPLATES = [
-    'commercial real estate broker',
-    'commercial property management company',
-    'commercial real estate investment firm',
-    'real estate acquisition group',
-    'commercial real estate law firm',
-    'title company commercial real estate',
-    'tenant representation broker',
-    'landlord representation commercial real estate'
-];
-
-// POST /api/leads
-// Body: { city: "Dallas, TX", limit: 100, googleApiKey: "AIza..." }
-// Returns: array of lead objects with firm name, emails, city, etc.
-app.post('/api/leads', requireAuth, async (req, res) => {
-    try {
-        const { city, limit = 25, googleApiKey } = req.body;
-
-        if (!city) {
-            return res.status(400).json({ error: 'Missing required field: city' });
-        }
-
-        const apiKey = googleApiKey || process.env.GOOGLE_PLACES_API_KEY;
-        if (!apiKey) {
-            return res.status(400).json({
-                error: 'Google Places API key is required. Pass googleApiKey in the request body or set GOOGLE_PLACES_API_KEY in server environment.'
-            });
-        }
-
-        const maxLeads = Math.min(parseInt(limit, 10) || 25, 200);
-        const leadsMap = new Map(); // keyed by place_id to deduplicate
-        const queryCount = Math.min(Math.ceil(maxLeads / 20), CRE_QUERY_TEMPLATES.length);
-
-        console.log(`[Leads API] Searching for ${maxLeads} CRE leads in: ${city}`);
-
-        // Run multiple CRE query types against the city, collecting up to maxLeads unique places
-        for (let qi = 0; qi < queryCount && leadsMap.size < maxLeads; qi++) {
-            const query = `${CRE_QUERY_TEMPLATES[qi]} in ${city}`;
-            let pageToken = null;
-            let pagesFetched = 0;
-
-            do {
-                // Google Places requires a short pause before using a next_page_token
-                if (pageToken) await new Promise(r => setTimeout(r, 2000));
-
-                let searchData;
-                try {
-                    searchData = await searchGooglePlaces(query, apiKey, pageToken);
-                } catch (err) {
-                    console.warn(`[Leads API] Search failed for query "${query}":`, err.message);
-                    break;
-                }
-
-                if (searchData.status === 'REQUEST_DENIED') {
-                    return res.status(400).json({ error: `Google Places API denied: ${searchData.error_message}` });
-                }
-
-                const places = searchData.results || [];
-                for (const place of places) {
-                    if (leadsMap.size >= maxLeads) break;
-                    if (!leadsMap.has(place.place_id)) {
-                        leadsMap.set(place.place_id, {
-                            place_id: place.place_id,
-                            firm_name: place.name,
-                            city: city,
-                            address: place.formatted_address || null,
-                            rating: place.rating || null
-                        });
-                    }
-                }
-
-                pageToken = searchData.next_page_token || null;
-                pagesFetched++;
-            } while (pageToken && leadsMap.size < maxLeads && pagesFetched < 3);
-        }
-
-        console.log(`[Leads API] Found ${leadsMap.size} unique places. Fetching details...`);
-
-        // Enrich each place with details (website → domain → emails)
-        const leads = [];
-        const placeEntries = Array.from(leadsMap.values());
-
-        // Batch detail requests with small concurrency to avoid quota limits
-        const BATCH_SIZE = 5;
-        for (let i = 0; i < placeEntries.length; i += BATCH_SIZE) {
-            const batch = placeEntries.slice(i, i + BATCH_SIZE);
-            const detailResults = await Promise.allSettled(
-                batch.map(place => getPlaceDetails(place.place_id, apiKey))
-            );
-
-            for (let j = 0; j < batch.length; j++) {
-                const base = batch[j];
-                const detailResult = detailResults[j];
-                const detail = (detailResult.status === 'fulfilled') ? detailResult.value : null;
-
-                const websiteUrl = detail?.website || null;
-                const domain = extractDomain(websiteUrl);
-                const firmEmails = generateFirmEmails(domain);
-
-                leads.push({
-                    firm_name: base.firm_name,
-                    city: base.city,
-                    address: detail?.formatted_address || base.address || null,
-                    phone: detail?.formatted_phone_number || detail?.international_phone_number || null,
-                    website: websiteUrl,
-                    domain: domain,
-                    // Generic firm-level emails (info@, contact@, leasing@)
-                    firm_email_primary: firmEmails[0] || null,
-                    firm_email_alt: firmEmails[1] || null,
-                    firm_email_leasing: firmEmails[3] || null,
-                    // Person-level data: Google Places does not provide contacts.
-                    // These fields are intentionally blank — enrich via LinkedIn Sales
-                    // Navigator, Apollo.io, or Hunter.io using the domain above.
-                    person_first_name: null,
-                    person_last_name: null,
-                    person_title: null,
-                    person_email: null,
-                    // Suggested person email formats once person name is known
-                    person_email_pattern_1: domain ? `[firstname].[lastname]@${domain}` : null,
-                    person_email_pattern_2: domain ? `[f][lastname]@${domain}` : null,
-                    // Source metadata
-                    google_place_id: base.place_id,
-                    google_rating: base.rating
-                });
-            }
-        }
-
-        console.log(`[Leads API] Returning ${leads.length} enriched leads for ${city}`);
-
-        return res.json({
-            city,
-            total: leads.length,
-            note: 'Person-level fields (person_first_name, person_last_name, person_email) require enrichment via Apollo.io, Hunter.io, or LinkedIn. Use the domain and email patterns provided.',
-            leads
-        });
-
-    } catch (error) {
-        console.error('[Leads API Error]', error);
-        return res.status(500).json({ error: error.message || 'Internal server error in leads generation' });
-    }
-});
-
-// GET /api/leads/cities
-// Returns the top US cities for commercial real estate targeting
-app.get('/api/leads/cities', requireAuth, (req, res) => {
-    const US_CRE_CITIES = [
-        "New York, NY", "Los Angeles, CA", "Chicago, IL", "Houston, TX", "Dallas, TX",
-        "Atlanta, GA", "Phoenix, AZ", "Philadelphia, PA", "San Antonio, TX", "San Diego, CA",
-        "San Jose, CA", "Austin, TX", "Jacksonville, FL", "Fort Worth, TX", "Columbus, OH",
-        "Charlotte, NC", "Indianapolis, IN", "San Francisco, CA", "Seattle, WA", "Denver, CO",
-        "Nashville, TN", "Oklahoma City, OK", "El Paso, TX", "Washington, DC", "Boston, MA",
-        "Las Vegas, NV", "Louisville, KY", "Memphis, TN", "Portland, OR", "Baltimore, MD",
-        "Milwaukee, WI", "Albuquerque, NM", "Tucson, AZ", "Fresno, CA", "Sacramento, CA",
-        "Kansas City, MO", "Mesa, AZ", "Cleveland, OH", "Raleigh, NC", "Omaha, NE",
-        "Colorado Springs, CO", "Long Beach, CA", "Virginia Beach, VA", "Minneapolis, MN",
-        "Tampa, FL", "New Orleans, LA", "Arlington, TX", "Bakersfield, CA", "Honolulu, HI",
-        "Anaheim, CA", "Aurora, CO", "Santa Ana, CA", "Corpus Christi, TX", "Riverside, CA",
-        "St. Louis, MO", "Lexington, KY", "Pittsburgh, PA", "Anchorage, AK", "Stockton, CA",
-        "Cincinnati, OH", "St. Paul, MN", "Toledo, OH", "Greensboro, NC", "Newark, NJ",
-        "Plano, TX", "Henderson, NV", "Lincoln, NE", "Buffalo, NY", "Fort Wayne, IN",
-        "Jersey City, NJ", "Chula Vista, CA", "Orlando, FL", "St. Petersburg, FL", "Laredo, TX",
-        "Norfolk, VA", "Madison, WI", "Durham, NC", "Lubbock, TX", "Winston-Salem, NC",
-        "Garland, TX", "Glendale, AZ", "Hialeah, FL", "Reno, NV", "Baton Rouge, LA",
-        "Irvine, CA", "Chesapeake, VA", "Irving, TX", "Scottsdale, AZ", "North Las Vegas, NV",
-        "Fremont, CA", "Gilbert, AZ", "San Bernardino, CA", "Boise, ID", "Birmingham, AL",
-        "Rochester, NY", "Richmond, VA", "Spokane, WA", "Des Moines, IA", "Montgomery, AL",
-        "Modesto, CA", "Fayetteville, NC", "Tacoma, WA", "Shreveport, LA", "Fontana, CA"
-    ];
-    res.json({ total: US_CRE_CITIES.length, cities: US_CRE_CITIES });
-});
-
-// POST /api/leads/export-csv
-// Body: { leads: [...] }  — converts a leads array to a downloadable CSV string
-app.post('/api/leads/export-csv', requireAuth, (req, res) => {
-    const { leads } = req.body;
-    if (!Array.isArray(leads) || leads.length === 0) {
-        return res.status(400).json({ error: 'No leads provided to export' });
-    }
-
-    const headers = [
-        'Firm Name', 'City', 'Address', 'Phone', 'Website', 'Domain',
-        'Firm Email (Primary)', 'Firm Email (Alt)', 'Firm Email (Leasing)',
-        'Person First Name', 'Person Last Name', 'Person Title', 'Person Email',
-        'Email Pattern 1', 'Email Pattern 2', 'Google Place ID', 'Google Rating'
-    ];
-
-    const escapeCSV = (val) => {
-        if (val === null || val === undefined) return '';
-        const str = String(val);
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-            return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-    };
-
-    const rows = leads.map(l => [
-        l.firm_name, l.city, l.address, l.phone, l.website, l.domain,
-        l.firm_email_primary, l.firm_email_alt, l.firm_email_leasing,
-        l.person_first_name, l.person_last_name, l.person_title, l.person_email,
-        l.person_email_pattern_1, l.person_email_pattern_2,
-        l.google_place_id, l.google_rating
-    ].map(escapeCSV).join(','));
-
-    const csv = [headers.join(','), ...rows].join('\r\n');
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="leasealign_leads_${Date.now()}.csv"`);
-    res.send(csv);
-});
 
 // Start Server
 app.listen(PORT, () => {

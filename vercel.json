@@ -6,19 +6,19 @@
       "use": "@vercel/node"
     },
     {
-      "src": "index.html",
+      "src": "public/index.html",
       "use": "@vercel/static"
     },
     {
-      "src": "styles.css",
+      "src": "public/styles.css",
       "use": "@vercel/static"
     },
     {
-      "src": "app.js",
+      "src": "public/app.js",
       "use": "@vercel/static"
     },
     {
-      "src": "assets/**",
+      "src": "public/assets/**",
       "use": "@vercel/static"
     }
   ],
@@ -31,7 +31,7 @@
     {
       "src": "/(.*)",
       "headers": { "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate" },
-      "dest": "/$1"
+      "dest": "/public/$1"
     }
   ]
 }

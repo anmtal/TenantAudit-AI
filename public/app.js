@@ -572,7 +572,18 @@ function initializeApp() {
             }
             
             if (!data || data.length === 0) {
+                historyEmptyMsg.innerHTML = `
+                    <div style="text-align: center; padding: 30px;">
+                        <h3 style="margin-bottom: 10px; color: var(--text-primary);">Welcome to LeaseAlign AI</h3>
+                        <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 14px; line-height: 1.5;">You haven't run any audits yet. Get started by uploading a lease and estoppel, or view a sample audit to see how it works.</p>
+                        <button id="btn-view-sample" class="primary-btn" style="width: auto; padding: 10px 20px; margin: 0 auto; display: block;">View Sample Audit</button>
+                    </div>
+                `;
                 historyEmptyMsg.style.display = 'block';
+                document.getElementById('btn-view-sample').addEventListener('click', () => {
+                    loadDemoAuditData();
+                    document.getElementById('history-panel').style.display = 'none';
+                });
                 return;
             }
             
@@ -586,6 +597,16 @@ function initializeApp() {
                 if (score < 50) badgeClass = 'score-badge-low';
                 else if (score < 90) badgeClass = 'score-badge-med';
                 
+                let discrepanciesHtml = '';
+                if (item.records && Array.isArray(item.records)) {
+                    const mismatches = item.records.filter(r => r.status === 'mismatch' || r.status === 'warning');
+                    if (mismatches.length > 0) {
+                        discrepanciesHtml = `<div class="history-detail-item" style="color: #ef4444; font-weight: 500;"><span>Discrepancies:</span> ${mismatches.map(m => escapeHtml(m.term)).join(', ')}</div>`;
+                    } else {
+                        discrepanciesHtml = `<div class="history-detail-item" style="color: #10b981; font-weight: 500;"><span>Discrepancies:</span> None</div>`;
+                    }
+                }
+                
                 const formattedDate = new Date(item.created_at).toLocaleString();
                 
                 card.innerHTML = `
@@ -596,9 +617,10 @@ function initializeApp() {
                     <div class="history-details">
                         <div class="history-detail-item"><span>Lease File:</span> ${escapeHtml(item.lease_file)}</div>
                         <div class="history-detail-item"><span>Estoppel:</span> ${escapeHtml(item.estoppel_file)}</div>
+                        ${discrepanciesHtml}
                         <div class="history-detail-item"><span>Red Flags:</span> ${item.red_flags}</div>
                         <div class="history-detail-item"><span>Rent:</span> ${escapeHtml(item.monthly_rent || 'N/A')}</div>
-                        <div class="history-detail-item"><span>Premises:</span> ${escapeHtml(item.premises_sf || 'N/A')}</div>
+                        <div class="history-detail-item"><span>Date:</span> ${formattedDate}</div>
                     </div>
                     <div class="history-actions">
                         <button class="btn-history-load" data-id="${item.id}">View Audit Results</button>
@@ -684,304 +706,36 @@ function initializeApp() {
                         
                         // Check if there was a pending package selection before login
                         if (window.pendingPurchase) {
-                            const { plan, amount } = window.pendingPurchase;
-                            window.pendingPurchase = null; // Clear state
-                            
-                            // Show credits modal
-                            creditsModal.classList.add('active');
-                            
-                            // Select plan and amount
-                            if (plan === 'hosted') {
-                                if (buyPlanHosted) {
-                                    buyPlanHosted.click();
-                                    creditsAmount.value = amount;
-                                }
-                            } else if (plan === 'byok') {
-                                if (buyPlanByok) {
-                                    buyPlanByok.click();
-                                    creditsAmount.value = amount;
-                                }
-                            }
-                        }
-
-                        // --- Check for Stripe Redirect Success ---
-                        const urlParams = new URLSearchParams(window.location.search);
-                        if (urlParams.get('checkout_success') === 'true' && urlParams.get('session_id')) {
-                            const sessionId = urlParams.get('session_id');
-                            showLoader("Verifying Stripe payment...");
-                            try {
-                                const response = await fetch(`/api/verify-checkout-session?session_id=${sessionId}&t=` + Date.now());
-                                const data = await response.json();
-                                if (data.success) {
-                                    const { amount, planType } = data.metadata;
-                                    const amt = parseInt(amount, 10);
-                                    
-                                    // Reload user profile & credits (updated server-side)
-                                    await loadUserProfileAndCredits();
-                                    
-                                    // Clear URL parameters
-                                    window.history.replaceState({}, document.title, window.location.pathname);
-                                    
-                                    const displayAmt = amt >= 900000 ? "Unlimited" : `+${amount}`;
-                                    alert(`🎉 Payment Verified! Successfully activated your ${planType.toUpperCase()} plan with ${displayAmt} credits.`);
-                                } else {
-                                    alert("Stripe Checkout verification failed: " + (data.error || "Unknown error"));
-                                }
-                            } catch (err) {
-                                console.error("Redirect verification error:", err);
-                                alert("Failed to verify Stripe payment: " + err.message);
-                            } finally {
-                                hideLoader();
-                            }
-                        }
-
-                        // --- Check for Stripe Redirect Cancel ---
-                        if (urlParams.get('checkout_cancel') === 'true') {
-                            window.history.replaceState({}, document.title, window.location.pathname);
-                            alert("Payment canceled. No credits were added.");
-                        }
-                    } else {
-                        isLoggedIn = false;
-                        userEmail = '';
-                        showView('home');
-                        updateNavUI();
-                        resetAppSessionState();
-                    }
-                });
-            } else {
-                console.warn("Supabase configs not loaded. Running in local fallback mode.");
-                initializeAuthFallback();
-            }
-        } catch (e) {
-            console.error("Failed to initialize Supabase:", e);
-            initializeAuthFallback();
-        }
-        document.body.setAttribute('data-initialized', 'true');
-    }
-
-    // Navigation triggers
-    if (homeLoginBtn) {
-        homeLoginBtn.addEventListener('click', () => {
-            if (isLoggedIn) {
-                showView('dashboard');
-            } else {
-                showView('login');
-            }
-        });
-    }
-    if (heroGetStartedBtn) {
-        heroGetStartedBtn.addEventListener('click', () => {
-            if (isLoggedIn) {
-                showView('dashboard');
-            } else {
-                showView('login');
-            }
-        });
-    }
-    if (loginToHomeLink) {
-        loginToHomeLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            showView('home');
-        });
-    }
-    const dashboardHomeBtn = document.getElementById('dashboard-home-btn');
-    if (dashboardHomeBtn) {
-        dashboardHomeBtn.addEventListener('click', () => {
-            showView('home');
-        });
-    }
-
-    // Pricing Switcher Tab Toggle Logic
-    const switchHostedBtn = document.getElementById('switch-hosted');
-    const switchByokBtn = document.getElementById('switch-byok');
-    const hostedGrid = document.getElementById('hosted-grid');
-    const byokGrid = document.getElementById('byok-grid');
-
-    if (switchHostedBtn && switchByokBtn && hostedGrid && byokGrid) {
-        switchHostedBtn.addEventListener('click', () => {
-            switchHostedBtn.classList.add('active');
-            switchByokBtn.classList.remove('active');
-            hostedGrid.style.display = 'grid';
-            byokGrid.style.display = 'none';
-            
-            // If logged in, sync connection mode as well
-            if (isLoggedIn) {
-                const currentMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                if (currentMode !== 'hosted') {
-                    localStorage.setItem('ta_connection_mode', 'hosted');
-                    if (settingsMode) settingsMode.value = 'hosted';
-                    const savedKey = localStorage.getItem('ta_api_key') || '';
-                    updateSettingsUI('hosted', '');
-                    selectedTopupPlan = 'hosted';
-                    if (buyPlanHosted) buyPlanHosted.click();
-                    updateCreditsDisplay();
-                }
-            }
-        });
-
-        switchByokBtn.addEventListener('click', () => {
-            switchByokBtn.classList.add('active');
-            switchHostedBtn.classList.remove('active');
-            hostedGrid.style.display = 'none';
-            byokGrid.style.display = 'flex';
-            
-            // If logged in, sync connection mode as well
-            if (isLoggedIn) {
-                const currentMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                if (currentMode !== 'byok') {
-                    localStorage.setItem('ta_connection_mode', 'byok');
-                    if (settingsMode) settingsMode.value = 'byok';
-                    const savedKey = localStorage.getItem('ta_api_key') || '';
-                    updateSettingsUI('byok', savedKey);
-                    selectedTopupPlan = 'byok';
-                    if (buyPlanByok) buyPlanByok.click();
-                    updateCreditsDisplay();
-                }
-            }
-        });
-    }
-
-    // Dynamic Pricing CTA Button Listeners
-    const pricingCtaBtns = document.querySelectorAll('.pricing-cta-btn');
-    pricingCtaBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const plan = btn.getAttribute('data-plan');
-            const amount = btn.getAttribute('data-amount');
-            
-            if (!isLoggedIn) {
-                window.pendingPurchase = { plan, amount };
-                showView('login');
-            } else {
-                // Show credits modal
-                creditsModal.classList.add('active');
-                
-                // Trigger plan switch and dropdown option selection
-                if (plan === 'hosted') {
-                    if (buyPlanHosted) {
-                        buyPlanHosted.click();
-                        creditsAmount.value = amount;
-                    }
-                } else if (plan === 'byok') {
-                    if (buyPlanByok) {
-                        buyPlanByok.click();
-                        creditsAmount.value = amount;
-                    }
-                }
-            }
-        });
-    });
-
-
-    // Event delegation on authToggleContainer to prevent listeners leak
-    if (authToggleContainer) {
-        authToggleContainer.addEventListener('click', (e) => {
-            const toggleLink = e.target.closest('#auth-toggle-link');
-            if (!toggleLink) return;
-            
-            e.preventDefault();
-            isSignUpMode = !isSignUpMode;
-            
-            if (isSignUpMode) {
-                loginTitle.textContent = "Create an Account";
-                loginSubtitle.textContent = "Sign up for LeaseAlign AI to start auditing commercial leases.";
-                loginSubmitBtn.textContent = "Register Account";
-                
-                document.querySelectorAll('.register-only').forEach(el => el.style.display = 'block');
-                if (registerFirstName) registerFirstName.required = true;
-                if (registerLastName) registerLastName.required = true;
-                if (registerCompany) registerCompany.required = true;
-                
-                authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
-            } else {
-                loginTitle.textContent = "Sign In to LeaseAlign AI";
-                loginSubtitle.textContent = "Enter your credentials to access your transaction dashboard";
-                loginSubmitBtn.textContent = "Sign In";
-                
-                document.querySelectorAll('.register-only').forEach(el => el.style.display = 'none');
-                if (registerFirstName) registerFirstName.required = false;
-                if (registerLastName) registerLastName.required = false;
-                if (registerCompany) registerCompany.required = false;
-                
-                authToggleContainer.innerHTML = 'Don\'t have an account? <a href="#" id="auth-toggle-link">Sign Up</a>';
-            }
-        });
-    }
-
-    if (loginForm) {
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = loginEmail.value.trim();
-            const password = loginPassword.value;
-
-            if (!email || !password) return;
-
-            loginErrorMsg.style.display = 'none';
-            loginSubmitBtn.disabled = true;
-            const originalText = loginSubmitBtn.textContent;
-            loginSubmitBtn.textContent = isSignUpMode ? "Registering..." : "Signing In...";
-
-            try {
-                if (supabase) {
-                    if (isSignUpMode) {
-                        const firstName = registerFirstName ? registerFirstName.value.trim() : '';
-                        const lastName = registerLastName ? registerLastName.value.trim() : '';
-                        const company = registerCompany ? registerCompany.value.trim() : '';
-
-                        localStorage.setItem('ta_fresh_login', 'true');
-                        const { data, error } = await supabase.auth.signUp({
-                            email: email,
-                            password: password,
-                            options: {
-                                data: {
-                                    first_name: firstName,
-                                    last_name: lastName,
-                                    company_name: company
-                                }
-                            }
-                        });
-                        if (error) {
-                            localStorage.removeItem('ta_fresh_login');
-                            throw error;
-                        }
-                        alert("🎉 Account created successfully! Please top up your page credits to begin auditing.");
-                    } else {
-                        localStorage.setItem('ta_fresh_login', 'true');
-                        const { data, error } = await supabase.auth.signInWithPassword({
-                            email: email,
-                            password: password
-                        });
-                        if (error) {
-                            localStorage.removeItem('ta_fresh_login');
-                            throw error;
-                        }
-                    }
-                } else {
-                    localStorage.setItem('ta_logged_in', 'true');
-                    localStorage.setItem('ta_user_email', email);
-                    isLoggedIn = true;
-                    userEmail = email;
-                    userEmailDisplay.textContent = userEmail;
-                    loginErrorMsg.style.display = 'none';
-                    showView('dashboard');
-                    updateNavUI();
-                    
-                    // Check if there was a pending package selection before login
-                    if (window.pendingPurchase) {
-                        const { plan, amount } = window.pendingPurchase;
+                        const { plan, amount, price, seats, packageName } = window.pendingPurchase;
                         window.pendingPurchase = null; // Clear state
-                        
-                        creditsModal.classList.add('active');
-                        if (plan === 'hosted') {
-                            if (buyPlanHosted) {
-                                buyPlanHosted.click();
-                                creditsAmount.value = amount;
+                        showLoader("Connecting to payment checkout...");
+                        try {
+                            const { data: { user } } = await supabase.auth.getUser();
+                            const response = await fetch('/api/create-checkout-session', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    amount: parseInt(amount, 10),
+                                    planType: plan,
+                                    userId: user.id,
+                                    price: parseInt(price, 10),
+                                    seatCount: parseInt(seats, 10),
+                                    packageName: packageName
+                                })
+                            });
+                            const sessionData = await response.json();
+                            hideLoader();
+                            if (sessionData.error) throw new Error(sessionData.error);
+                            if (sessionData.url) {
+                                window.location.href = sessionData.url;
+                            } else {
+                                throw new Error("Stripe checkout session creation failed.");
                             }
-                        } else if (plan === 'byok') {
-                            if (buyPlanByok) {
-                                buyPlanByok.click();
-                                creditsAmount.value = amount;
-                            }
+                        } catch(err) {
+                            hideLoader();
+                            alert("Error initiating checkout: " + err.message);
                         }
+                    }
                     }
                 }
             } catch (err) {
@@ -1030,13 +784,13 @@ function initializeApp() {
 
     // Credits Modal Handlers
     const handleTopupClick = () => {
-        creditsModal.classList.add('active');
-        // Sync with user's current plan type
-        if (activePlanType === 'hosted') {
-            if (buyPlanHosted) buyPlanHosted.click();
-        } else {
-            if (buyPlanByok) buyPlanByok.click();
-        }
+        showView('home');
+        setTimeout(() => {
+            const pricingSection = document.getElementById('pricing-section');
+            if (pricingSection) {
+                pricingSection.scrollIntoView({ behavior: 'smooth' });
+            }
+        }, 100);
     };
 
     if (creditsTopupTrigger) {

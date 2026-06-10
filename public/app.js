@@ -364,7 +364,7 @@ function initializeApp() {
                 topupBalanceValue.style.color = 'var(--color-emerald)';
             } else {
                 const displayBal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
-                topupBalanceValue.textContent = `${displayBal} Hosted SaaS Pages`;
+                topupBalanceValue.textContent = `${displayBal} Hosted SaaS Audits`;
                 topupBalanceValue.style.color = 'var(--color-purple)';
             }
         }
@@ -444,7 +444,7 @@ function initializeApp() {
             let profileData = null;
             const { data, error } = await supabase
                 .from('profiles')
-                .select('credits, byok_credits')
+                .select('credits, byok_credits, teams(audit_credits)')
                 .eq('id', user.id)
                 .single();
                 
@@ -458,8 +458,12 @@ function initializeApp() {
             // Seat enforcement checks have been removed to support multi-seat plans.
 
             if (profileData) {
-                console.log("Fetched profile credits. Hosted:", profileData.credits, "BYOK:", profileData.byok_credits);
-                hostedCredits = profileData.credits || 0;
+                const teamAuditCredits = profileData.teams && profileData.teams.audit_credits !== undefined
+                    ? profileData.teams.audit_credits
+                    : profileData.credits || 0;
+
+                console.log("Fetched profile credits. Hosted:", teamAuditCredits, "BYOK:", profileData.byok_credits);
+                hostedCredits = teamAuditCredits;
                 byokCredits = profileData.byok_credits || 0;
             } else {
                 console.log("No profile data returned for user:", user.id);
@@ -1981,9 +1985,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);
             const totalPagesNeeded = leasePagesCount + estoppelPagesCount;
             
-            if (connectionMode !== 'byok' && pageCredits < totalPagesNeeded) {
+            if (connectionMode !== 'byok' && pageCredits < 1) {
                 hideLoader();
-                alert(`🚫 Insufficient page credits! This audit requires ${totalPagesNeeded} pages, but you only have ${pageCredits} pages left. Please top up your credits.`);
+                alert(`🚫 Insufficient audit credits! This audit requires 1 audit credit, but you only have ${pageCredits} credits left. Please top up your credits.`);
                 creditsModal.classList.add('active');
                 return;
             }
@@ -2094,7 +2098,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
                     if (connectionMode !== 'byok') {
                         if (hostedCredits < 900000) {
-                            hostedCredits -= totalPagesNeeded;
+                            hostedCredits -= 1;
                             localStorage.setItem('ta_hosted_credits', hostedCredits);
                         }
                     }
@@ -2107,7 +2111,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     alert(`🎉 Audit completed successfully using your custom API Key!`);
                 } else {
                     const isUnlimited = hostedCredits >= 900000;
-                    const deductMsg = isUnlimited ? "" : ` Deducted ${totalPagesNeeded} page credits.`;
+                    const deductMsg = isUnlimited ? "" : ` Deducted 1 audit credit.`;
                     alert(`🎉 Audit completed successfully!${deductMsg}`);
                 }
             } catch (err) {

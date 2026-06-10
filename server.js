@@ -589,62 +589,7 @@ Please extract the required fields and return the JSON.`;
             const data = await response.json();
             const rawContent = data.content[0].text;
             extractedData = extractAndParseJSON(rawContent);
-        } 
-        
-        else if (activeProvider === 'gemini') {
-            let parts = [{ text: userPrompt }];
-            if (hasImages) {
-                for (const img of images) {
-                    const match = img.match(/^data:(image\/\w+);base64,(.+)$/);
-                    if (match) {
-                        const mimeType = match[1];
-                        const base64Data = match[2];
-                        parts.push({
-                            inlineData: {
-                                mimeType: mimeType,
-                                data: base64Data
-                            }
-                        });
-                    }
-                }
-            }
-
-            // Google Gemini generateContent API (supports json output mime type)
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${activeKey}`;
-            const response = await fetchWithTimeout(url, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    contents: [
-                        { parts: parts }
-                    ],
-                    systemInstruction: {
-                        parts: [{ text: systemPrompt }]
-                    },
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        temperature: 0.1
-                    }
-                })
-            });
-
-            if (!response.ok) {
-                let errMsg = `Gemini returned status ${response.status}`;
-                try {
-                    const errJson = await response.json();
-                    errMsg = errJson.error?.message || errMsg;
-                } catch(e) {}
-                return res.status(response.status).json({ error: errMsg });
-            }
-
-            const data = await response.json();
-            const rawText = data.candidates[0].content.parts[0].text;
-            extractedData = extractAndParseJSON(rawText);
-        } 
-        
-        else {
+        } else {
             return res.status(400).json({ error: `Unsupported AI provider: ${activeProvider}` });
         }
 
@@ -845,34 +790,6 @@ Please compare all fields and return the structured JSON report.`;
             const data = await response.json();
             const rawContent = data.content[0].text;
             const resultData = extractAndParseJSON(rawContent);
-            return res.json(resultData);
-        } 
-        
-        else if (activeProvider === 'gemini') {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${activeModel}:generateContent?key=${activeKey}`;
-            const response = await fetchWithTimeout(url, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: userPrompt }] }],
-                    systemInstruction: { parts: [{ text: systemPrompt }] },
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        temperature: 0.1
-                    }
-                })
-            });
-
-            if (!response.ok) {
-                const errJson = await response.json().catch(() => ({}));
-                return res.status(response.status).json({ error: errJson.error?.message || `Gemini returned status ${response.status}` });
-            }
-
-            const data = await response.json();
-            const rawText = data.candidates[0].content.parts[0].text;
-            const resultData = extractAndParseJSON(rawText);
             return res.json(resultData);
         } 
         

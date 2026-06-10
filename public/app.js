@@ -264,13 +264,9 @@ function initializeApp() {
             { value: 'gpt-4o', label: 'GPT-4o (Deep Legal Audit)' }
         ],
         anthropic: [
-            { value: 'claude-sonnet-4-6', label: 'Claude 3.5 Sonnet' },
+            { value: 'claude-sonnet-4-6', label: 'Claude 4.6 Sonnet (Latest)' },
             { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus (Most Capable)' },
             { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (Fast & Cheap)' }
-        ],
-        gemini: [
-            { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-            { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' }
         ]
     };
 

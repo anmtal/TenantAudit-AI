@@ -2807,14 +2807,18 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     if (btnMonthly && btnAnnual) {
         btnMonthly.addEventListener('click', () => {
             currentPeriod = 'monthly';
-            btnMonthly.classList.add('active');
-            btnAnnual.classList.remove('active');
+            btnMonthly.classList.add('btn-primary');
+            btnMonthly.classList.remove('btn-secondary');
+            btnAnnual.classList.add('btn-secondary');
+            btnAnnual.classList.remove('btn-primary');
             updateGrids();
         });
         btnAnnual.addEventListener('click', () => {
             currentPeriod = 'annual';
-            btnAnnual.classList.add('active');
-            btnMonthly.classList.remove('active');
+            btnAnnual.classList.add('btn-primary');
+            btnAnnual.classList.remove('btn-secondary');
+            btnMonthly.classList.add('btn-secondary');
+            btnMonthly.classList.remove('btn-primary');
             updateGrids();
         });
     }

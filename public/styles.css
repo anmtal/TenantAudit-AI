@@ -1752,11 +1752,7 @@ select option {
     gap: 10px;
 }
 
-.pricing-features-list li::before {
-    content: '✓';
-    color: var(--color-emerald);
-    font-weight: bold;
-}
+
 
 .pricing-cta-btn {
     width: 100%;

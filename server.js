@@ -139,16 +139,8 @@ async function requireAuth(req, res, next) {
             return res.status(401).json({ error: "Unauthorized: Invalid or expired session token." });
         }
 
-        // Verify active session for single-seat restriction using auth user metadata
-        const clientSessionId = req.headers['x-session-id'] || req.headers['X-Session-ID'];
-        const activeSessionId = user.user_metadata?.active_session_id;
-        if (activeSessionId && activeSessionId !== clientSessionId) {
-            console.warn(`[Blocked] Session mismatch for user ${user.email}. Auth Metadata: ${activeSessionId}, Header: ${clientSessionId}`);
-            return res.status(403).json({
-                error: "session_mismatch",
-                message: "Your account is logged in on another device. This subscription is limited to 1 active seat."
-            });
-        }
+        // Session validation has been relaxed to support multi-seat plans.
+        // We no longer block based on strict active_session_id matches.
 
         req.user = user;
         next();

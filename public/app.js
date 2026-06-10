@@ -454,53 +454,8 @@ function initializeApp() {
                 profileData = data;
             }
             
-            // Real-time seat enforcement check using auth user metadata
-            const currentSessionId = localStorage.getItem('ta_session_id');
-            const isFreshLogin = localStorage.getItem('ta_fresh_login') === 'true';
-            const sessionTimestampStr = localStorage.getItem('ta_session_timestamp');
-            const sessionAge = sessionTimestampStr ? (Date.now() - parseInt(sessionTimestampStr, 10)) : Infinity;
-            // activeSessionId is already retrieved from metadata above
             
-            // If there is an active session mismatch, retry fetching metadata up to 3 times to allow propagation
-            const maxRetries = 3;
-            if (activeSessionId && currentSessionId && activeSessionId !== currentSessionId && !isFreshLogin && sessionAge >= 10000) {
-                console.log(`[Seat Enforcement Mismatch Detection] Metadata Session (${activeSessionId}) !== Local Session (${currentSessionId}). Initiating propagation check...`);
-                for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                    console.log(`[Seat Enforcement Retry] Waiting 1000ms before re-fetching user metadata (Attempt ${attempt}/${maxRetries})...`);
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    try {
-                        const authRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
-                            headers: {
-                                'apikey': supabaseAnonKey,
-                                'Authorization': `Bearer ${session.access_token}`
-                            }
-                        });
-                        if (authRes.ok) {
-                            const freshUser = await authRes.json();
-                            activeSessionId = freshUser.user_metadata?.active_session_id;
-                            if (activeSessionId === currentSessionId) {
-                                console.log("[Seat Enforcement Sync Success] active_session_id matches after retry!");
-                                break;
-                            }
-                        }
-                    } catch (e) {
-                        console.warn("[Seat Enforcement Retry Error] Failed to fetch fresh metadata:", e);
-                    }
-                }
-            }
-            
-            if (isFreshLogin) {
-                console.log("[Seat Enforcement] Fresh login detected. Overriding active_session_id.");
-                localStorage.removeItem('ta_fresh_login');
-            } else if (sessionAge < 10000) {
-                console.log("[Seat Enforcement Grace] Session ID was generated recently (age under 10s). Bypassing mismatch check for metadata propagation.");
-            } else if (activeSessionId && currentSessionId && activeSessionId !== currentSessionId) {
-                console.warn(`[Seat Enforcement Mismatch Confirmed] Auth Metadata Session: ${activeSessionId}, Local Session: ${currentSessionId}`);
-                alert("🚫 Multiple active sessions detected. Your account has been logged in on another device/browser.");
-                await handleLogout();
-                return;
-            }
+            // Seat enforcement checks have been removed to support multi-seat plans.
 
             if (profileData) {
                 console.log("Fetched profile credits. Hosted:", profileData.credits, "BYOK:", profileData.byok_credits);
@@ -2228,12 +2183,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         });
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            if (errorData.error === 'session_mismatch') {
-                alert(`🚫 ${errorData.message || "Multiple active sessions detected. Account is restricted to 1 active seat."}`);
-                await handleLogout();
-                throw new Error(errorData.message);
-            }
             throw new Error(errorData.error || `Server returned error status ${response.status}`);
         }
 
@@ -2454,12 +2403,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     renderAuditResults();
                     console.log("[AI Verification] Compliance audit successfully verified & refined semantically.");
                 } else {
-                    const errData = await response.json().catch(() => ({}));
-                    if (errData.error === 'session_mismatch') {
-                        alert(`🚫 ${errData.message || "Multiple active sessions detected. Account is restricted to 1 active seat."}`);
-                        await handleLogout();
-                        return;
-                    }
                     console.error("[AI Verification Failed] Backend returned status error:", errData.error || response.status);
                 }
             } catch (e) {

@@ -409,6 +409,8 @@ app.post('/api/audit', requireAuth, async (req, res) => {
             activeProvider = 'anthropic';
             activeModel = 'claude-3-5-sonnet-latest';
             
+            console.log(`[DEBUG] Hosted activeKey starts with: ${activeKey ? activeKey.substring(0, 15) : 'UNDEFINED'}...`);
+            
             if (!activeKey) {
                 return res.status(500).json({ 
                     error: "SaaS Anthropic API Key is not configured on the backend server. Please switch to BYOK Mode in settings." 

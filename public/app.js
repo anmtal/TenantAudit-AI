@@ -1953,7 +1953,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     await loadAuditHistory();
                 } else {
                     // Fallback mock mode
-                    const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
                     if (connectionMode !== 'byok') {
                         if (hostedCredits < 900000) {
                             hostedCredits -= 1;
@@ -1964,7 +1963,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 }
                 
                 hideLoader();
-                const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
                 if (connectionMode === 'byok') {
                     showToast(`🎉 Audit completed successfully using your custom API Key!`, 'success');
                 } else {

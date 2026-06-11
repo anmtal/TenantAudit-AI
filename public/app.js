@@ -336,34 +336,54 @@ function initializeApp() {
 
     function updateCreditsDisplay() {
         const mode = localStorage.getItem('ta_connection_mode') || 'hosted';
+        const apiKey = sessionStorage.getItem('ta_api_key');
+        
+        const suffixEl = document.getElementById('credits-count-suffix');
+        const homeSuffixEl = document.getElementById('home-credits-suffix');
 
         if (mode === 'byok') {
-            hostedCredits = 999999; // BYOK is always Unlimited page audits on our platform
-        } else {
-            hostedCredits = hostedCredits;
-        }
-        
-        const displayVal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
-        creditsCountDisplay.textContent = displayVal;
-        if (homeCreditsCount) {
-            homeCreditsCount.textContent = displayVal;
-        }
-
-        // Apply color styles for credits pill depending on mode
-        if (creditsTopupTrigger) {
-            if (mode === 'byok') {
-                creditsTopupTrigger.classList.remove('credits-low', 'credits-empty');
-                creditsTopupTrigger.style.color = 'var(--color-emerald)';
-                creditsTopupTrigger.style.borderColor = 'rgba(16, 185, 129, 0.25)';
-                creditsTopupTrigger.style.background = 'rgba(16, 185, 129, 0.08)';
+            if (!apiKey) {
+                hostedCredits = 0;
+                creditsCountDisplay.textContent = "API Key Required";
+                if (homeCreditsCount) homeCreditsCount.textContent = "API Key Required";
+                if (suffixEl) suffixEl.style.display = 'none';
+                if (homeSuffixEl) homeSuffixEl.style.display = 'none';
+                
+                if (creditsTopupTrigger) {
+                    creditsTopupTrigger.classList.remove('credits-low', 'credits-empty');
+                    creditsTopupTrigger.style.color = 'var(--color-orange)';
+                    creditsTopupTrigger.style.borderColor = 'rgba(249, 115, 22, 0.4)';
+                    creditsTopupTrigger.style.background = 'rgba(249, 115, 22, 0.08)';
+                }
             } else {
+                hostedCredits = 999999; // BYOK is always Unlimited
+                creditsCountDisplay.textContent = "Unlimited";
+                if (homeCreditsCount) homeCreditsCount.textContent = "Unlimited";
+                
+                if (suffixEl) { suffixEl.style.display = 'inline'; suffixEl.textContent = "Audits"; }
+                if (homeSuffixEl) { homeSuffixEl.style.display = 'inline'; homeSuffixEl.textContent = "Pages"; }
+
+                if (creditsTopupTrigger) {
+                    creditsTopupTrigger.classList.remove('credits-low', 'credits-empty');
+                    creditsTopupTrigger.style.color = 'var(--color-emerald)';
+                    creditsTopupTrigger.style.borderColor = 'rgba(16, 185, 129, 0.25)';
+                    creditsTopupTrigger.style.background = 'rgba(16, 185, 129, 0.08)';
+                }
+            }
+        } else {
+            const displayVal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
+            creditsCountDisplay.textContent = displayVal;
+            if (homeCreditsCount) homeCreditsCount.textContent = displayVal;
+            
+            if (suffixEl) { suffixEl.style.display = 'inline'; suffixEl.textContent = "Audits Left"; }
+            if (homeSuffixEl) { homeSuffixEl.style.display = 'inline'; homeSuffixEl.textContent = "Pages Left"; }
+
+            if (creditsTopupTrigger) {
                 creditsTopupTrigger.style.color = '';
                 creditsTopupTrigger.style.borderColor = '';
                 creditsTopupTrigger.style.background = '';
                 updateCreditsPillColor(hostedCredits);
             }
-        } else {
-            updateCreditsPillColor(hostedCredits);
         }
 
         // Sync header mode switcher toggle buttons

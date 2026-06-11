@@ -196,7 +196,15 @@ function initializeApp() {
     const userEmailDisplay = document.getElementById('user-email-display');
     const creditsCountDisplay = document.getElementById('credits-count-display');
     const creditsTopupTrigger = document.getElementById('credits-topup-trigger');
-        let selectedTopupPlan = 'hosted';
+        
+    const creditsModal = document.getElementById('credits-modal');
+    const closeCreditsBtn = document.getElementById('close-credits-btn');
+    const creditsForm = document.getElementById('credits-form');
+    const creditsAmount = document.getElementById('credits-amount');
+    const buyPlanHosted = document.getElementById('buy-plan-hosted');
+    const buyPlanByok = document.getElementById('buy-plan-byok');
+
+    let selectedTopupPlan = 'hosted';
 
     const leaseDropZone = document.getElementById('lease-drop-zone');
     const estoppelDropZone = document.getElementById('estoppel-drop-zone');

@@ -2032,11 +2032,15 @@ select option {
 }
 
 .toast {
-    background: white;
-    color: var(--text-main);
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--text-primary);
     padding: 16px 20px;
-    border-radius: var(--radius-md);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.05);
+    border-radius: var(--border-radius-lg);
+    border: 1px solid var(--card-border);
+    border-left: 4px solid var(--color-purple);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
     display: flex;
     align-items: flex-start;
     gap: 12px;
@@ -2044,9 +2048,8 @@ select option {
     max-width: 400px;
     transform: translateX(120%);
     opacity: 0;
-    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.4s ease;
+    transition: var(--transition-smooth);
     pointer-events: auto;
-    border-left: 4px solid var(--color-blue);
 }
 
 .toast.show {
@@ -2065,8 +2068,10 @@ select option {
 
 .toast-title {
     font-weight: 600;
+    font-family: var(--font-heading);
     font-size: 15px;
     margin-bottom: 4px;
+    color: var(--text-primary);
 }
 
 .toast-message {
@@ -2080,16 +2085,14 @@ select option {
     border: none;
     color: var(--text-muted);
     cursor: pointer;
-    padding: 0;
-    margin-left: 8px;
-    transition: color 0.2s;
+    padding: 4px;
+    transition: var(--transition-smooth);
 }
 
 .toast-close:hover {
-    color: var(--text-main);
+    color: var(--text-primary);
 }
 
-/* Toast Variants */
 .toast.success {
     border-left-color: var(--color-emerald);
 }

@@ -1833,7 +1833,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
                 if (attempt > 1) {
-                    onProgress(0, 0, `Retry attempt ${attempt}/${maxRetries} (Recovering from error...)`);
+                    showLoader(`Retry attempt ${attempt}/${maxRetries} (Recovering from error...)`);
                     console.log(`[Retry] Attempt ${attempt} of ${maxRetries}`);
                 }
 

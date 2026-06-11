@@ -131,9 +131,20 @@ function extractAndParseJSON(rawText) {
     }
     
     // Find the bounds of the JSON object
-    const startIdx = cleanText.indexOf('{');
-    const endIdx = cleanText.lastIndexOf('}');
-    if (startIdx !== -1 && endIdx !== -1) {
+    const firstBrace = cleanText.indexOf('{');
+    const firstBracket = cleanText.indexOf('[');
+    let startIdx = -1;
+    let endIdx = -1;
+    
+    if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+        startIdx = firstBrace;
+        endIdx = cleanText.lastIndexOf('}');
+    } else if (firstBracket !== -1) {
+        startIdx = firstBracket;
+        endIdx = cleanText.lastIndexOf(']');
+    }
+    
+    if (startIdx !== -1 && endIdx !== -1 && startIdx < endIdx) {
         cleanText = cleanText.substring(startIdx, endIdx + 1).trim();
     }
     
@@ -150,6 +161,38 @@ function extractAndParseJSON(rawText) {
         }
     }
 }
+
+
+app.post('/api/refund-credit', requireAuth, async (req, res) => {
+    try {
+        const { transactionId, planMode } = req.body;
+        if (!transactionId) return res.status(400).json({ error: 'Missing transactionId' });
+        
+        // Ensure this transaction exists for the user's team
+        const { data: teamData } = await supabaseAdmin.from('profiles').select('team_id').eq('id', req.user.id).single();
+        if (!teamData || !teamData.team_id) return res.status(400).json({ error: 'User has no team' });
+        
+        const { data: transExists } = await supabaseAdmin.from('audit_transactions').select('id').eq('transaction_id', transactionId).eq('team_id', teamData.team_id).single();
+        if (!transExists) return res.status(404).json({ error: 'Transaction not found or not owned by user' });
+        
+        // Trigger the refund
+        const { error } = await supabaseAdmin.rpc('refund_user_credits', {
+            target_user_id: req.user.id,
+            pages_to_refund: 1,
+            plan_mode: planMode || 'hosted'
+        });
+        
+        if (error) throw error;
+        
+        // Optionally delete the transaction record so it can't be refunded again (prevent double refunds)
+        await supabaseAdmin.from('audit_transactions').delete().eq('transaction_id', transactionId);
+        
+        return res.json({ success: true, message: "Credit refunded successfully" });
+    } catch (e) {
+        console.error("Refund error:", e);
+        return res.status(500).json({ error: e.message });
+    }
+});
 
 // Stripe Webhook Endpoint (MUST be defined before express.json() to capture raw body Buffer)
 app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async (req, res) => {

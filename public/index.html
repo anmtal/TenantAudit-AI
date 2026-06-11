@@ -625,7 +625,11 @@
                     </div>
                 </div>
 
-                <!-- Dashboard Actions -->
+                                    <div class="checkbox-group" style="margin-top: 15px; margin-bottom: 10px;">
+                        <input type="checkbox" id="force-ocr-checkbox">
+                        <label for="force-ocr-checkbox" style="font-weight: 500;">Force OCR / Vision Mode (Use if your PDF is scanned or image-based)</label>
+                    </div>
+                    <!-- Dashboard Actions -->
                 <div style="display: flex; gap: 16px; justify-content: flex-end; margin-top: 10px;">
                     <button class="btn btn-primary" id="start-audit-btn" disabled>
                         <i data-lucide="search"></i> Run AI Lease Audit
@@ -920,6 +924,25 @@
             <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
                 <button type="button" class="btn btn-secondary" id="disclaimer-cancel-btn">Cancel</button>
                 <button type="button" class="btn btn-primary" id="disclaimer-proceed-btn" disabled>Accept & Start Audit</button>
+            </div>
+        </div>
+    </div>
+
+    
+    <!-- 8. RAW EXTRACTION MODAL -->
+    <div class="modal-overlay" id="raw-extraction-modal">
+        <div class="modal-card" style="max-width: 800px; width: 90%;">
+            <button class="modal-close-btn" id="close-raw-extraction-btn">&times;</button>
+            <div class="modal-title-wrapper">
+                <h3><i data-lucide="code" class="inline-icon"></i> Raw LLM Extraction</h3>
+                <p>The AI returned the following raw text which could not be automatically parsed into the dashboard.</p>
+            </div>
+            <div style="background: var(--bg-dark); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); margin-top: 15px; max-height: 400px; overflow-y: auto;">
+                <pre id="raw-extraction-content" style="white-space: pre-wrap; font-family: monospace; font-size: 13px; color: var(--text-primary); margin: 0;"></pre>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" id="raw-extraction-copy-btn">Copy to Clipboard</button>
+                <button type="button" class="btn btn-primary" id="raw-extraction-done-btn">Done</button>
             </div>
         </div>
     </div>

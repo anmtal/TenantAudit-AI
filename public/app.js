@@ -152,7 +152,7 @@ function initializeApp() {
     let auditData = null;
     let currentAuditTransactionId = null;
     let isLoggedIn = false;
-    let pageCredits = 0;
+    let hostedCredits = 0;
     let hostedCredits = 0;
     let byokCredits = 0;
     let userEmail = '';
@@ -203,6 +203,36 @@ function initializeApp() {
     
     const startAuditBtn = document.getElementById('start-audit-btn');
     const auditLoader = document.getElementById('audit-loader');
+
+    const rawExtractionModal = document.getElementById('raw-extraction-modal');
+    const closeRawExtractionBtn = document.getElementById('close-raw-extraction-btn');
+    const rawExtractionCopyBtn = document.getElementById('raw-extraction-copy-btn');
+    const rawExtractionDoneBtn = document.getElementById('raw-extraction-done-btn');
+    const rawExtractionContent = document.getElementById('raw-extraction-content');
+    const forceOcrCheckbox = document.getElementById('force-ocr-checkbox');
+    
+    if (closeRawExtractionBtn) closeRawExtractionBtn.addEventListener('click', () => rawExtractionModal.classList.remove('active'));
+    if (rawExtractionDoneBtn) rawExtractionDoneBtn.addEventListener('click', () => rawExtractionModal.classList.remove('active'));
+    if (rawExtractionCopyBtn) rawExtractionCopyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(rawExtractionContent.textContent);
+        showToast("Raw LLM extraction copied to clipboard!", "success");
+    });
+    
+
+    const rawExtractionModal = document.getElementById('raw-extraction-modal');
+    const closeRawExtractionBtn = document.getElementById('close-raw-extraction-btn');
+    const rawExtractionCopyBtn = document.getElementById('raw-extraction-copy-btn');
+    const rawExtractionDoneBtn = document.getElementById('raw-extraction-done-btn');
+    const rawExtractionContent = document.getElementById('raw-extraction-content');
+    const forceOcrCheckbox = document.getElementById('force-ocr-checkbox');
+    
+    if (closeRawExtractionBtn) closeRawExtractionBtn.addEventListener('click', () => rawExtractionModal.classList.remove('active'));
+    if (rawExtractionDoneBtn) rawExtractionDoneBtn.addEventListener('click', () => rawExtractionModal.classList.remove('active'));
+    if (rawExtractionCopyBtn) rawExtractionCopyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(rawExtractionContent.textContent);
+        showToast("Raw JSON copied to clipboard!", "success");
+    });
+    
     const loaderStatusText = document.getElementById('loader-status-text');
 
     // Disclaimer Modal Elements
@@ -309,12 +339,12 @@ function initializeApp() {
         const mode = localStorage.getItem('ta_connection_mode') || 'hosted';
 
         if (mode === 'byok') {
-            pageCredits = 999999; // BYOK is always Unlimited page audits on our platform
+            hostedCredits = 999999; // BYOK is always Unlimited page audits on our platform
         } else {
-            pageCredits = hostedCredits;
+            hostedCredits = hostedCredits;
         }
         
-        const displayVal = pageCredits >= 900000 ? "Unlimited" : pageCredits;
+        const displayVal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
         creditsCountDisplay.textContent = displayVal;
         if (homeCreditsCount) {
             homeCreditsCount.textContent = displayVal;
@@ -331,10 +361,10 @@ function initializeApp() {
                 creditsTopupTrigger.style.color = '';
                 creditsTopupTrigger.style.borderColor = '';
                 creditsTopupTrigger.style.background = '';
-                updateCreditsPillColor(pageCredits);
+                updateCreditsPillColor(hostedCredits);
             }
         } else {
-            updateCreditsPillColor(pageCredits);
+            updateCreditsPillColor(hostedCredits);
         }
 
         // Sync header mode switcher toggle buttons
@@ -1542,7 +1572,10 @@ function initializeApp() {
                     const numPages = pdf.numPages;
                     let fullText = [];
 
-                    for (let i = 1; i <= numPages; i++) {
+                    if (numPages > 50) {
+            throw new Error(`Document has ${numPages} pages. Maximum allowed is 50 pages to prevent LLM context limits.`);
+        }
+        for (let i = 1; i <= numPages; i++) {
                         if (onProgress) onProgress(i, numPages);
                         const page = await pdf.getPage(i);
                         const textContent = await page.getTextContent();
@@ -1631,6 +1664,9 @@ function initializeApp() {
         
         // Step 1: Extract raw text first to determine if scanned
         let pagesText = [];
+        if (numPages > 50) {
+            throw new Error(`Document has ${numPages} pages. Maximum allowed is 50 pages to prevent LLM context limits.`);
+        }
         for (let i = 1; i <= numPages; i++) {
             onProgress(i, numPages, `Extracting raw text: Page ${i}/${numPages}`);
             const page = await pdfDoc.getPage(i);
@@ -1639,7 +1675,11 @@ function initializeApp() {
             pagesText.push({ pageNum: i, text: pageText });
         }
         
-        const isScanned = isScannedPDF(pagesText);
+        let isScanned = isScannedPDF(pagesText);
+        if (forceOcrCheckbox && forceOcrCheckbox.checked) {
+            console.log(`[OCR Check] User forced OCR Vision Mode.`);
+            isScanned = true;
+        }
         console.log(`[OCR Check] ${docType} document isScanned: ${isScanned}`);
         
         if (!isScanned) {
@@ -1784,7 +1824,18 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             return;
         }
 
-        try {
+
+        let maxRetries = 3;
+        let lastError = null;
+        let success = false;
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                if (attempt > 1) {
+                    onProgress(0, 0, `Retry attempt ${attempt}/${maxRetries} (Recovering from error...)`);
+                    console.log(`[Retry] Attempt ${attempt} of ${maxRetries}`);
+                }
+
             currentAuditTransactionId = generateUUID();
             showLoader("Initializing audit process...");
             
@@ -1792,9 +1843,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);
             const totalPagesNeeded = leasePagesCount + estoppelPagesCount;
             
-            if (connectionMode !== 'byok' && pageCredits < 1) {
+            if (connectionMode !== 'byok' && hostedCredits < 1) {
                 hideLoader();
-                showToast(`🚫 Insufficient audit credits! This audit requires 1 audit credit, but you only have ${pageCredits} credits left. Please top up your credits.`, 'error');
+                showToast(`🚫 Insufficient audit credits! This audit requires 1 audit credit, but you only have ${hostedCredits} credits left. Please top up your credits.`, 'error');
                 handleTopupClick();
                 return;
             }
@@ -1921,7 +1972,28 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     const deductMsg = isUnlimited ? "" : ` Deducted 1 audit credit.`;
                     showToast(`🎉 Audit completed successfully!${deductMsg}`, 'success');
                 }
+    
+                success = true;
+                break; // Break out of retry loop if successful
             } catch (err) {
+                lastError = err;
+                console.error(`[Audit Error] Attempt ${attempt} failed:`, err);
+                
+                // Only retry if it's not a user error (like context length or unauthorized)
+                if (err.message && (err.message.includes('Insufficient') || err.message.includes('Unauthorized') || err.message.includes('Maximum allowed'))) {
+                    break;
+                }
+                
+                if (attempt < maxRetries) {
+                    showToast(`Extraction failed. Retrying (${attempt}/${maxRetries})...`, 'warning');
+                    await new Promise(r => setTimeout(r, 2000 * attempt)); // Exponential backoff
+                }
+            }
+        }
+        
+        if (!success) {
+            const err = lastError;
+
                 console.error("Deduction/Logging error:", err);
                 hideLoader();
                 showToast(`🚫 Audit finished, but database update failed: ${err.message}`, 'error');
@@ -2222,7 +2294,25 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 }
             } catch (e) {
                 console.error("[AI Verification Error] Network or client failure:", e);
-            } finally {
+    
+            
+            // Auto Refund logic for hosted users if it failed
+            if (connectionMode === 'hosted' && currentAuditTransactionId) {
+                console.log("[Refund] Attempting to auto-refund credit for failed transaction:", currentAuditTransactionId);
+                const tokenResponse = supabase.auth.session()?.access_token || '';
+                fetch('/api/refund-credit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenResponse}` },
+                    body: JSON.stringify({ transactionId: currentAuditTransactionId, planMode: 'hosted' })
+                }).then(res => res.json()).then(data => {
+                    if (data.success) {
+                        showToast("Your audit credit has been auto-refunded due to the failure.", "info");
+                        loadUserProfileAndCredits();
+                    }
+                }).catch(e => console.error("Refund failed:", e));
+            }
+        }
+        } finally {
                 hideLoader();
             }
         }

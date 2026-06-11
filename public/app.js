@@ -158,7 +158,6 @@ function initializeApp() {
     let currentAuditTransactionId = null;
     let isLoggedIn = false;
     let hostedCredits = 0;
-    let hostedCredits = 0;
     let byokCredits = 0;
     let userEmail = '';
     let supabase = null;
@@ -224,19 +223,6 @@ function initializeApp() {
     });
     
 
-    const rawExtractionModal = document.getElementById('raw-extraction-modal');
-    const closeRawExtractionBtn = document.getElementById('close-raw-extraction-btn');
-    const rawExtractionCopyBtn = document.getElementById('raw-extraction-copy-btn');
-    const rawExtractionDoneBtn = document.getElementById('raw-extraction-done-btn');
-    const rawExtractionContent = document.getElementById('raw-extraction-content');
-    const forceOcrCheckbox = document.getElementById('force-ocr-checkbox');
-    
-    if (closeRawExtractionBtn) closeRawExtractionBtn.addEventListener('click', () => rawExtractionModal.classList.remove('active'));
-    if (rawExtractionDoneBtn) rawExtractionDoneBtn.addEventListener('click', () => rawExtractionModal.classList.remove('active'));
-    if (rawExtractionCopyBtn) rawExtractionCopyBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(rawExtractionContent.textContent);
-        showToast("Raw JSON copied to clipboard!", "success");
-    });
     
     const loaderStatusText = document.getElementById('loader-status-text');
 
@@ -1938,8 +1924,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             await performAILinkedAudit(leaseExtraction, estoppelExtraction);
             
             // Log audit to Database and reload profile
-            try {
-                if (supabase) {
+            if (supabase) {
                     const { data: { user } } = await supabase.auth.getUser();
                     
                     const { error: logErr } = await supabase.from('audits').insert({
@@ -2000,16 +1985,26 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         
         if (!success) {
             const err = lastError;
-
-                console.error("Deduction/Logging error:", err);
-                hideLoader();
-                showToast(`🚫 Audit finished, but database update failed: ${err.message}`, 'error');
-            }
-            
-        } catch (err) {
             console.error(err);
             hideLoader();
-            showToast(`🚫 AI Extraction Error: ${err.message}\n\nPlease check your configuration, network, or server status.`, 'error');
+            showToast(`Error: ${err.message}`, 'error');
+
+            // Auto Refund logic for hosted users if it failed
+            if (connectionMode === 'hosted' && currentAuditTransactionId) {
+                console.log("[Refund] Attempting to auto-refund credit for failed transaction:", currentAuditTransactionId);
+                const tokenResponse = supabase.auth.session()?.access_token || '';
+                fetch('/api/refund-credit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenResponse}` },
+                    body: JSON.stringify({ transactionId: currentAuditTransactionId, planMode: 'hosted' })
+                }).then(res => res.json()).then(data => {
+                    if (data.success) {
+                        showToast("Your audit credit has been auto-refunded due to the failure.", "info");
+                        loadUserProfileAndCredits();
+                    }
+                }).catch(e => console.error("Refund failed:", e));
+            }
+
         }
     }
 
@@ -2301,25 +2296,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 }
             } catch (e) {
                 console.error("[AI Verification Error] Network or client failure:", e);
-    
-            
-            // Auto Refund logic for hosted users if it failed
-            if (connectionMode === 'hosted' && currentAuditTransactionId) {
-                console.log("[Refund] Attempting to auto-refund credit for failed transaction:", currentAuditTransactionId);
-                const tokenResponse = supabase.auth.session()?.access_token || '';
-                fetch('/api/refund-credit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenResponse}` },
-                    body: JSON.stringify({ transactionId: currentAuditTransactionId, planMode: 'hosted' })
-                }).then(res => res.json()).then(data => {
-                    if (data.success) {
-                        showToast("Your audit credit has been auto-refunded due to the failure.", "info");
-                        loadUserProfileAndCredits();
-                    }
-                }).catch(e => console.error("Refund failed:", e));
-            }
-        }
-        } finally {
+            } finally {
                 hideLoader();
             }
         }

@@ -2851,6 +2851,15 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 seatsDisplay.textContent = `Seats: ${members ? members.length : 0} / ${displayLimit}`;
             }
 
+            const inviteForm = document.getElementById('team-invite-form');
+            if (inviteForm) {
+                if (members && members.length >= seatLimit) {
+                    inviteForm.style.display = 'none';
+                } else {
+                    inviteForm.style.display = 'flex';
+                }
+            }
+
             if (!members || members.length === 0) {
                 teamMemberList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">No other members on this team.</div>';
                 return;

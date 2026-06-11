@@ -927,28 +927,26 @@
 
     <!-- Team Management Modal -->
     <div class="modal-overlay" id="team-modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title"><i data-lucide="users"></i> Manage Team</h3>
-                <button class="modal-close" id="close-team-btn"><i data-lucide="x"></i></button>
+        <div class="modal-card" style="max-width: 500px;">
+            <button class="modal-close-btn" id="close-team-btn">&times;</button>
+            <div class="modal-title-wrapper" style="margin-bottom: 20px;">
+                <h3><i data-lucide="users" style="vertical-align: middle; margin-right: 6px; width: 20px; height: 20px;"></i> Manage Team</h3>
+                <p>Invite coworkers to share your workspace and audit credits. They must sign up with their email first to join.</p>
             </div>
-            <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 16px;">
-                Invite coworkers to share your workspace and audit credits. They must sign up with their email first to join.
-            </p>
             
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; font-size: 14px;">
                 <strong style="color: var(--text-primary);">Active Members</strong>
                 <span id="team-seats-display" style="color: var(--text-muted); background: var(--bg-hover); padding: 4px 8px; border-radius: 6px; font-weight: 500;">Seats: 1 / 1</span>
             </div>
             
-            <div class="team-member-list" id="team-member-list" style="margin-bottom: 20px; border: 1px solid var(--border-color); border-radius: 8px; padding: 4px;">
+            <div class="team-member-list" id="team-member-list" style="margin-bottom: 20px; border: 1px solid var(--border-color); border-radius: 8px; padding: 4px; max-height: 250px; overflow-y: auto;">
                 <!-- Populated by JS -->
                 <div style="text-align: center; color: var(--text-muted); padding: 20px;">Loading team members...</div>
             </div>
 
             <form class="team-invite-form" id="team-invite-form" style="display: flex; gap: 10px;">
                 <div class="form-group" style="flex: 1; margin: 0;">
-                    <input type="email" id="invite-email-input" class="form-control" placeholder="coworker@company.com" required>
+                    <input type="email" id="invite-email-input" class="text-input" placeholder="coworker@company.com" required>
                 </div>
                 <button type="submit" class="btn btn-primary" id="invite-submit-btn" style="white-space: nowrap;">Add Member</button>
             </form>

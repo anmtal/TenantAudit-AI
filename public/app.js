@@ -2834,7 +2834,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             if (!user) return;
             
             // Get user's team ID
-            const { data: profile } = await supabase.from('profiles').select('team_id').eq('id', user.id).single();
+            const { data: profile } = await supabase.from('profiles').select('team_id, teams(seat_limit)').eq('id', user.id).single();
             if (!profile || !profile.team_id) {
                 teamMemberList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">You are not part of a team.</div>';
                 return;
@@ -2844,6 +2844,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const { data: members, error } = await supabase.from('profiles').select('email, first_name, last_name, id').eq('team_id', profile.team_id);
             if (error) throw error;
             
+            const seatLimit = profile.teams?.seat_limit || 1;
+            const displayLimit = seatLimit >= 9999 ? 'Unlimited' : seatLimit;
+            const seatsDisplay = document.getElementById('team-seats-display');
+            if (seatsDisplay) {
+                seatsDisplay.textContent = `Seats: ${members ? members.length : 0} / ${displayLimit}`;
+            }
+
             if (!members || members.length === 0) {
                 teamMemberList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">No other members on this team.</div>';
                 return;

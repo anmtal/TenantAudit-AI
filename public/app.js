@@ -2,6 +2,11 @@
    LeaseAlign AI — Core Application Logic
    ========================================================================== */
 
+// Set workerSrc for PDF.js to function correctly on client side
+if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
 function initializeApp() {
 
     // --- Toast Notifications ---
@@ -136,8 +141,6 @@ function initializeApp() {
         // 7. Clear user-specific session trackers
         localStorage.removeItem('ta_session_id');
         localStorage.removeItem('ta_session_timestamp');
-        localStorage.removeItem('ta_user_email');
-        localStorage.removeItem('ta_logged_in');
 
         // 8. Dismiss any active visual loaders
         hideLoader();
@@ -314,7 +317,7 @@ function initializeApp() {
             homeLoginBtn.textContent = isLoggedIn ? 'Dashboard' : 'Log In';
         }
         if (heroGetStartedBtn) {
-            heroGetStartedBtn.textContent = isLoggedIn ? 'Go to Dashboard' : 'Launch Platform Free';
+            heroGetStartedBtn.textContent = isLoggedIn ? 'Go to Dashboard' : 'Start Your Audit';
         }
         if (homeLogoutBtn) {
             homeLogoutBtn.style.display = isLoggedIn ? 'flex' : 'none';
@@ -361,7 +364,7 @@ function initializeApp() {
                 if (homeCreditsCount) homeCreditsCount.textContent = "Unlimited";
                 
                 if (suffixEl) { suffixEl.style.display = 'inline'; suffixEl.textContent = "Audits"; }
-                if (homeSuffixEl) { homeSuffixEl.style.display = 'inline'; homeSuffixEl.textContent = "Pages"; }
+                if (homeSuffixEl) { homeSuffixEl.style.display = 'inline'; homeSuffixEl.textContent = "Audits"; }
 
                 if (creditsTopupTrigger) {
                     creditsTopupTrigger.classList.remove('credits-low', 'credits-empty');
@@ -376,7 +379,7 @@ function initializeApp() {
             if (homeCreditsCount) homeCreditsCount.textContent = displayVal;
             
             if (suffixEl) { suffixEl.style.display = 'inline'; suffixEl.textContent = "Audits Left"; }
-            if (homeSuffixEl) { homeSuffixEl.style.display = 'inline'; homeSuffixEl.textContent = "Pages Left"; }
+            if (homeSuffixEl) { homeSuffixEl.style.display = 'inline'; homeSuffixEl.textContent = "Audits Left"; }
 
             if (creditsTopupTrigger) {
                 creditsTopupTrigger.style.color = '';
@@ -404,7 +407,7 @@ function initializeApp() {
         const topupBalanceValue = document.getElementById('topup-balance-value');
         if (topupBalanceValue) {
             if (selectedTopupPlan === 'byok') {
-                topupBalanceValue.textContent = `Unlimited BYOK Pages`;
+                topupBalanceValue.textContent = `Unlimited BYOK Audits`;
                 topupBalanceValue.style.color = 'var(--color-emerald)';
             } else {
                 const displayBal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
@@ -412,40 +415,6 @@ function initializeApp() {
                 topupBalanceValue.style.color = 'var(--color-purple)';
             }
         }
-    }
-
-    function initializeAuthFallback() {
-        const storedLogin = localStorage.getItem('ta_logged_in') === 'true';
-        const storedEmail = localStorage.getItem('ta_user_email') || '';
-        
-        let storedHosted = localStorage.getItem('ta_hosted_credits');
-        if (storedHosted === null) {
-            storedHosted = localStorage.getItem('ta_page_credits') || 0;
-            localStorage.setItem('ta_hosted_credits', storedHosted);
-        }
-        hostedCredits = parseInt(storedHosted, 10) || 0;
-        
-        let storedByok = localStorage.getItem('ta_byok_credits');
-        if (storedByok === null) {
-            storedByok = 0;
-            localStorage.setItem('ta_byok_credits', storedByok);
-        }
-        byokCredits = parseInt(storedByok, 10) || 0;
-
-        activePlanType = localStorage.getItem('ta_user_plan_type') || 'hosted';
-        applyPlanRestrictions(activePlanType);
-        updateCreditsDisplay();
-
-        if (storedLogin && storedEmail) {
-            isLoggedIn = true;
-            userEmail = storedEmail;
-            userEmailDisplay.textContent = userEmail;
-            showView('dashboard');
-        } else {
-            isLoggedIn = false;
-            showView('home');
-        }
-        updateNavUI();
     }
 
     async function loadUserProfileAndCredits() {
@@ -648,11 +617,142 @@ function initializeApp() {
         showToast(`📂 Loaded audit for ${item.tenant_name} (${item.match_score}% compliance).`, 'info');
     }
 
+    function loadDemoAuditData() {
+        auditData = {
+            metadata: {
+                tenantName: "Starbucks Corporation",
+                leaseFile: "complex_lease_agreement.pdf",
+                estoppelFile: "complex_estoppel_certificate.pdf",
+                auditModel: "Demo Audit Model"
+            },
+            summary: {
+                matchScore: 82,
+                redFlags: 1,
+                monthlyRent: "$12,500.00 / $12,000.00",
+                premisesSf: "2,200 SF",
+                expiryDate: "11/30/2031"
+            },
+            records: [
+                {
+                    term: "Tenant Name",
+                    leaseVal: "Starbucks Corporation",
+                    estoppelVal: "Starbucks Corporation",
+                    status: "match",
+                    leaseQuote: "Tenant: Starbucks Corporation",
+                    estoppelQuote: "Starbucks Corp. hereby certifies...",
+                    reason: "Names match exactly."
+                },
+                {
+                    term: "Suite / Unit Number",
+                    leaseVal: "Suite 100",
+                    estoppelVal: "Suite 100",
+                    status: "match",
+                    leaseQuote: "Suite 100 at the Mall",
+                    estoppelQuote: "Suite 100",
+                    reason: "Suite numbers match."
+                },
+                {
+                    term: "Premises Size",
+                    leaseVal: "2,200 SF",
+                    estoppelVal: "2,200 SF",
+                    status: "match",
+                    leaseQuote: "premises measuring approximately 2,200 square feet",
+                    estoppelQuote: "Premises size: 2,200 SF",
+                    reason: "Square footage matches."
+                },
+                {
+                    term: "Current Monthly Rent",
+                    leaseVal: "$12,500.00",
+                    estoppelVal: "$12,000.00",
+                    status: "mismatch",
+                    leaseQuote: "monthly base rent of $12,500.00",
+                    estoppelQuote: "Current monthly rent is $12,000.00",
+                    reason: "Lease states $12,500/mo but estoppel confirms $12,000/mo."
+                },
+                {
+                    term: "Lease Expiration Date",
+                    leaseVal: "11/30/2031",
+                    estoppelVal: "11/30/2031",
+                    status: "match",
+                    leaseQuote: "expiry date of November 30, 2031",
+                    estoppelQuote: "Lease expires on November 30, 2031",
+                    reason: "Dates match."
+                },
+                {
+                    term: "Security Deposit",
+                    leaseVal: "$25,000.00",
+                    estoppelVal: "$25,000.00",
+                    status: "match",
+                    leaseQuote: "Security deposit of $25,000",
+                    estoppelQuote: "Security deposit held: $25,000",
+                    reason: "Deposit amounts match."
+                },
+                {
+                    term: "Renewal Options",
+                    leaseVal: "Two 5-year options",
+                    estoppelVal: "Two 5-year options",
+                    status: "match",
+                    leaseQuote: "Tenant shall have two options to renew for 5 years each",
+                    estoppelQuote: "Two renewal options remain",
+                    reason: "Renewal options match."
+                },
+                {
+                    term: "CAM & Operating Caps",
+                    leaseVal: "$3.50/SF",
+                    estoppelVal: "$3.50/SF",
+                    status: "match",
+                    leaseQuote: "CAM charges at $3.50 per square foot",
+                    estoppelQuote: "CAM at $3.50/SF",
+                    reason: "CAM charges match."
+                },
+                {
+                    term: "Lease Guarantor",
+                    leaseVal: "Not Mentioned",
+                    estoppelVal: "Not Mentioned",
+                    status: "warning",
+                    leaseQuote: "No citation found.",
+                    estoppelQuote: "No citation found.",
+                    reason: "Neither document mentions a guarantor."
+                },
+                {
+                    term: "Prepaid Rent",
+                    leaseVal: "Not Mentioned",
+                    estoppelVal: "Not Mentioned",
+                    status: "warning",
+                    leaseQuote: "No citation found.",
+                    estoppelQuote: "No citation found.",
+                    reason: "Neither document mentions prepaid rent."
+                },
+                {
+                    term: "Landlord Default Status",
+                    leaseVal: "No default",
+                    estoppelVal: "No default",
+                    status: "match",
+                    leaseQuote: "No landlord default noted.",
+                    estoppelQuote: "No landlord defaults.",
+                    reason: "No defaults in either document."
+                }
+            ]
+        };
+        
+        if (uploadPanel) uploadPanel.style.display = 'none';
+        if (resultsPanel) resultsPanel.style.display = 'block';
+        renderAuditResults();
+        showToast("🎉 Loaded demo sample audit.", "info");
+    }
+
     // Initialize Supabase from Config
     async function initSupabase() {
         try {
             const res = await fetch('/api/config?t=' + Date.now());
             const config = await res.json();
+            
+            // Initialize Sentry client-side if DSN is returned and SDK is loaded
+            if (config.sentryDsn && window.Sentry) {
+                window.Sentry.init({ dsn: config.sentryDsn });
+                console.log("Sentry Client initialized successfully.");
+            }
+
             if (config.supabaseUrl && config.supabaseAnonKey && window.supabase) {
                 supabaseUrl = config.supabaseUrl;
                 supabaseAnonKey = config.supabaseAnonKey;
@@ -672,23 +772,41 @@ function initializeApp() {
                         showView('dashboard');
                         updateNavUI();
                         
-                        // Sync active session ID to auth user metadata for single-seat enforcement first
+                        // Sync active session ID to enforce single-seat logins cryptographically
                         const isFreshLogin = localStorage.getItem('ta_fresh_login') === 'true';
-                        const sessionId = getOrGenerateSessionId(isFreshLogin);
-                        try {
-                            const { error: syncErr } = await supabase.auth.updateUser({
-                                data: { active_session_id: sessionId }
-                            });
-                            if (syncErr) {
-                                console.warn("[Session Sync Warning] Failed to update active_session_id in metadata:", syncErr.message);
-                            } else {
-                                console.log("[Session Sync] Successfully updated active_session_id in metadata:", sessionId);
+                        if (isFreshLogin) {
+                            try {
+                                let sessionIdToRegister = '';
+                                const payload = session.access_token.split('.')[1];
+                                if (payload) {
+                                    // Handle base64url decoding
+                                    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+                                    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                                        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                                    }).join(''));
+                                    sessionIdToRegister = JSON.parse(jsonPayload).session_id;
+                                }
+                                
+                                    const { data: registered, error: syncErr } = await supabase.rpc('register_active_session', {
+                                        p_session_id: sessionIdToRegister
+                                    });
+                                    if (syncErr || !registered) {
+                                        console.warn("[Session Sync Blocked] Concurrent seat session active:", syncErr?.message || "Seat occupied on another device.");
+                                        showToast("🚫 Login Blocked: This account is currently active on another device. Please wait 30 seconds or log out from the other device.", 'error');
+                                        await supabase.auth.signOut();
+                                        isLoggedIn = false;
+                                        showView('home');
+                                        updateNavUI();
+                                        return;
+                                    } else {
+                                        console.log("[Session Sync] Successfully registered active session ID securely.");
+                                    }
+                            } catch (e) {
+                                console.error("[Session Sync Error] Exception during RPC update:", e);
                             }
-                        } catch (e) {
-                            console.error("[Session Sync Error] Exception during metadata update:", e);
                         }
-
-                        // Load credits and past history from Supabase
+                        
+                        localStorage.removeItem('ta_fresh_login');     // Load credits and past history from Supabase
                         await loadUserProfileAndCredits();
                         await loadAuditHistory();
                         
@@ -778,12 +896,16 @@ function initializeApp() {
                     }
                 });
             } else {
-                console.warn("Supabase configs not loaded. Running in local fallback mode.");
-                initializeAuthFallback();
+                console.warn("Supabase configs not loaded. Auth will not work.");
+                showView('home');
+                updateNavUI();
             }
         } catch (e) {
             console.error("Failed to initialize Supabase:", e);
-            initializeAuthFallback();
+            showView('home');
+            updateNavUI();
+        } finally {
+            document.body.setAttribute('data-initialized', 'true');
         }
     }
 
@@ -804,6 +926,29 @@ function initializeApp() {
             } else {
                 showView('login');
             }
+        });
+    }
+    const heroViewDemoBtn = document.getElementById('hero-view-demo-btn');
+    if (heroViewDemoBtn) {
+        heroViewDemoBtn.addEventListener('click', () => {
+            console.log("Launching interactive demo...");
+            isLoggedIn = true;
+            userEmail = "demo-user@leasealign.ai";
+            if (userEmailDisplay) userEmailDisplay.textContent = userEmail;
+            if (localStorage.getItem('ta_hosted_credits') === null) {
+                localStorage.setItem('ta_hosted_credits', '10');
+            }
+            if (localStorage.getItem('ta_byok_credits') === null) {
+                localStorage.setItem('ta_byok_credits', '0');
+            }
+            localStorage.setItem('ta_user_email', userEmail);
+            getOrGenerateSessionId(true);
+            hostedCredits = parseInt(localStorage.getItem('ta_hosted_credits') || '0', 10);
+            byokCredits = parseInt(localStorage.getItem('ta_byok_credits') || '0', 10);
+            showView('dashboard');
+            updateNavUI();
+            updateCreditsDisplay();
+            loadDemoAuditData();
         });
     }
     if (loginToHomeLink) {
@@ -911,10 +1056,13 @@ function initializeApp() {
     if (forgotPasswordLink) {
         forgotPasswordLink.addEventListener('click', async (e) => {
             e.preventDefault();
-            const email = loginEmail ? loginEmail.value.trim() : '';
+            let email = loginEmail ? loginEmail.value.trim() : '';
             if (!email) {
-                showToast("Please enter your email address in the Email field first, then click 'Forgot password?'.", 'error');
-                return;
+                email = window.prompt("Please enter your email address to reset your password:");
+                if (!email || !email.trim()) {
+                    return;
+                }
+                email = email.trim();
             }
             if (supabase) {
                 const originalText = forgotPasswordLink.textContent;
@@ -952,6 +1100,14 @@ function initializeApp() {
             try {
                 if (supabase) {
                     if (isSignUpMode) {
+                        const registerTosCheckbox = document.getElementById('register-tos-checkbox');
+                        if (registerTosCheckbox && !registerTosCheckbox.checked) {
+                            showToast('You must agree to the Terms of Service to register.', 'error');
+                            loginSubmitBtn.disabled = false;
+                            loginSubmitBtn.textContent = originalText;
+                            return;
+                        }
+                        
                         const firstName = registerFirstName ? registerFirstName.value.trim() : '';
                         const lastName = registerLastName ? registerLastName.value.trim() : '';
                         const company = registerCompany ? registerCompany.value.trim() : '';
@@ -972,7 +1128,7 @@ function initializeApp() {
                             localStorage.removeItem('ta_fresh_login');
                             throw error;
                         }
-                        showToast("🎉 Account created successfully! Please top up your page credits to begin auditing.", 'success');
+                        showToast("🎉 Account created successfully! Please top up your audit credits to begin auditing.", 'success');
                     } else {
                         localStorage.setItem('ta_fresh_login', 'true');
                         const { data, error } = await supabase.auth.signInWithPassword({
@@ -985,32 +1141,32 @@ function initializeApp() {
                         }
                     }
                 } else {
-                    localStorage.setItem('ta_logged_in', 'true');
-                    localStorage.setItem('ta_user_email', email);
+                    console.log("Offline mode: initiating mock login/signup.");
                     isLoggedIn = true;
                     userEmail = email;
-                    userEmailDisplay.textContent = userEmail;
-                    loginErrorMsg.style.display = 'none';
+                    if (userEmailDisplay) userEmailDisplay.textContent = userEmail;
+                    
+                    if (localStorage.getItem('ta_hosted_credits') === null) {
+                        localStorage.setItem('ta_hosted_credits', '10');
+                    }
+                    if (localStorage.getItem('ta_byok_credits') === null) {
+                        localStorage.setItem('ta_byok_credits', '0');
+                    }
+                    localStorage.setItem('ta_user_email', email);
+                    
+                    getOrGenerateSessionId(true);
+                    
+                    hostedCredits = parseInt(localStorage.getItem('ta_hosted_credits') || '0', 10);
+                    byokCredits = parseInt(localStorage.getItem('ta_byok_credits') || '0', 10);
+                    
                     showView('dashboard');
                     updateNavUI();
+                    updateCreditsDisplay();
                     
-                    // Check if there was a pending package selection before login
-                    if (window.pendingPurchase) {
-                        const { plan, amount } = window.pendingPurchase;
-                        window.pendingPurchase = null; // Clear state
-                        
-                        handleTopupClick();
-                        if (plan === 'hosted') {
-                            if (buyPlanHosted) {
-                                buyPlanHosted.click();
-                                creditsAmount.value = amount;
-                            }
-                        } else if (plan === 'byok') {
-                            if (buyPlanByok) {
-                                buyPlanByok.click();
-                                creditsAmount.value = amount;
-                            }
-                        }
+                    if (isSignUpMode) {
+                        showToast("🎉 Account created successfully (Local Offline Mode)!", 'success');
+                    } else {
+                        showToast("🎉 Logged in successfully (Local Offline Mode).", "success");
                     }
                 }
             } catch (err) {
@@ -1094,11 +1250,11 @@ function initializeApp() {
             buyPlanByok.classList.remove('active');
             selectedTopupPlan = 'hosted';
             creditsAmount.innerHTML = `
-                <option value="100" selected>Starter: 100 Pages ($49.00)</option>
-                <option value="500">Strip Center: 500 Pages ($149.00)</option>
-                <option value="1500">Neighborhood Center: 1500 Pages ($399.00)</option>
-                <option value="8000">Annual Package: 8,000 Pages ($999.00)</option>
-                <option value="20000">Enterprise Package: 20,000 Pages ($2,499.00)</option>
+                <option value="100" selected>Starter: 100 Audit Credits ($49.00)</option>
+                <option value="500">Strip Center: 500 Audit Credits ($149.00)</option>
+                <option value="1500">Neighborhood Center: 1,500 Audit Credits ($399.00)</option>
+                <option value="8000">Annual Package: 8,000 Audit Credits ($999.00)</option>
+                <option value="20000">Enterprise Package: 20,000 Audit Credits ($2,499.00)</option>
             `;
             updateCreditsDisplay();
         });
@@ -1108,8 +1264,8 @@ function initializeApp() {
             buyPlanHosted.classList.remove('active');
             selectedTopupPlan = 'byok';
             creditsAmount.innerHTML = `
-                <option value="149" selected>BYOK Monthly: Unlimited Pages ($149.00/mo)</option>
-                <option value="1299">BYOK Annual: Unlimited Pages ($1,299.00/yr)</option>
+                <option value="149" selected>BYOK Monthly: Unlimited Audits ($149.00/mo)</option>
+                <option value="1299">BYOK Annual: Unlimited Audits ($1,299.00/yr)</option>
             `;
             updateCreditsDisplay();
         });
@@ -1350,6 +1506,40 @@ function initializeApp() {
     }
 
     // --- Modal Listeners ---
+    const passwordRecoveryModal = document.getElementById('password-recovery-modal');
+    const closeRecoveryBtn = document.getElementById('close-recovery-btn');
+    const passwordRecoveryForm = document.getElementById('password-recovery-form');
+    const recoveryPasswordInput = document.getElementById('recovery-password');
+    const recoveryPasswordConfirm = document.getElementById('recovery-password-confirm');
+
+    if (closeRecoveryBtn && passwordRecoveryModal) {
+        closeRecoveryBtn.addEventListener('click', () => passwordRecoveryModal.classList.remove('active'));
+    }
+
+    if (passwordRecoveryForm) {
+        passwordRecoveryForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const newPassword = recoveryPasswordInput.value;
+            const confirmPassword = recoveryPasswordConfirm.value;
+            if (newPassword !== confirmPassword) {
+                showToast("Passwords do not match.", "error");
+                return;
+            }
+            if (newPassword.length < 6) {
+                showToast("Password must be at least 6 characters.", "error");
+                return;
+            }
+            if (!supabase) return;
+            const { error } = await supabase.auth.updateUser({ password: newPassword });
+            if (error) {
+                showToast("Failed to set new password: " + error.message, "error");
+            } else {
+                showToast("Password updated successfully!", "success");
+                passwordRecoveryModal.classList.remove('active');
+            }
+        });
+    }
+
     if (openSettingsBtn) {
         openSettingsBtn.addEventListener('click', () => {
             applyPlanRestrictions(activePlanType);
@@ -1424,15 +1614,57 @@ function initializeApp() {
     }
 
     if (settingsForm) {
-        settingsForm.addEventListener('submit', (e) => {
+        settingsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            localStorage.setItem('ta_connection_mode', settingsMode.value);
-            localStorage.setItem('ta_api_provider', settingsProvider.value);
+            
+            const mode = settingsMode.value;
+            const provider = settingsProvider.value;
+            const key = settingsApiKey.value.trim();
+            
+            if (mode === 'byok' && key) {
+                const saveBtn = settingsForm.querySelector('button[type="submit"]');
+                const origText = saveBtn ? saveBtn.textContent : 'Save';
+                if (saveBtn) {
+                    saveBtn.textContent = 'Validating...';
+                    saveBtn.disabled = true;
+                }
+                
+                try {
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (supabase) {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (session) {
+                            headers['Authorization'] = `Bearer ${session.access_token}`;
+                        }
+                    }
+                    const resp = await fetch('/api/validate-key', {
+                        method: 'POST',
+                        headers: headers,
+                        body: JSON.stringify({ provider, apiKey: key })
+                    });
+                    const data = await resp.json();
+                    
+                    if (!data.valid) {
+                        showToast(data.error || 'Invalid API Key', 'error');
+                        if (saveBtn) { saveBtn.textContent = origText; saveBtn.disabled = false; }
+                        return;
+                    }
+                } catch (err) {
+                    showToast('Failed to validate key', 'error');
+                    if (saveBtn) { saveBtn.textContent = origText; saveBtn.disabled = false; }
+                    return;
+                }
+                
+                if (saveBtn) { saveBtn.textContent = origText; saveBtn.disabled = false; }
+            }
+            
+            localStorage.setItem('ta_connection_mode', mode);
+            localStorage.setItem('ta_api_provider', provider);
             localStorage.setItem('ta_llm_model', settingsLlmModel.value);
-            sessionStorage.setItem('ta_api_key', settingsApiKey.value.trim());
+            sessionStorage.setItem('ta_api_key', key);
             settingsModal.classList.remove('active');
             loadSettings();
-            showToast('🎉 Connection configurations saved successfully.', 'success');
+            showToast('Connection configurations saved successfully.', 'success');
         });
     }
 
@@ -1534,11 +1766,11 @@ function initializeApp() {
         }
         
         if (startAuditBtn) {
-            startAuditBtn.disabled = true;
+            // startAuditBtn.disabled = true;
         }
     }
 
-    function handleFileSelection(file, zoneEl, fileKey) {
+    async function handleFileSelection(file, zoneEl, fileKey) {
         const isPdfType = file.type === 'application/pdf';
         const isPdfExtension = file.name && file.name.toLowerCase().endsWith('.pdf');
         if (!isPdfType && !isPdfExtension) {
@@ -1553,6 +1785,16 @@ function initializeApp() {
             return;
         }
 
+        try {
+            const pageCount = await getPDFPageCount(file);
+            if (pageCount > 300) {
+                showToast(`🚫 Document has ${pageCount} pages. Maximum allowed is 300 pages.`, 'error');
+                return;
+            }
+        } catch (e) {
+            console.warn("Could not check PDF page count:", e);
+        }
+
         filesState[fileKey] = file;
         zoneEl.classList.add('file-selected');
         
@@ -1563,11 +1805,6 @@ function initializeApp() {
         const removeBtn = document.getElementById(`remove-${fileKey}-file-btn`);
         if (removeBtn) {
             removeBtn.style.display = 'inline-flex';
-        }
-
-        // Check if both files are uploaded to enable the audit button
-        if (filesState.lease && filesState.estoppel) {
-            startAuditBtn.disabled = false;
         }
     }
 
@@ -1717,7 +1954,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 const userPromptOverride = `Here are the snippets of each page in the document:\n\n${snippets}\n\nPlease identify the relevant page numbers.`;
                 
                 try {
-                    const routeRes = await callOpenAIToExtract("", docType, connectionMode, apiProvider, llmModel, apiKey, null, systemPromptOverride, userPromptOverride);
+                    const routeRes = await callOpenAIToExtract("", docType, connectionMode, apiProvider, llmModel, apiKey, null, systemPromptOverride, userPromptOverride, true);
                     console.log(`[Pass 1 Routing] ${docType} relevant pages returned:`, routeRes);
                     if (routeRes && Array.isArray(routeRes.pageNumbers)) {
                         relevantPageNums = routeRes.pageNumbers;
@@ -1768,7 +2005,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const userPromptOverride = `Identify relevant page numbers based on the Table of Contents or general structure.`;
             
             try {
-                const routeRes = await callOpenAIToExtract("", docType, connectionMode, apiProvider, llmModel, apiKey, imageList, systemPromptOverride, userPromptOverride);
+                const routeRes = await callOpenAIToExtract("", docType, connectionMode, apiProvider, llmModel, apiKey, imageList, systemPromptOverride, userPromptOverride, true);
                 console.log(`[Pass 1 Vision Routing] ${docType} relevant pages returned:`, routeRes);
                 if (routeRes && Array.isArray(routeRes.pageNumbers)) {
                     relevantPageNums = routeRes.pageNumbers;
@@ -1864,9 +2101,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);
             const totalPagesNeeded = leasePagesCount + estoppelPagesCount;
             
-            if (connectionMode !== 'byok' && hostedCredits < 1) {
+            if (connectionMode !== 'byok' && hostedCredits < 3) {
                 hideLoader();
-                showToast(`🚫 Insufficient audit credits! This audit requires 1 audit credit, but you only have ${hostedCredits} credits left. Please top up your credits.`, 'error');
+                showToast(`🚫 Insufficient audit credits! This audit requires 3 audit credits (1 for lease, 1 for estoppel, and 1 for comparison), but you only have ${hostedCredits} credits left. Please top up your credits.`, 'error');
                 handleTopupClick();
                 return;
             }
@@ -1926,6 +2163,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             );
 
             // Step 3: Run final analyses
+            currentAuditTransactionId = generateUUID();
             showLoader("Analyzing Lease terms with AI...");
             const leaseExtraction = await callOpenAIToExtract(
                 leaseResult.text || "",
@@ -1937,6 +2175,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 leaseResult.images || null
             );
             
+            currentAuditTransactionId = generateUUID();
             showLoader("Analyzing Estoppel statements with AI...");
             const estoppelExtraction = await callOpenAIToExtract(
                 estoppelResult.text || "",
@@ -1948,34 +2187,19 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 estoppelResult.images || null
             );
 
+            currentAuditTransactionId = generateUUID();
             showLoader("Auditing discrepancies...");
             await performAILinkedAudit(leaseExtraction, estoppelExtraction);
             
-            // Log audit to Database and reload profile
+            // Reload profile
             if (supabase) {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    
-                    const { error: logErr } = await supabase.from('audits').insert({
-                        user_id: user ? user.id : null,
-                        tenant_name: auditData.metadata.tenantName,
-                        lease_file: auditData.metadata.leaseFile,
-                        estoppel_file: auditData.metadata.estoppelFile,
-                        match_score: auditData.summary.matchScore,
-                        red_flags: auditData.summary.redFlags,
-                        monthly_rent: auditData.summary.monthlyRent,
-                        premises_sf: auditData.summary.premisesSf,
-                        expiry_date: auditData.summary.expiryDate,
-                        records: auditData.records
-                    });
-                    if (logErr) throw logErr;
-
                     await loadUserProfileAndCredits();
                     await loadAuditHistory();
                 } else {
                     // Fallback mock mode
                     if (connectionMode !== 'byok') {
                         if (hostedCredits < 900000) {
-                            hostedCredits -= 1;
+                            hostedCredits -= 3;
                             localStorage.setItem('ta_hosted_credits', hostedCredits);
                         }
                     }
@@ -1987,7 +2211,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     showToast(`🎉 Audit completed successfully using your custom API Key!`, 'success');
                 } else {
                     const isUnlimited = hostedCredits >= 900000;
-                    const deductMsg = isUnlimited ? "" : ` Deducted 1 audit credit.`;
+                    const deductMsg = isUnlimited ? "" : ` Deducted 3 audit credits.`;
                     showToast(`🎉 Audit completed successfully!${deductMsg}`, 'success');
                 }
     
@@ -2036,6 +2260,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
     if (startAuditBtn) {
         startAuditBtn.addEventListener('click', () => {
+            if (!filesState.lease || !filesState.estoppel) {
+                showToast("Please upload both the Base Lease and the Estoppel document to run an audit.", 'error');
+                return;
+            }
+
             const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
             const apiKey = sessionStorage.getItem('ta_api_key');
             
@@ -2060,7 +2289,14 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     }
 
     // --- API Calls Router (Secure CORS Proxy via Backend) ---
-    async function callOpenAIToExtract(text, docType, connectionMode, provider, model, apiKey, images = null, systemPromptOverride = null, userPromptOverride = null) {
+    async function callOpenAIToExtract(text, docType, connectionMode, provider, model, apiKey, images = null, systemPromptOverride = null, userPromptOverride = null, isRoutingRequest = false) {
+        // Validation check for empty text/images (skip for routing requests)
+        const hasImages = images && Array.isArray(images) && images.length > 0;
+        const hasText = text && typeof text === 'string' && text.trim().length > 0;
+        if (!isRoutingRequest && !hasImages && !hasText) {
+            throw new Error(`No readable text found in the ${docType}. If this is a scanned document, please enable 'Force OCR' in Settings and try again.`);
+        }
+
         // Build payload based on mode.
         // In Hosted SaaS mode, we run Claude Sonnet via server key.
         const payload = {
@@ -2070,16 +2306,23 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             connectionMode: connectionMode,
             provider: connectionMode === 'hosted' ? 'anthropic' : provider,
             model: connectionMode === 'hosted' ? 'claude-sonnet-4-6' : model,
-            apiKey: connectionMode === 'hosted' ? null : apiKey,
             systemPromptOverride: systemPromptOverride,
-            userPromptOverride: userPromptOverride
+            userPromptOverride: userPromptOverride,
+            isRoutingRequest: isRoutingRequest
         };
 
         const headers = {
-            "Content-Type": "application/json",
-            "X-Session-ID": getOrGenerateSessionId(),
-            "X-Transaction-ID": currentAuditTransactionId
+            "Content-Type": "application/json"
         };
+
+        if (!isRoutingRequest) {
+            headers["X-Session-ID"] = getOrGenerateSessionId();
+            headers["X-Transaction-ID"] = currentAuditTransactionId;
+        }
+
+        if (connectionMode === 'byok' && apiKey) {
+            headers["X-BYOK-API-Key"] = apiKey;
+        }
 
         if (supabase) {
             const { data: { session } } = await supabase.auth.getSession();
@@ -2099,7 +2342,15 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             throw new Error(errorData.error || `Server returned error status ${response.status}`);
         }
 
-        return await response.json();
+        const data = await response.json();
+        if (data.status === 'completed') {
+            return data.data;
+        } else if (data.tenantName) {
+            // Support raw mock objects directly (e.g. from Playwright test mock / direct objects)
+            return data;
+        } else {
+            throw new Error(data.error || "Audit failed.");
+        }
     }
 
 
@@ -2253,8 +2504,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     estoppelJson,
                     connectionMode,
                     provider: connectionMode === 'hosted' ? 'anthropic' : apiProvider,
-                    model: connectionMode === 'hosted' ? 'claude-sonnet-4-6' : llmModel,
-                    apiKey: connectionMode === 'hosted' ? null : apiKey
+                    model: connectionMode === 'hosted' ? 'claude-sonnet-4-6' : llmModel
                 };
                 
                 const headers = {
@@ -2262,6 +2512,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     "X-Session-ID": getOrGenerateSessionId(),
                     "X-Transaction-ID": currentAuditTransactionId
                 };
+
+                if (connectionMode === 'byok' && apiKey) {
+                    headers["X-BYOK-API-Key"] = apiKey;
+                }
 
                 if (supabase) {
                     const { data: { session } } = await supabase.auth.getSession();
@@ -2277,12 +2531,15 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 });
 
                 if (response.ok) {
-                    const aiReport = await response.json();
-                    console.log("[AI Verification Report]:", aiReport);
+                    const data = await response.json();
                     
-                    let verifiedMatchCount = 0;
-                    let verifiedRedFlags = 0;
-                    let verifiedWarningCount = 0;
+                    if (data.status === 'completed' || data.tenantName) {
+                        let aiReport = data.status === 'completed' ? data.data : data;
+                        console.log("[AI Verification Report]:", aiReport);
+                        
+                        let verifiedMatchCount = 0;
+                        let verifiedRedFlags = 0;
+                        let verifiedWarningCount = 0;
                     
                     // Merge verified statuses
                     auditData.records = auditData.records.map(rec => {
@@ -2319,6 +2576,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 } else {
                     const errData = await response.json().catch(() => ({}));
                     console.error("[AI Verification Failed] Backend returned status error:", errData.error || response.status);
+                }
                 }
             } catch (e) {
                 console.error("[AI Verification Error] Network or client failure:", e);
@@ -2473,9 +2731,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 
                 // Create a temporary container for rendering
                 const tempDiv = document.createElement('div');
-                tempDiv.style.position = 'absolute';
-                tempDiv.style.left = '-9999px';
-                tempDiv.style.top = '-9999px';
+                tempDiv.style.position = 'fixed';
+                tempDiv.style.left = '200vw'; // Hide far off-screen safely for html2canvas
+                tempDiv.style.top = '0';
                 tempDiv.style.width = '700px'; // fixed width for consistent scaling
                 tempDiv.style.backgroundColor = '#ffffff';
                 tempDiv.style.color = '#1f2937';
@@ -2585,17 +2843,34 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 const doc = new jsPDF('p', 'pt', 'a4');
                 const pdfName = `LeaseAlign_AI_Report_${auditData.metadata.tenantName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
                 
-                await doc.html(tempDiv, {
-                    callback: function (pdf) {
-                        pdf.save(pdfName);
-                        document.body.removeChild(tempDiv);
-                        hideLoader();
-                    },
-                    margin: [30, 30, 30, 30],
-                    autoPaging: 'text',
-                    width: 535, // A4 printable width is 595 - margins (60 pt)
-                    windowWidth: 700 // element pixel width mapping
-                });
+                // Rasterize to image using html2canvas to guarantee compatibility with Acrobat
+                const canvas = await html2canvas(tempDiv, { scale: 2, useCORS: true, logging: false });
+                const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                
+                const pdfWidth = doc.internal.pageSize.getWidth();
+                const pdfHeight = doc.internal.pageSize.getHeight();
+                const margin = 30;
+                const availableWidth = pdfWidth - (margin * 2);
+                
+                const imgProps = doc.getImageProperties(imgData);
+                const calculatedHeight = (imgProps.height * availableWidth) / imgProps.width;
+                
+                let heightLeft = calculatedHeight;
+                let position = margin;
+                
+                doc.addImage(imgData, 'JPEG', margin, position, availableWidth, calculatedHeight);
+                heightLeft -= (pdfHeight - margin * 2);
+                
+                while (heightLeft > 0) {
+                    position = heightLeft - calculatedHeight;
+                    doc.addPage();
+                    doc.addImage(imgData, 'JPEG', margin, position, availableWidth, calculatedHeight);
+                    heightLeft -= pdfHeight;
+                }
+                
+                doc.save(pdfName);
+                document.body.removeChild(tempDiv);
+                hideLoader();
             } catch (err) {
                 console.error("[PDF Export Error] Failed to generate PDF via jsPDF:", err);
                 showToast("❌ Failed to generate PDF report. Please try again.", 'error');
@@ -2776,10 +3051,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         userId: user.id,
                         userEmail: user.email,
                         planType: plan,
-                        auditAmount: parseInt(amount, 10),
-                        priceAmount: parseInt(price, 10),
-                        seats: parseInt(seats, 10),
-                        packageName: pack
+                        amount: parseInt(amount, 10),
+                        price: parseInt(price, 10),
+                        seatCount: parseInt(seats, 10),
+                        packageName: pack,
+                        isSubscription: true
                     })
                 });
                 
@@ -2852,11 +3128,14 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
 
             const inviteForm = document.getElementById('team-invite-form');
+            const limitWarning = document.getElementById('seat-limit-warning');
             if (inviteForm) {
                 if (members && members.length >= seatLimit) {
                     inviteForm.style.display = 'none';
+                    if (limitWarning) limitWarning.style.display = 'block';
                 } else {
                     inviteForm.style.display = 'flex';
+                    if (limitWarning) limitWarning.style.display = 'none';
                 }
             }
 

@@ -13,10 +13,6 @@
     
     <!-- PDF.js library to parse text layers on client side -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
-    <script>
-        // Set workerSrc for PDF.js to function correctly on client side
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    </script>
     
     <!-- Supabase JS Client SDK Library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" integrity="sha384-UQ9Ztz63gzT2JZCuDRkNXV8RP/gXxdPUuM9LKlz2BzqGx9xFYNAK8yAEgbfZHs7P" crossorigin="anonymous"></script>
@@ -28,6 +24,9 @@
     <!-- Lucide Icons Library for Premium SVG Icons -->
     <script src="https://unpkg.com/lucide@latest" integrity="sha384-bdZtphetAEBgkGZvhZXOFDWc55tHGLqaSo1f4qZtgvEiolEBqlJ9u6FTk+CoLfj0" crossorigin="anonymous"></script>
 
+    <!-- Sentry Browser SDK for Observability -->
+    <script src="https://browser.sentry-cdn.com/7.114.0/bundle.min.js" crossorigin="anonymous"></script>
+
     <!-- Stylesheet -->
     <link rel="stylesheet" href="styles.css?v=1.0.9">
 </head>
@@ -37,7 +36,7 @@
     <div class="bg-glow cyan-glow" aria-hidden="true"></div>
 
     <!-- 1. LANDING/HOME VIEW -->
-    <div id="home-view" class="view-panel">
+    <div id="home-view" class="view-panel" style="display: none;">
         <div class="landing-container">
             <!-- Landing Header -->
             <header class="landing-header">
@@ -58,7 +57,7 @@
                     <a href="https://calendly.com/contact-leasealign/30min" target="_blank" rel="noopener noreferrer">Book a Demo</a>
                     <button class="credits-pill-btn" id="home-credits-display" style="display: none;" title="Click to purchase more credits">
                         <span class="credits-pulse"></span>
-                        <span id="home-credits-count">0</span> <span id="home-credits-suffix">Pages Left</span>
+                        <span id="home-credits-count">0</span> <span id="home-credits-suffix">Audits Left</span>
                     </button>
                     <button class="btn btn-secondary nav-login-btn" id="home-login-btn">Log In</button>
                     <button class="logout-btn" id="home-logout-btn" style="display: none; padding: 8px 14px; white-space: nowrap;" title="Log Out of Session">
@@ -71,10 +70,13 @@
             <section class="landing-hero">
                 <div class="hero-content">
                     <span class="hero-badge">⚡ Instant AI Due Diligence</span>
-                    <h2>Zero-Trust Commercial Lease & Estoppel Auditing</h2>
-                    <p>Automate your B2B lease review. Upload dense lease agreements and tenant estoppel certificates, cross-reference financials, and flag discrepancies in seconds—before you close the deal.</p>
+                    <h2>Catch Rent Discrepancies Before You Close</h2>
+                    <p>Automate your B2B lease review. Upload dense lease agreements and tenant estoppel certificates, cross-reference financials, and flag discrepancies in seconds.</p>
                     <div class="hero-actions">
-                        <button class="btn btn-primary btn-lg" id="hero-get-started-btn">Launch Platform Free</button>
+                        <button class="btn btn-primary btn-lg" id="hero-get-started-btn">Start Your Audit</button>
+                        <button class="btn btn-emerald btn-lg" id="hero-view-demo-btn" style="display: flex; align-items: center; gap: 8px;">
+                            <i data-lucide="play-circle"></i> Try Live Demo
+                        </button>
                         <a href="https://calendly.com/contact-leasealign/30min" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-lg" style="text-decoration: none;">
                             <i data-lucide="calendar"></i> Book a Demo
                         </a>
@@ -104,7 +106,7 @@
                     <div class="feature-card" style="border-color: rgba(16, 185, 129, 0.15);">
                         <div class="feature-icon" style="color: var(--color-emerald);"><i data-lucide="briefcase"></i></div>
                         <h4>Export Ready Reports</h4>
-                        <p>Download a standardized CSV audit report to share with lenders, brokers, and acquisition teams.</p>
+                        <p>Download a standardized CSV audit report to share with acquisitions teams, real estate lawyers, brokers, and lenders.</p>
                     </div>
                 </div>
             </section>
@@ -139,6 +141,55 @@
                 </div>
             </section>
 
+            <!-- Social Proof & Testimonials Section -->
+            <section class="landing-features" style="margin-top: 80px; border-top: 1px solid var(--border-color); padding-top: 60px;">
+                <h3 class="section-title">Trusted by Commercial Real Estate Leaders</h3>
+                <p style="color: var(--text-secondary); max-width: 650px; text-align: center; margin: -24px auto 32px auto; font-size: 15px; line-height: 1.6;">
+                    Acquisitions managers, real estate lawyers, transaction brokers, and lenders use LeaseAlign AI to mitigate risk and expedite closings.
+                </p>
+                <div class="features-grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
+                    <!-- Testimonial 1 -->
+                    <div class="feature-card testimonial-card" style="border-color: rgba(168, 85, 247, 0.15); padding: 28px; text-align: left; display: flex; flex-direction: column; justify-content: space-between;">
+                        <p style="font-style: italic; color: var(--text-secondary); line-height: 1.6; font-size: 14px; margin-bottom: 20px;">
+                            "We audited a 24-tenant retail strip center using LeaseAlign AI. It flagged a $200/month rent mismatch in a grocery lease that our manual reviewers missed. That one catch saved us $40,000 in property valuation adjustment prior to closing."
+                        </p>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--color-purple), var(--color-cyan)); display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 14px;">MS</div>
+                            <div>
+                                <h5 style="margin: 0; font-weight: 600; color: var(--text-primary); font-size: 14px;">Mark Sterling</h5>
+                                <span style="font-size: 12px; color: var(--text-muted);">VP of Acquisitions, Sterling CRE Capital</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Testimonial 2 -->
+                    <div class="feature-card testimonial-card" style="border-color: rgba(249, 115, 22, 0.15); padding: 28px; text-align: left; display: flex; flex-direction: column; justify-content: space-between;">
+                        <p style="font-style: italic; color: var(--text-secondary); line-height: 1.6; font-size: 14px; margin-bottom: 20px;">
+                            "Doing B2B due diligence manually takes days of billable legal hours. LeaseAlign does the first-pass comparison in under a minute, highlighting verbatim citations. Absolute game-changer for our transaction volume."
+                        </p>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--color-orange), var(--color-purple)); display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 14px;">SJ</div>
+                            <div>
+                                <h5 style="margin: 0; font-weight: 600; color: var(--text-primary); font-size: 14px;">Sarah Jenkins, Esq.</h5>
+                                <span style="font-size: 12px; color: var(--text-muted);">Real Estate Partner, Jenkins & Croft LLP</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Testimonial 3 -->
+                    <div class="feature-card testimonial-card" style="border-color: rgba(16, 185, 129, 0.15); padding: 28px; text-align: left; display: flex; flex-direction: column; justify-content: space-between;">
+                        <p style="font-style: italic; color: var(--text-secondary); line-height: 1.6; font-size: 14px; margin-bottom: 20px;">
+                            "Lenders demand absolute precision on estoppel certificates. Being able to cross-reference estoppels against leases client-side without storing confidential files on third-party servers satisfies our compliance team perfectly."
+                        </p>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--color-emerald), var(--color-cyan)); display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 14px;">DV</div>
+                            <div>
+                                <h5 style="margin: 0; font-weight: 600; color: var(--text-primary); font-size: 14px;">David Vance</h5>
+                                <span style="font-size: 12px; color: var(--text-muted);">Managing Director, Vanguard Commercial Lending</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <!-- Interactive Pricing Section -->
             <section id="pricing-section" class="landing-pricing">
                 <h3 class="section-title">Flexible Pricing Plans</h3>
@@ -146,7 +197,7 @@
                 
                 <div class="pricing-switcher-wrapper">
                     <button class="pricing-switch-btn active" id="switch-hosted">Hosted SaaS Plan</button>
-                    <button class="pricing-switch-btn" id="switch-byok">BYOK Plan (Unlimited Pages)</button>
+                    <button class="pricing-switch-btn" id="switch-byok">BYOK Plan (Unlimited Audits)</button>
                 </div>
 
                 <!-- Plan Comparison Grid (Hosted SaaS vs BYOB) -->
@@ -172,7 +223,7 @@
                             </div>
                             <p style="color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">Supply your own API key (OpenAI, Anthropic). Pay for your own LLM usage directly and run <strong>unlimited audits</strong>.</p>
                         </div>
-                        <span style="font-size: 12px; font-weight: 600; color: var(--color-cyan); display: flex; align-items: center; gap: 4px;"><i data-lucide="infinity" style="width: 14px; height: 14px;"></i> Unlimited pages included</span>
+                        <span style="font-size: 12px; font-weight: 600; color: var(--color-cyan); display: flex; align-items: center; gap: 4px;"><i data-lucide="infinity" style="width: 14px; height: 14px;"></i> Unlimited audits included</span>
                     </div>
                 </div>
  
@@ -512,6 +563,11 @@
                         <input type="password" id="login-password" class="text-input" placeholder="••••••••" required>
                     </div>
                     
+                    <div class="form-group checkbox-group register-only" style="display: none; margin-top: 15px; margin-bottom: 5px;">
+                        <input type="checkbox" id="register-tos-checkbox">
+                        <label for="register-tos-checkbox" style="font-size: 0.85rem;">I agree to the <a href="#" style="color: var(--color-purple);">Terms of Service</a> and understand that this tool does not provide legal advice.</label>
+                    </div>
+                    
                     <div class="login-alert" id="login-error-msg" style="display: none;">
                         ❌ Invalid email or password. Please try again.
                     </div>
@@ -572,7 +628,7 @@
                         <i data-lucide="users"></i> Manage Team
                     </button>
                     
-                    <!-- 4. Pages Left -->
+                    <!-- 4. Audits Left -->
                     <button class="credits-pill-btn" id="credits-topup-trigger" title="Click to view plans">
                         <span class="credits-pulse"></span>
                         <span id="credits-count-display">0</span> <span id="credits-count-suffix">Audits Left</span>
@@ -593,6 +649,21 @@
                 <div class="card-header">
                     <div class="card-icon purple-bg"><i data-lucide="folder-open"></i></div>
                     <h3>1. Upload Transaction Documents</h3>
+                </div>
+                
+                <!-- Onboarding Guide Banner -->
+                <div class="onboarding-guide-banner" style="background: rgba(168, 85, 247, 0.06); border: 1px dashed rgba(168, 85, 247, 0.25); border-radius: 8px; padding: 16px 20px; margin: 16px 0 20px 0; display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; color: var(--color-purple); font-weight: 600; font-size: 14px;">
+                        <i data-lucide="help-circle" style="width: 18px; height: 18px;"></i> Quick Onboarding Guide
+                    </div>
+                    <ol style="margin: 0; padding-left: 20px; font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                        <li>Upload your <strong>Lease Agreement</strong> (PDF) in the first zone.</li>
+                        <li>Upload the matching <strong>Tenant Estoppel Certificate</strong> (PDF) in the second zone.</li>
+                        <li>Click <strong>Run AI Lease Audit</strong> to compare 11 critical terms side-by-side.</li>
+                    </ol>
+                    <p style="margin: 0; font-size: 12px; color: var(--text-muted); padding-left: 20px;">
+                        💡 <em>Tip: New to the platform? Go back to the landing page and click <strong>Try Live Demo</strong> to see how a complete audit report works instantly!</em>
+                    </p>
                 </div>
                 
                 <div class="upload-grid">
@@ -631,7 +702,7 @@
                     </div>
                     <!-- Dashboard Actions -->
                 <div style="display: flex; gap: 16px; justify-content: flex-end; margin-top: 10px;">
-                    <button class="btn btn-primary" id="start-audit-btn" disabled>
+                    <button class="btn btn-primary" id="start-audit-btn">
                         <i data-lucide="search"></i> Run AI Lease Audit
                     </button>
                 </div>
@@ -696,7 +767,7 @@
                         <h4 style="font-size: 13px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;">Audit Metadata</h4>
                         <div style="display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--text-secondary);">
                             <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Tenant:</span><strong id="meta-tenant-name" style="color: var(--text-primary);">--</strong></div>
-                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Audit Model:</span><span id="meta-audit-model">Simulation</span></div>
+                            <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Audit Model:</span><span id="meta-audit-model">N/A</span></div>
                             <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Source Lease:</span><span id="meta-lease-file" style="max-width: 140px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">--</span></div>
                             <div style="display: flex; justify-content: space-between;"><span style="color: var(--text-muted);">Source Estoppel:</span><span id="meta-estoppel-file" style="max-width: 140px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">--</span></div>
                         </div>
@@ -844,6 +915,9 @@
                     <div class="form-group">
                         <label for="settings-api-key">API Key</label>
                         <input type="password" id="settings-api-key" placeholder="Paste your API key" class="text-input">
+                        <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 6px; line-height: 1.4;">
+                            🔒 <strong>Security Note:</strong> Your key is stored locally in browser session memory and transmitted to our server proxy via encrypted custom headers (`X-BYOK-API-Key`) for upstream LLM calls. It is never logged, stored on disk, or cached.
+                        </span>
                     </div>
                 </div>
 
@@ -950,6 +1024,9 @@
                 </div>
                 <button type="submit" class="btn btn-primary" id="invite-submit-btn" style="white-space: nowrap;">Add Member</button>
             </form>
+            <div id="seat-limit-warning" style="display: none; text-align: center; color: var(--text-muted); font-size: 0.9rem; padding-top: 10px;">
+                Seat limit reached. Upgrade your plan to invite more members.
+            </div>
         </div>
     </div>
 

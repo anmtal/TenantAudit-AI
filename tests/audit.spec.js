@@ -183,7 +183,7 @@ test.describe('LeaseAlign AI E2E Audit Workflow', () => {
     await expect(page.locator('#results-panel')).toBeVisible({ timeout: 45000 });
 
     // Dismiss any custom alert modals that appear after audit completion
-    // (e.g. "🎉 Audit completed successfully! Deducted 5 page credits.")
+    // (e.g. "🎉 Audit completed successfully! Deducted 3 audit credits.")
     await dismissCustomAlert();
 
     // ============================

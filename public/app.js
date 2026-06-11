@@ -2368,7 +2368,12 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             { key: "camShare", label: "CAM & Operating Caps" },
             { key: "guarantorName", label: "Lease Guarantor" },
             { key: "prepaidRent", label: "Prepaid Rent" },
-            { key: "landlordDefault", label: "Landlord Default Status" }
+            { key: "landlordDefault", label: "Landlord Default Status" },
+            { key: "tiAllowance", label: "Tenant Improvement Allowance" },
+            { key: "coTenancy", label: "Co-Tenancy Clause" },
+            { key: "terminationRight", label: "Termination Right" },
+            { key: "sndaStatus", label: "SNDA Status" },
+            { key: "permittedUse", label: "Permitted Use" }
         ];
 
         let records = [];
@@ -2451,13 +2456,22 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
             console.log(`[Audit Comparison Baseline] term: "${t.label}" | lease: "${lease.value}" (normalized: "${lVal}") | estoppel: "${estoppel.value}" (normalized: "${eVal}") | status: "${status}"`);
 
+            let leaseCiteText = lease.quote || "";
+            if (lease.page && lease.page !== "Not Mentioned" && lease.page !== "") {
+                leaseCiteText = `[Source: ${lease.page}] ${leaseCiteText}`;
+            }
+            let estoppelCiteText = estoppel.quote || "";
+            if (estoppel.page && estoppel.page !== "Not Mentioned" && estoppel.page !== "") {
+                estoppelCiteText = `[Source: ${estoppel.page}] ${estoppelCiteText}`;
+            }
+
             records.push({
                 term: t.label,
                 leaseVal: lease.value,
                 estoppelVal: estoppel.value,
                 status: status,
-                leaseCite: lease.quote,
-                estoppelCite: estoppel.quote,
+                leaseCite: leaseCiteText,
+                estoppelCite: estoppelCiteText,
                 verifiedReason: "Verified using local standard rules."
             });
         });
@@ -3120,17 +3134,24 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const { data: members, error } = await supabase.from('profiles').select('email, first_name, last_name, id').eq('team_id', profile.team_id);
             if (error) throw error;
             
+            // Get all pending invites for this team
+            const { data: invites, error: inviteErr } = await supabase.from('team_invitations').select('email, created_at').eq('team_id', profile.team_id);
+            if (inviteErr) {
+                console.warn("[loadTeamMembers] Failed to fetch team invitations:", inviteErr.message);
+            }
+            
+            const totalSeatsUsed = (members ? members.length : 0) + (invites ? invites.length : 0);
             const seatLimit = profile.teams?.seat_limit || 1;
             const displayLimit = seatLimit >= 9999 ? 'Unlimited' : seatLimit;
             const seatsDisplay = document.getElementById('team-seats-display');
             if (seatsDisplay) {
-                seatsDisplay.textContent = `Seats: ${members ? members.length : 0} / ${displayLimit}`;
+                seatsDisplay.textContent = `Seats: ${totalSeatsUsed} / ${displayLimit}`;
             }
 
             const inviteForm = document.getElementById('team-invite-form');
             const limitWarning = document.getElementById('seat-limit-warning');
             if (inviteForm) {
-                if (members && members.length >= seatLimit) {
+                if (totalSeatsUsed >= seatLimit) {
                     inviteForm.style.display = 'none';
                     if (limitWarning) limitWarning.style.display = 'block';
                 } else {
@@ -3139,29 +3160,53 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 }
             }
 
-            if (!members || members.length === 0) {
+            if ((!members || members.length === 0) && (!invites || invites.length === 0)) {
                 teamMemberList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">No other members on this team.</div>';
                 return;
             }
             
             teamMemberList.innerHTML = '';
-            members.forEach(member => {
-                const name = member.first_name ? `${member.first_name} ${member.last_name || ''}`.trim() : 'Team Member';
-                const initial = name.charAt(0).toUpperCase();
-                const isYou = member.id === user.id ? ' (You)' : '';
-                
-                teamMemberList.innerHTML += `
-                    <div class="team-member-item">
-                        <div class="team-member-info">
-                            <div class="team-member-avatar">${initial}</div>
-                            <div class="team-member-details">
-                                <span class="team-member-name">${name}${isYou}</span>
-                                <span class="team-member-email">${member.email}</span>
+            
+            // Render active team members
+            if (members) {
+                members.forEach(member => {
+                    const name = member.first_name ? `${member.first_name} ${member.last_name || ''}`.trim() : 'Team Member';
+                    const initial = name.charAt(0).toUpperCase();
+                    const isYou = member.id === user.id ? ' (You)' : '';
+                    
+                    teamMemberList.innerHTML += `
+                        <div class="team-member-item">
+                            <div class="team-member-info">
+                                <div class="team-member-avatar">${initial}</div>
+                                <div class="team-member-details">
+                                    <span class="team-member-name">${name}${isYou}</span>
+                                    <span class="team-member-email">${member.email}</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                `;
-            });
+                    `;
+                });
+            }
+
+            // Render pending invites
+            if (invites) {
+                invites.forEach(invite => {
+                    const name = 'Invited User';
+                    const initial = 'I';
+                    
+                    teamMemberList.innerHTML += `
+                        <div class="team-member-item" style="opacity: 0.7;">
+                            <div class="team-member-info">
+                                <div class="team-member-avatar" style="background: var(--bg-surface-secondary, #f3f4f6); color: var(--text-muted, #6b7280);">${initial}</div>
+                                <div class="team-member-details">
+                                    <span class="team-member-name">${name} <span class="badge" style="font-size: 0.7rem; background: #ffedd5; color: #ea580c; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px;">Pending</span></span>
+                                    <span class="team-member-email">${invite.email}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
             
         } catch (err) {
             console.error("Error loading team members:", err);

@@ -1,0 +1,102 @@
+{
+  "score": "34%",
+  "redFlags": "8",
+  "results": [
+    {
+      "field": "Tenant Name",
+      "leaseVal": "APEX COWORKING SOLUTIONS INTERNATIONAL INC.",
+      "estoppelVal": "Apex Coworking Solutions Int'l, Inc.",
+      "comparison": "Match"
+    },
+    {
+      "field": "Suite / Unit Number",
+      "leaseVal": "Suite 4200, 42nd Floor",
+      "estoppelVal": "Suite 4200",
+      "comparison": "Mismatch"
+    },
+    {
+      "field": "Premises Size",
+      "leaseVal": "14,500 rentable square feet",
+      "estoppelVal": "14,500 SF",
+      "comparison": "Match"
+    },
+    {
+      "field": "Current Monthly Rent",
+      "leaseVal": "$35,000.00 (Months 1–12), escalating at 3.50% per annum to $47,701.41 (Months 109–120)",
+      "estoppelVal": "$41,569.02 per month",
+      "comparison": "Mismatch"
+    },
+    {
+      "field": "Lease Expiration Date",
+      "leaseVal": "August 31, 2031",
+      "estoppelVal": "September 30, 2031",
+      "comparison": "Mismatch"
+    },
+    {
+      "field": "Security Deposit",
+      "leaseVal": "$105,000.00 (three months of initial Base Rent)",
+      "estoppelVal": "$70,000.00, no portion applied",
+      "comparison": "Mismatch"
+    },
+    {
+      "field": "Renewal Options",
+      "leaseVal": "Two (2) renewal options, each for five (5) years, at Fair Market Value; written notice required at least 270 days prior to then-current Expiration Date",
+      "estoppelVal": "One (1) renewal option to extend the Lease term for 5 years",
+      "comparison": "Mismatch"
+    },
+    {
+      "field": "CAM & Operating Caps",
+      "leaseVal": "4.85% pro-rata share of Building operating expenses; annual CAM increases capped at 3% on a cumulative and compounding basis",
+      "estoppelVal": "4.85% pro-rata share of operating costs and CAM expenses; increases capped at 4% annually",
+      "comparison": "Mismatch"
+    },
+    {
+      "field": "Lease Guarantor",
+      "leaseVal": "APEX GLOBAL ENTERPRISES HOLDINGS LLC",
+      "estoppelVal": "Apex Global Enterprises Holdings LLC",
+      "comparison": "Match"
+    },
+    {
+      "field": "Prepaid Rent",
+      "leaseVal": "$35,000.00 (applied to first full calendar month's Base Rent)",
+      "estoppelVal": "No base rent prepaid in advance except for the current month's rent",
+      "comparison": "Mismatch"
+    },
+    {
+      "field": "Landlord Default Status",
+      "leaseVal": "Landlord obligated to maintain structural parts, mechanical elevator units, and Building electrical grids at its sole cost; exception for repairs required due to Tenant negligence. No explicit landlord default/cure provision mentioned beyond this.",
+      "estoppelVal": "Landlord is currently in default under its repair obligations for failing to complete elevator modernization repairs on the 42nd floor, impairing tenant access",
+      "comparison": "Mismatch"
+    },
+    {
+      "field": "Tenant Improvement Allowance",
+      "leaseVal": "Not Mentioned",
+      "estoppelVal": "Not Mentioned",
+      "comparison": "Warning"
+    },
+    {
+      "field": "Co-Tenancy Clause",
+      "leaseVal": "Not Mentioned",
+      "estoppelVal": "Not Mentioned",
+      "comparison": "Warning"
+    },
+    {
+      "field": "Termination Right",
+      "leaseVal": "Not Mentioned",
+      "estoppelVal": "Not Mentioned",
+      "comparison": "Warning"
+    },
+    {
+      "field": "SNDA Status",
+      "leaseVal": "Not Mentioned",
+      "estoppelVal": "Not Mentioned",
+      "comparison": "Warning"
+    },
+    {
+      "field": "Permitted Use",
+      "leaseVal": "Not Mentioned",
+      "estoppelVal": "Not Mentioned",
+      "comparison": "Warning"
+    }
+  ]
+}

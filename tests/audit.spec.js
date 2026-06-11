@@ -60,7 +60,12 @@ test.describe('LeaseAlign AI E2E Audit Workflow', () => {
             camShare: { value: "$3.50/SF", quote: "CAM charges at $3.50 per square foot" },
             guarantorName: { value: "Not Mentioned", quote: "No citation found." },
             prepaidRent: { value: "Not Mentioned", quote: "No citation found." },
-            landlordDefault: { value: "No default", quote: "No landlord default noted." }
+            landlordDefault: { value: "No default", quote: "No landlord default noted." },
+            tiAllowance: { value: "$50.00/SF", quote: "Landlord shall provide a TI Allowance of $50.00 per SF" },
+            coTenancy: { value: "Required 80% occupancy", quote: "Co-tenancy requires 80% occupancy of the shopping center" },
+            terminationRight: { value: "One-time option at Year 5", quote: "Tenant may terminate at end of Lease Year 5" },
+            sndaStatus: { value: "Required within 30 days", quote: "SNDA must be executed within 30 days of lease execution" },
+            permittedUse: { value: "Retail coffee shop", quote: "Permitted use is retail coffee shop" }
           })
         });
       } else if (postData.docType === 'estoppel') {
@@ -78,7 +83,12 @@ test.describe('LeaseAlign AI E2E Audit Workflow', () => {
             camShare: { value: "$3.50/SF", quote: "CAM at $3.50/SF" },
             guarantorName: { value: "Not Mentioned", quote: "No citation found." },
             prepaidRent: { value: "Not Mentioned", quote: "No citation found." },
-            landlordDefault: { value: "No default", quote: "No landlord defaults." }
+            landlordDefault: { value: "No default", quote: "No landlord defaults." },
+            tiAllowance: { value: "$50.00/SF", quote: "TI Allowance of $50.00/SF has been paid in full" },
+            coTenancy: { value: "Required 80% occupancy", quote: "Co-tenancy active" },
+            terminationRight: { value: "One-time option at Year 5", quote: "One termination option exists" },
+            sndaStatus: { value: "Required within 30 days", quote: "SNDA active" },
+            permittedUse: { value: "Retail coffee shop", quote: "Coffee shop permitted" }
           })
         });
       } else {
@@ -106,7 +116,12 @@ test.describe('LeaseAlign AI E2E Audit Workflow', () => {
           camShare: { status: "match", reason: "CAM charges match." },
           guarantorName: { status: "warning", reason: "Neither document mentions a guarantor." },
           prepaidRent: { status: "warning", reason: "Neither document mentions prepaid rent." },
-          landlordDefault: { status: "match", reason: "No defaults in either document." }
+          landlordDefault: { status: "match", reason: "No defaults in either document." },
+          tiAllowance: { status: "match", reason: "TI allowance terms match." },
+          coTenancy: { status: "match", reason: "Co-tenancy clauses match." },
+          terminationRight: { status: "match", reason: "Termination options match." },
+          sndaStatus: { status: "match", reason: "SNDA status matches." },
+          permittedUse: { status: "match", reason: "Permitted use matches." }
         })
       });
     });
@@ -203,7 +218,7 @@ test.describe('LeaseAlign AI E2E Audit Workflow', () => {
     //  STEP 6: Verify Comparison Matrix
     // ============================
     const tableRows = page.locator('#audit-results-tbody tr');
-    await expect(tableRows).toHaveCount(11, { timeout: 5000 });
+    await expect(tableRows).toHaveCount(16, { timeout: 5000 });
 
     // Monthly Rent should be a mismatch (Lease=$12,500 vs Estoppel=$12,000)
     const rentRow = page.locator('#audit-results-tbody tr', { hasText: 'Monthly Rent' });

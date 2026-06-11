@@ -154,8 +154,12 @@ BEGIN
   ELSE
     -- No pending invitation: create a new personal team
     INSERT INTO public.teams (name, owner_id, audit_credits, seat_limit)
-    VALUES (COALESCE(new.raw_user_meta_data->>'first_name', 'Personal') || '''s Team', new.id, 0, 1)
+    VALUES (COALESCE(new.raw_user_meta_data->>'first_name', 'Personal') || '''s Team', new.id, 1, 1)
     RETURNING id INTO new_team_id;
+
+    -- Pre-seed 1 free audit credit via a 30-day grant
+    INSERT INTO public.team_credit_grants (team_id, amount_granted, amount_remaining, expires_at)
+    VALUES (new_team_id, 1, 1, NOW() + INTERVAL '30 days');
 
     INSERT INTO public.profiles (id, email, credits, byok_credits, first_name, last_name, company_name, team_id)
     VALUES (
@@ -392,6 +396,11 @@ DECLARE
   current_member_count INTEGER;
   target_user_id UUID;
 BEGIN
+  -- Security check to prevent IDOR privilege escalation
+  IF auth.uid() IS NULL OR auth.uid() != inviter_id THEN
+    RAISE EXCEPTION 'Unauthorized: Inviter ID must match the authenticated user.';
+  END IF;
+
   SELECT id, seat_limit INTO inviter_team_id, current_seat_limit FROM public.teams WHERE owner_id = inviter_id;
   IF inviter_team_id IS NULL THEN RETURN FALSE; END IF;
 

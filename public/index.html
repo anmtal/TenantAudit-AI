@@ -11,21 +11,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     
-    <!-- PDF.js library to parse text layers on client side -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
-    
     <!-- Supabase JS Client SDK Library -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" integrity="sha384-UQ9Ztz63gzT2JZCuDRkNXV8RP/gXxdPUuM9LKlz2BzqGx9xFYNAK8yAEgbfZHs7P" crossorigin="anonymous"></script>
 
-    <!-- jsPDF and html2canvas libraries for client-side PDF generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" integrity="sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
-
     <!-- Lucide Icons Library for Premium SVG Icons -->
-    <script src="https://unpkg.com/lucide@latest" integrity="sha384-bdZtphetAEBgkGZvhZXOFDWc55tHGLqaSo1f4qZtgvEiolEBqlJ9u6FTk+CoLfj0" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
 
-    <!-- Sentry Browser SDK for Observability -->
-    <script src="https://browser.sentry-cdn.com/7.114.0/bundle.min.js" crossorigin="anonymous"></script>
+
 
     <!-- Stylesheet -->
     <link rel="stylesheet" href="styles.css?v=1.0.9">
@@ -49,6 +41,12 @@
                         <p class="tagline">Commercial Lease & Estoppel Due Diligence</p>
                     </div>
                 </div>
+                <input type="checkbox" id="menu-toggle" class="menu-toggle" style="display: none;">
+                <label for="menu-toggle" class="menu-button" aria-label="Toggle navigation menu">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </label>
                 <nav class="landing-nav">
                     <a href="#features-section">Features</a>
                     <a href="#why-choose-us-section">Why Choose Us</a>
@@ -70,15 +68,14 @@
             <section class="landing-hero">
                 <div class="hero-content">
                     <span class="hero-badge">⚡ Instant AI Due Diligence</span>
-                    <h2>Catch Rent Discrepancies Before You Close</h2>
-                    <p>Automate your B2B lease review. Upload dense lease agreements and tenant estoppel certificates, cross-reference financials, and flag discrepancies in seconds.</p>
+                    <h2>Save an Average of $30k in Property Valuation Per Mismatch</h2>
+                    <p>At a 6% capitalization rate, an overlooked $150/month rent discrepancy costs $30,000 in property value. Auto-Audit and cross-reference leases and tenant estoppel certificates side-by-side in seconds.</p>
                     <div class="hero-actions">
-                        <button class="btn btn-primary btn-lg" id="hero-get-started-btn">Start Your Audit</button>
-                        <button class="btn btn-emerald btn-lg" id="hero-view-demo-btn" style="display: flex; align-items: center; gap: 8px;">
+                        <button class="btn btn-primary btn-lg" id="hero-view-demo-btn" style="display: flex; align-items: center; gap: 8px;">
                             <i data-lucide="play-circle"></i> Try Live Demo
                         </button>
                         <a href="https://calendly.com/contact-leasealign/30min" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-lg" style="text-decoration: none;">
-                            <i data-lucide="calendar"></i> Book a Demo
+                            <i data-lucide="calendar"></i> Book a 1:1 Demo
                         </a>
                     </div>
                 </div>
@@ -101,7 +98,7 @@
                     <div class="feature-card" style="border-color: rgba(6, 182, 212, 0.15);">
                         <div class="feature-icon" style="color: var(--color-cyan);"><i data-lucide="shield-check"></i></div>
                         <h4>Secure Isolated Hosting</h4>
-                        <p>Secure database footprint. Documents are parsed client-side to extract data, and original files are never saved to a server.</p>
+                        <p>Secure database footprint. Standard PDFs are parsed in-browser, while scanned documents are processed using secure OCR endpoints. Original files are never saved to a server.</p>
                     </div>
                     <div class="feature-card" style="border-color: rgba(16, 185, 129, 0.15);">
                         <div class="feature-icon" style="color: var(--color-emerald);"><i data-lucide="briefcase"></i></div>
@@ -141,91 +138,12 @@
                 </div>
             </section>
 
-            <!-- Social Proof & Testimonials Section -->
-            <section class="landing-features" style="margin-top: 80px; border-top: 1px solid var(--border-color); padding-top: 60px;">
-                <h3 class="section-title">Trusted by Commercial Real Estate Leaders</h3>
-                <p style="color: var(--text-secondary); max-width: 650px; text-align: center; margin: -24px auto 32px auto; font-size: 15px; line-height: 1.6;">
-                    Acquisitions managers, real estate lawyers, transaction brokers, and lenders use LeaseAlign AI to mitigate risk and expedite closings.
-                </p>
-                <div class="features-grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
-                    <!-- Testimonial 1 -->
-                    <div class="feature-card testimonial-card" style="border-color: rgba(168, 85, 247, 0.15); padding: 28px; text-align: left; display: flex; flex-direction: column; justify-content: space-between;">
-                        <p style="font-style: italic; color: var(--text-secondary); line-height: 1.6; font-size: 14px; margin-bottom: 20px;">
-                            "We audited a 24-tenant retail strip center using LeaseAlign AI. It flagged a $200/month rent mismatch in a grocery lease that our manual reviewers missed. That one catch saved us $40,000 in property valuation adjustment prior to closing."
-                        </p>
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--color-purple), var(--color-cyan)); display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 14px;">MS</div>
-                            <div>
-                                <h5 style="margin: 0; font-weight: 600; color: var(--text-primary); font-size: 14px;">Mark Sterling</h5>
-                                <span style="font-size: 12px; color: var(--text-muted);">VP of Acquisitions, Sterling CRE Capital</span>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Testimonial 2 -->
-                    <div class="feature-card testimonial-card" style="border-color: rgba(249, 115, 22, 0.15); padding: 28px; text-align: left; display: flex; flex-direction: column; justify-content: space-between;">
-                        <p style="font-style: italic; color: var(--text-secondary); line-height: 1.6; font-size: 14px; margin-bottom: 20px;">
-                            "Doing B2B due diligence manually takes days of billable legal hours. LeaseAlign does the first-pass comparison in under a minute, highlighting verbatim citations. Absolute game-changer for our transaction volume."
-                        </p>
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--color-orange), var(--color-purple)); display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 14px;">SJ</div>
-                            <div>
-                                <h5 style="margin: 0; font-weight: 600; color: var(--text-primary); font-size: 14px;">Sarah Jenkins, Esq.</h5>
-                                <span style="font-size: 12px; color: var(--text-muted);">Real Estate Partner, Jenkins & Croft LLP</span>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Testimonial 3 -->
-                    <div class="feature-card testimonial-card" style="border-color: rgba(16, 185, 129, 0.15); padding: 28px; text-align: left; display: flex; flex-direction: column; justify-content: space-between;">
-                        <p style="font-style: italic; color: var(--text-secondary); line-height: 1.6; font-size: 14px; margin-bottom: 20px;">
-                            "Lenders demand absolute precision on estoppel certificates. Being able to cross-reference estoppels against leases client-side without storing confidential files on third-party servers satisfies our compliance team perfectly."
-                        </p>
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <div style="width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--color-emerald), var(--color-cyan)); display: flex; align-items: center; justify-content: center; font-weight: 700; color: white; font-size: 14px;">DV</div>
-                            <div>
-                                <h5 style="margin: 0; font-weight: 600; color: var(--text-primary); font-size: 14px;">David Vance</h5>
-                                <span style="font-size: 12px; color: var(--text-muted);">Managing Director, Vanguard Commercial Lending</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+
 
             <!-- Interactive Pricing Section -->
             <section id="pricing-section" class="landing-pricing">
                 <h3 class="section-title">Flexible Pricing Plans</h3>
-                <p style="color: var(--text-secondary); max-width: 500px; text-align: center; margin-top: -16px; font-size: 14px;">Choose between using our secure hosted server or configuring your own API key to bypass audit credit limits.</p>
-                
-                <div class="pricing-switcher-wrapper">
-                    <button class="pricing-switch-btn active" id="switch-hosted">Hosted SaaS Plan</button>
-                    <button class="pricing-switch-btn" id="switch-byok">BYOK Plan (Unlimited Audits)</button>
-                </div>
-
-                <!-- Plan Comparison Grid (Hosted SaaS vs BYOB) -->
-                <div class="plan-comparison-grid" style="display: flex; flex-flow: row wrap; gap: 20px; max-width: 900px; width: 100%; margin: 24px auto 32px auto; font-size: 14px; text-align: left;">
-                    <!-- Hosted SaaS Explainer -->
-                    <div class="glass-card" style="flex: 1; min-width: 280px; padding: 20px 24px; border-color: rgba(168, 85, 247, 0.15); display: flex; flex-direction: column; justify-content: space-between;">
-                        <div>
-                            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-                                <div class="feature-icon" style="font-size: 14px; margin: 0; background: transparent; color: var(--color-purple);"><i data-lucide="cloud"></i></div>
-                                <h4 style="font-size: 15px; font-weight: 700; color: var(--text-primary);">Hosted SaaS Mode</h4>
-                            </div>
-                            <p style="color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">Run audits instantly using our secure hosted server keys. Requires <strong>zero setup</strong>, developer accounts, or technical expertise.</p>
-                        </div>
-                        <span style="font-size: 12px; font-weight: 600; color: var(--color-purple); display: flex; align-items: center; gap: 4px;"><i data-lucide="check" style="width: 14px; height: 14px;"></i> Ready out-of-the-box</span>
-                    </div>
-                    
-                    <!-- BYOB Explainer -->
-                    <div class="glass-card" style="flex: 1; min-width: 280px; padding: 20px 24px; border-color: rgba(6, 182, 212, 0.15); display: flex; flex-direction: column; justify-content: space-between;">
-                        <div>
-                            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
-                                <div class="feature-icon" style="font-size: 14px; margin: 0; background: transparent; color: var(--color-cyan);"><i data-lucide="key-round"></i></div>
-                                <h4 style="font-size: 15px; font-weight: 700; color: var(--text-primary);">BYOK Mode (Bring Your Own Key)</h4>
-                            </div>
-                            <p style="color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">Supply your own API key (OpenAI, Anthropic). Pay for your own LLM usage directly and run <strong>unlimited audits</strong>.</p>
-                        </div>
-                        <span style="font-size: 12px; font-weight: 600; color: var(--color-cyan); display: flex; align-items: center; gap: 4px;"><i data-lucide="infinity" style="width: 14px; height: 14px;"></i> Unlimited audits included</span>
-                    </div>
-                </div>
+                <p style="color: var(--text-secondary); max-width: 500px; text-align: center; margin-top: -16px; font-size: 14px;">Choose a pricing plan that fits your business needs and seat counts.</p>
  
                 <!-- Hosted API Plans (5 Tiers) -->
                 <div style="margin-bottom: 20px; text-align: center;">
@@ -240,12 +158,12 @@
                             <span class="pricing-price">$99</span><span class="pricing-period">/mo</span>
                         </div>
                         <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 5 Audits / mo</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 5 Audit Credits / mo (~1.67 audits)</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 1 Seat</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Full Discrepancy Matrix</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Export to PDF & Excel</li>
                         </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="5" data-price="99" data-seats="1" data-pack="Starter Monthly">Get Plan</button>
+                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="5" data-price="99" data-seats="1" data-interval="month" data-pack="Starter Monthly">Get Plan</button>
                     </div>
 
                     <!-- Pro -->
@@ -255,12 +173,12 @@
                             <span class="pricing-price">$299</span><span class="pricing-period">/mo</span>
                         </div>
                         <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 75 Audits / mo</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 75 Audit Credits / mo (25 audits)</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 3 Seats</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Team Shared Balance</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Full Discrepancy Matrix</li>
                         </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="75" data-price="299" data-seats="3" data-pack="Pro Monthly">Get Plan</button>
+                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="75" data-price="299" data-seats="3" data-interval="month" data-pack="Pro Monthly">Get Plan</button>
                     </div>
 
                     <!-- Team (Popular) -->
@@ -271,13 +189,13 @@
                             <span class="pricing-price">$499</span><span class="pricing-period">/mo</span>
                         </div>
                         <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 150 Audits / mo</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 150 Audit Credits / mo (50 audits)</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 5 Seats</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Team Shared Balance</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Full Discrepancy Matrix</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Priority Support</li>
                         </ul>
-                        <button class="btn btn-primary pricing-cta-btn" data-plan="hosted" data-amount="150" data-price="499" data-seats="5" data-pack="Team Monthly">Get Plan</button>
+                        <button class="btn btn-primary pricing-cta-btn" data-plan="hosted" data-amount="150" data-price="499" data-seats="5" data-interval="month" data-pack="Team Monthly">Get Plan</button>
                     </div>
 
                     <!-- Business -->
@@ -287,13 +205,13 @@
                             <span class="pricing-price">$999</span><span class="pricing-period">/mo</span>
                         </div>
                         <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 500 Audits / mo</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 500 Audit Credits / mo (~166.7 audits)</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 20 Seats</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Team Shared Balance</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Full Discrepancy Matrix</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Dedicated Account Manager</li>
                         </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="500" data-price="999" data-seats="20" data-pack="Business Monthly">Get Plan</button>
+                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="500" data-price="999" data-seats="20" data-interval="month" data-pack="Business Monthly">Get Plan</button>
                     </div>
                 </div>
 
@@ -303,15 +221,15 @@
                     <div class="pricing-card">
                         <span class="pricing-tier">STARTER ANNUAL</span>
                         <div class="pricing-price-box">
-                            <span class="pricing-price" style="font-size: 2.2rem;">$1,188</span><span class="pricing-period">/yr</span>
+                            <span class="pricing-price" style="font-size: 2.2rem;">$950</span><span class="pricing-period">/yr</span>
                         </div>
-                        <div style="text-align: center;"><span class="info-badge">($99/mo billed annually)</span></div>
+                        <div style="text-align: center;"><span class="discount-badge">Save 20% (~$79/mo)</span></div>
                         <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 60 Audits / yr</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 60 Audit Credits / yr (20 audits)</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 1 Seat</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Full Discrepancy Matrix</li>
                         </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="60" data-price="1188" data-seats="1" data-pack="Starter Annual">Get Plan</button>
+                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="60" data-price="950" data-seats="1" data-interval="year" data-pack="Starter Annual">Get Plan</button>
                     </div>
 
                     <!-- Pro -->
@@ -320,13 +238,13 @@
                         <div class="pricing-price-box">
                             <span class="pricing-price" style="font-size: 2.2rem;">$2,868</span><span class="pricing-period">/yr</span>
                         </div>
-                        <div style="text-align: center;"><span class="discount-badge">Save 20% ($239/mo)</span></div>
+                        <div style="text-align: center;"><span class="discount-badge">Save 20% (~$239/mo)</span></div>
                         <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 900 Audits / yr</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 900 Audit Credits / yr (300 audits)</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 3 Seats</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Team Shared Balance</li>
                         </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="900" data-price="2868" data-seats="3" data-pack="Pro Annual">Get Plan</button>
+                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="900" data-price="2868" data-seats="3" data-interval="year" data-pack="Pro Annual">Get Plan</button>
                     </div>
 
                     <!-- Team (Popular) -->
@@ -336,13 +254,13 @@
                         <div class="pricing-price-box">
                             <span class="pricing-price" style="font-size: 2.2rem;">$4,788</span><span class="pricing-period">/yr</span>
                         </div>
-                        <div style="text-align: center;"><span class="discount-badge">Save 20% ($399/mo)</span></div>
+                        <div style="text-align: center;"><span class="discount-badge">Save 20% (~$399/mo)</span></div>
                         <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 1,800 Audits / yr</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 1,800 Audit Credits / yr (600 audits)</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 5 Seats</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Priority Support</li>
                         </ul>
-                        <button class="btn btn-primary pricing-cta-btn" data-plan="hosted" data-amount="1800" data-price="4788" data-seats="5" data-pack="Team Annual">Get Plan</button>
+                        <button class="btn btn-primary pricing-cta-btn" data-plan="hosted" data-amount="1800" data-price="4788" data-seats="5" data-interval="year" data-pack="Team Annual">Get Plan</button>
                     </div>
 
                     <!-- Business -->
@@ -351,139 +269,72 @@
                         <div class="pricing-price-box">
                             <span class="pricing-price" style="font-size: 2.2rem;">$9,588</span><span class="pricing-period">/yr</span>
                         </div>
-                        <div style="text-align: center;"><span class="discount-badge">Save 20% ($799/mo)</span></div>
+                        <div style="text-align: center;"><span class="discount-badge">Save 20% (~$799/mo)</span></div>
                         <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 6,000 Audits / yr</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 6,000 Audit Credits / yr (2,000 audits)</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 20 Seats</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Dedicated Account Manager</li>
                         </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="6000" data-price="9588" data-seats="20" data-pack="Business Annual">Get Plan</button>
+                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="6000" data-price="9588" data-seats="20" data-interval="year" data-pack="Business Annual">Get Plan</button>
                     </div>
                 </div>
 
-                <!-- BYOK Plans MONTHLY -->
-                <div class="pricing-grid" id="byok-grid-monthly" style="display: none; max-width: 1200px; margin: 0 auto; width: 100%;">
-                    <!-- BYOK Starter -->
-                    <div class="pricing-card">
-                        <span class="pricing-tier">BYOK STARTER</span>
-                        <div class="pricing-price-box">
-                            <span class="pricing-price">$99</span><span class="pricing-period">/mo</span>
-                        </div>
-                        <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Unlimited Audits</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 1 Seat</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Bring Your Own API Key</li>
-                        </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="byok" data-amount="999999" data-price="99" data-seats="1" data-pack="BYOK Starter Monthly">Get Plan</button>
-                    </div>
-
-                    <!-- BYOK Pro -->
-                    <div class="pricing-card">
-                        <span class="pricing-tier">BYOK PRO</span>
-                        <div class="pricing-price-box">
-                            <span class="pricing-price">$199</span><span class="pricing-period">/mo</span>
-                        </div>
-                        <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Unlimited Audits</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 3 Seats</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Team Shared Balance</li>
-                        </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="byok" data-amount="999999" data-price="199" data-seats="3" data-pack="BYOK Pro Monthly">Get Plan</button>
-                    </div>
-
-                    <!-- BYOK Team (Popular) -->
-                    <div class="pricing-card" style="border-color: var(--color-purple); box-shadow: 0 0 20px rgba(168,85,247,0.1);">
-                        <div class="popular-badge">Popular</div>
-                        <span class="pricing-tier">BYOK TEAM</span>
-                        <div class="pricing-price-box">
-                            <span class="pricing-price">$499</span><span class="pricing-period">/mo</span>
-                        </div>
-                        <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Unlimited Audits</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 10 Seats</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Priority Support</li>
-                        </ul>
-                        <button class="btn btn-primary pricing-cta-btn" data-plan="byok" data-amount="999999" data-price="499" data-seats="10" data-pack="BYOK Team Monthly">Get Plan</button>
-                    </div>
-
-                    <!-- BYOK Custom -->
-                    <div class="pricing-card">
-                        <span class="pricing-tier">BYOK CUSTOM</span>
-                        <div class="pricing-price-box">
-                            <span class="pricing-price" style="font-size: 2.4rem;">Custom</span>
-                        </div>
-                        <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Unlimited Audits</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Unlimited Seats</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Dedicated Integration</li>
-                        </ul>
-                        <a href="mailto:contact@leasealign.ai" class="btn btn-secondary" style="display: block; text-align: center; text-decoration: none;">Contact Us</a>
-                    </div>
+                <div style="text-align: center; margin-top: 2rem; color: var(--text-secondary); font-size: 0.95rem;">
+                    <em>Cancel anytime. No lock-in contracts.</em>
                 </div>
 
-                <!-- BYOK Plans ANNUAL -->
-                <div class="pricing-grid" id="byok-grid-annual" style="display: none; max-width: 1200px; margin: 0 auto; width: 100%;">
-                    <!-- BYOK Starter -->
-                    <div class="pricing-card">
-                        <span class="pricing-tier">BYOK STARTER ANNUAL</span>
-                        <div class="pricing-price-box">
-                            <span class="pricing-price" style="font-size: 2.2rem;">$1,068</span><span class="pricing-period">/yr</span>
-                        </div>
-                        <div style="text-align: center;"><span class="discount-badge">Save 10% ($89/mo)</span></div>
-                        <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Unlimited Audits</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 1 Seat</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Bring Your Own API Key</li>
-                        </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="byok" data-amount="999999" data-price="1068" data-seats="1" data-pack="BYOK Starter Annual">Get Plan</button>
+                <!-- FAQ Section -->
+                <section id="faq-section" class="landing-features" style="margin-top: 80px; margin-bottom: 40px;">
+                    <h3 class="section-title">Frequently Asked Questions</h3>
+                    <div class="faq-container" style="max-width: 800px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 16px;">
+                        <details class="faq-item" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--border-radius-lg); padding: 20px; cursor: pointer; transition: var(--transition-smooth); backdrop-filter: blur(12px);">
+                            <summary style="font-weight: 700; font-size: 16px; color: var(--text-primary); display: flex; justify-content: space-between; align-items: center; list-style: none; outline: none; user-select: none;">
+                                How accurate is the automated audit?
+                                <span class="faq-icon" style="color: var(--color-purple); font-weight: bold; font-size: 20px;">+</span>
+                            </summary>
+                            <p style="margin-top: 12px; font-size: 14px; color: var(--text-secondary); line-height: 1.6; cursor: default;">
+                                LeaseAlign AI extracts and compares document terms with high precision using advanced LLMs. However, AI can occasionally overlook subtle contextual details. Therefore, all comparisons are designed as assistive tools and should be verified by a human expert or legal counsel.
+                            </p>
+                        </details>
+                        <details class="faq-item" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--border-radius-lg); padding: 20px; cursor: pointer; transition: var(--transition-smooth); backdrop-filter: blur(12px);">
+                            <summary style="font-weight: 700; font-size: 16px; color: var(--text-primary); display: flex; justify-content: space-between; align-items: center; list-style: none; outline: none; user-select: none;">
+                                What is the Human-in-the-Loop (HITL) review pattern?
+                                <span class="faq-icon" style="color: var(--color-purple); font-weight: bold; font-size: 20px;">+</span>
+                            </summary>
+                            <p style="margin-top: 12px; font-size: 14px; color: var(--text-secondary); line-height: 1.6; cursor: default;">
+                                Our platform displays extracted fields side-by-side with original text quotes from the lease and estoppel certificate. This allows human auditors to quickly click, verify, and override any discrepancies in a matter of seconds, rather than searching manually through 100-page lease files.
+                            </p>
+                        </details>
+                        <details class="faq-item" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--border-radius-lg); padding: 20px; cursor: pointer; transition: var(--transition-smooth); backdrop-filter: blur(12px);">
+                            <summary style="font-weight: 700; font-size: 16px; color: var(--text-primary); display: flex; justify-content: space-between; align-items: center; list-style: none; outline: none; user-select: none;">
+                                Is my transaction data secure?
+                                <span class="faq-icon" style="color: var(--color-purple); font-weight: bold; font-size: 20px;">+</span>
+                            </summary>
+                            <p style="margin-top: 12px; font-size: 14px; color: var(--text-secondary); line-height: 1.6; cursor: default;">
+                                Absolutely. We employ bank-grade encryption in transit and at rest. Documents are processed entirely in memory and are never written to permanent disk storage. We never share your data or use it to train public AI models.
+                            </p>
+                        </details>
+                        <details class="faq-item" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--border-radius-lg); padding: 20px; cursor: pointer; transition: var(--transition-smooth); backdrop-filter: blur(12px);">
+                            <summary style="font-weight: 700; font-size: 16px; color: var(--text-primary); display: flex; justify-content: space-between; align-items: center; list-style: none; outline: none; user-select: none;">
+                                How does the platform guard against AI hallucinations or errors?
+                                <span class="faq-icon" style="color: var(--color-purple); font-weight: bold; font-size: 20px;">+</span>
+                            </summary>
+                            <p style="margin-top: 12px; font-size: 14px; color: var(--text-secondary); line-height: 1.6; cursor: default;">
+                                We employ strict schema formatting, localized context matching, and an aggregate vision merging pipeline to isolate errors. Crucially, every extracted clause is directly linked to its exact page citation and original highlighted text quote, allowing human auditors to instantly verify accuracy in one click rather than blind trust.
+                            </p>
+                        </details>
+                        <details class="faq-item" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: var(--border-radius-lg); padding: 20px; cursor: pointer; transition: var(--transition-smooth); backdrop-filter: blur(12px);">
+                            <summary style="font-weight: 700; font-size: 16px; color: var(--text-primary); display: flex; justify-content: space-between; align-items: center; list-style: none; outline: none; user-select: none;">
+                                Does LeaseAlign AI replace legal counsel or commercial brokers?
+                                <span class="faq-icon" style="color: var(--color-purple); font-weight: bold; font-size: 20px;">+</span>
+                            </summary>
+                            <p style="margin-top: 12px; font-size: 14px; color: var(--text-secondary); line-height: 1.6; cursor: default;">
+                                No. LeaseAlign AI is an assistive productivity tool designed to automate the manual, time-consuming extraction of terms. It highlights potential discrepancies and saves up to 90% of review time, but all final audits and lease summaries should be verified by a qualified real estate professional or legal counsel.
+                            </p>
+                        </details>
                     </div>
+                </section>
 
-                    <!-- BYOK Pro -->
-                    <div class="pricing-card">
-                        <span class="pricing-tier">BYOK PRO ANNUAL</span>
-                        <div class="pricing-price-box">
-                            <span class="pricing-price" style="font-size: 2.2rem;">$1,908</span><span class="pricing-period">/yr</span>
-                        </div>
-                        <div style="text-align: center;"><span class="discount-badge">Save 20% ($159/mo)</span></div>
-                        <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Unlimited Audits</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 3 Seats</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Team Shared Balance</li>
-                        </ul>
-                        <button class="btn btn-secondary pricing-cta-btn" data-plan="byok" data-amount="999999" data-price="1908" data-seats="3" data-pack="BYOK Pro Annual">Get Plan</button>
-                    </div>
-
-                    <!-- BYOK Team (Popular) -->
-                    <div class="pricing-card" style="border-color: var(--color-purple); box-shadow: 0 0 20px rgba(168,85,247,0.1);">
-                        <div class="popular-badge">Popular</div>
-                        <span class="pricing-tier">BYOK TEAM ANNUAL</span>
-                        <div class="pricing-price-box">
-                            <span class="pricing-price" style="font-size: 2.2rem;">$4,788</span><span class="pricing-period">/yr</span>
-                        </div>
-                        <div style="text-align: center;"><span class="discount-badge">Save 20% ($399/mo)</span></div>
-                        <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Unlimited Audits</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 10 Seats</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Priority Support</li>
-                        </ul>
-                        <button class="btn btn-primary pricing-cta-btn" data-plan="byok" data-amount="999999" data-price="4788" data-seats="10" data-pack="BYOK Team Annual">Get Plan</button>
-                    </div>
-
-                    <!-- BYOK Custom -->
-                    <div class="pricing-card">
-                        <span class="pricing-tier">BYOK CUSTOM</span>
-                        <div class="pricing-price-box">
-                            <span class="pricing-price" style="font-size: 2.4rem;">Custom</span>
-                        </div>
-                        <div style="text-align: center;"><span class="info-badge">Contact Sales</span></div>
-                        <ul class="pricing-features-list">
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Unlimited Audits</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Unlimited Seats</li>
-                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Dedicated Integration</li>
-                        </ul>
-                        <a href="mailto:contact@leasealign.ai" class="btn btn-secondary" style="display: block; text-align: center; text-decoration: none;">Contact Us</a>
-                    </div>
-                </div>
 
             <!-- Security Focus Section -->
             <section id="security-section" class="landing-security">
@@ -493,7 +344,7 @@
                     </div>
                     <div class="security-info">
                         <h4>Secure Isolated Hosting</h4>
-                        <p>Unlike other platforms, LeaseAlign AI performs PDF text extraction directly in your browser. Your lease texts and credentials are routed via encrypted API proxy memory and are never stored on disk. Audit summary comparisons are securely saved under your own private account, significantly reducing corporate compliance and data exposure risks.</p>
+                        <p>Unlike other platforms, LeaseAlign AI extracts standard PDF text directly in your browser and processes scanned documents via secure, memory-only OCR endpoints. Your lease texts and credentials are routed via encrypted API proxy memory and are never stored on disk. Audit summary comparisons are securely saved under your own private account, significantly reducing corporate compliance and data exposure risks.</p>
                     </div>
                 </div>
             </section>
@@ -550,10 +401,6 @@
                         <label for="register-last-name">Last Name</label>
                         <input type="text" id="register-last-name" class="text-input" placeholder="Last Name">
                     </div>
-                    <div class="form-group register-only" style="display: none;">
-                        <label for="register-company">Company</label>
-                        <input type="text" id="register-company" class="text-input" placeholder="Company Name">
-                    </div>
                     <div class="form-group">
                         <label for="login-email">Email Address</label>
                         <input type="email" id="login-email" class="text-input" placeholder="name@company.com" required>
@@ -561,6 +408,15 @@
                     <div class="form-group">
                         <label for="login-password">Password</label>
                         <input type="password" id="login-password" class="text-input" placeholder="••••••••" required>
+                        <div id="password-strength-container" class="register-only" style="display: none; margin-top: 8px;">
+                            <div class="strength-bar-wrapper" style="height: 6px; width: 100%; background: var(--border-color); border-radius: 3px; overflow: hidden;">
+                                <div id="password-strength-bar" style="height: 100%; width: 0%; transition: width 0.3s ease, background-color 0.3s ease;"></div>
+                            </div>
+                            <div id="password-strength-text" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
+                                <span id="password-strength-label">Password Strength</span>
+                                <span id="password-strength-requirements" style="font-size: 0.7rem; color: var(--text-muted);">Min 8 chars (lower, upper, number, symbol)</span>
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="form-group checkbox-group register-only" style="display: none; margin-top: 15px; margin-bottom: 5px;">
@@ -588,6 +444,45 @@
                     <a href="#" id="login-to-home-link">&larr; Back to Landing Page</a>
                 </div>
             </div>
+
+            <!-- Forgot Password Card -->
+            <div class="glass-card login-card" id="forgot-password-card" style="display: none;">
+                <div class="login-logo-wrapper">
+                    <img src="assets/logo.png" alt="LeaseAlign AI Logo" class="login-logo">
+                    <h2>Reset Password</h2>
+                    <p>Enter your email address to receive a password reset link</p>
+                </div>
+                <form id="forgot-password-form">
+                    <div class="form-group">
+                        <label for="forgot-email">Email Address</label>
+                        <input type="email" id="forgot-email" class="text-input" placeholder="name@company.com" required>
+                    </div>
+                    <div class="login-alert" id="forgot-error-msg" style="display: none;"></div>
+                    <div id="forgot-success-msg" style="color: var(--color-emerald); font-size: 0.85rem; font-weight: 600; text-align: center; margin-bottom: 12px; display: none;"></div>
+                    <button type="submit" class="btn btn-primary full-width-btn" id="forgot-submit-btn">Send Reset Link</button>
+                </form>
+                <div class="login-back-link" style="margin-top: 20px;">
+                    <a href="#" id="forgot-back-to-login">&larr; Back to Sign In</a>
+                </div>
+            </div>
+
+            <!-- Signup Confirmation Card -->
+            <div class="glass-card login-card" id="signup-confirm-card" style="display: none; text-align: center;">
+                <div class="login-logo-wrapper">
+                    <img src="assets/logo.png" alt="LeaseAlign AI Logo" class="login-logo">
+                    <h2>Verify Your Email</h2>
+                    <p>We've sent a verification email to your address.</p>
+                </div>
+                <div style="margin: 24px 0; background: rgba(168, 85, 247, 0.05); border: 1px solid rgba(168, 85, 247, 0.15); border-radius: var(--border-radius-lg); padding: 20px;">
+                    <p style="color: var(--text-primary); font-size: 14px; font-weight: 600; margin-bottom: 8px;">Check your inbox to verify...</p>
+                    <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.5; margin-bottom: 15px;">Please click the verification link in the email to activate your account and start your automated audits.</p>
+                    <button type="button" class="btn btn-secondary btn-sm" id="resend-verification-btn">Resend Verification Email</button>
+                    <div id="resend-status-msg" style="font-size: 11px; margin-top: 8px; display: none;"></div>
+                </div>
+                <div class="login-back-link">
+                    <a href="#" id="confirm-back-to-login">&larr; Back to Sign In</a>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -612,16 +507,7 @@
                         <i data-lucide="home"></i> Home
                     </button>
                     
-                    <!-- 2. Hosted SaaS / BYOK Toggle -->
-                    <div class="connection-toggle-pill" id="header-mode-toggle" title="Switch connection mode">
-                        <button class="mode-toggle-btn active" data-mode="hosted">Hosted SaaS</button>
-                        <button class="mode-toggle-btn" data-mode="byok">BYOK</button>
-                    </div>
-                    
-                    <!-- 3. Connection Settings -->
-                    <button class="settings-btn" id="open-settings-btn">
-                        <i data-lucide="settings"></i> API Settings
-                    </button>
+
                     <button class="settings-btn" id="open-team-btn" style="margin-left: 8px;">
                         <i data-lucide="users"></i> Manage Team
                     </button>
@@ -642,6 +528,15 @@
                 </div>
             </header>
 
+            <!-- Payment Warning Banner -->
+            <div id="payment-warning-banner" class="payment-warning-alert" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 12px 20px; margin-bottom: 20px; align-items: center; justify-content: space-between; gap: 15px; color: #f87171;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                    <span style="font-size: 0.9rem; font-weight: 500;">Your latest subscription payment failed. Please update your billing details to maintain full service.</span>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="warning-banner-billing-btn" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fff; font-size: 0.8rem; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.3)'" onmouseout="this.style.background='rgba(239,68,68,0.2)'">Update Billing</button>
+            </div>
+
             <!-- Document Upload & Launch Section -->
             <section class="glass-card" id="upload-panel">
                 <div class="card-header">
@@ -657,11 +552,19 @@
                     <ol style="margin: 0; padding-left: 20px; font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
                         <li>Upload your <strong>Lease Agreement</strong> (PDF) in the first zone.</li>
                         <li>Upload the matching <strong>Tenant Estoppel Certificate</strong> (PDF) in the second zone.</li>
-                        <li>Click <strong>Run AI Lease Audit</strong> to compare 11 critical terms side-by-side.</li>
+                        <li>Click <strong>Run AI Lease Audit</strong> to compare 16 critical terms side-by-side.</li>
                     </ol>
                     <p style="margin: 0; font-size: 12px; color: var(--text-muted); padding-left: 20px;">
                         💡 <em>Tip: New to the platform? Go back to the landing page and click <strong>Try Live Demo</strong> to see how a complete audit report works instantly!</em>
                     </p>
+                </div>
+
+                <!-- Scanned PDF Warning Banner -->
+                <div id="scanned-warning-banner" style="display: none; background: rgba(249, 115, 22, 0.1); border: 1px solid rgba(249, 115, 22, 0.3); border-radius: 8px; padding: 12px 20px; margin-bottom: 20px; align-items: center; justify-content: space-between; gap: 15px; color: #fb923c;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                        <span style="font-size: 0.9rem; font-weight: 500;">Warning: The uploaded PDF appears to be a scanned document (missing text layer). For best results, we suggest enabling "Force OCR / Vision Mode" to utilize high-resolution AI vision extraction.</span>
+                    </div>
                 </div>
                 
                 <div class="upload-grid">
@@ -694,9 +597,16 @@
                     </div>
                 </div>
 
-                                    <div class="checkbox-group" style="margin-top: 15px; margin-bottom: 10px;">
+                <div style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 12px; margin-bottom: 8px;">
+                    💡 Supports PDF documents up to 300 pages or 10MB in size.
+                </div>
+
+                    <div class="checkbox-group" style="margin-top: 15px; margin-bottom: 5px;">
                         <input type="checkbox" id="force-ocr-checkbox">
-                        <label for="force-ocr-checkbox" style="font-weight: 500;">Force OCR / Vision Mode (Use if your PDF is scanned or image-based)</label>
+                        <label for="force-ocr-checkbox" style="font-weight: 500;">Force OCR / Vision Mode</label>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 15px; padding-left: 24px; line-height: 1.4;">
+                        💡 Enable this if your PDF is a scanned document, image-only, or has un-selectable text. This forces the system to convert the PDF pages into high-resolution images and run advanced AI vision model extraction.
                     </div>
                     <!-- Dashboard Actions -->
                 <div style="display: flex; gap: 16px; justify-content: flex-end; margin-top: 10px;">
@@ -714,6 +624,18 @@
 
             <!-- Audit Analysis Dashboard View (Initially Hidden) -->
             <section class="results-section" id="results-panel" style="display: none;">
+                
+                <!-- Vision Truncation Warning Banner -->
+                <div id="truncation-warning-banner" style="display: none; background: rgba(249, 115, 22, 0.1); border: 1px solid rgba(249, 115, 22, 0.3); border-radius: 8px; padding: 12px 20px; margin-bottom: 20px; align-items: center; gap: 10px; color: #fb923c;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                    <span style="font-size: 0.9rem; font-weight: 500;">Notice: Vision OCR processing was truncated early to prevent a server timeout. Only <span id="truncated-pages-count">X</span> pages were analyzed.</span>
+                </div>
+
+                <!-- Routing Fallback Warning Banner -->
+                <div id="routing-warning-banner" style="display: none; background: rgba(249, 115, 22, 0.1); border: 1px solid rgba(249, 115, 22, 0.3); border-radius: 8px; padding: 12px 20px; margin-bottom: 20px; align-items: center; gap: 10px; color: #fb923c;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
+                    <span style="font-size: 0.9rem; font-weight: 500;">Low Confidence: Relevant pages couldn't be auto-detected in the <span id="routing-warning-doc-type">document</span>. The audit fell back to using the first 5 pages, which may miss data on subsequent pages.</span>
+                </div>
                 
                 <!-- Summary Stats KPIs Grid -->
                 <div class="stats-summary-grid">
@@ -779,7 +701,10 @@
                             <h4>2. Comparison Matrix & Discrepancy Flagging</h4>
                             <p>Cross-referencing legal and financial terms between lease and tenant estoppel.</p>
                         </div>
-                        <div style="display: flex; gap: 12px;">
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <button class="btn btn-secondary" id="results-new-audit-btn">
+                                <i data-lucide="refresh-cw"></i> Start New Audit
+                            </button>
                             <button class="btn btn-secondary" id="export-pdf-btn">
                                 <i data-lucide="file-text"></i> Export PDF Report
                             </button>
@@ -865,67 +790,7 @@
         </div>
     </div>
 
-    <!-- 4. API CONFIGURATION MODAL OVERLAY -->
-    <div class="modal-overlay" id="settings-modal">
-        <div class="modal-card">
-            <button class="modal-close-btn" id="close-settings-btn">&times;</button>
-            <div class="modal-title-wrapper">
-                <h3>Configure Connection Settings</h3>
-                <p>Choose whether to use our secure hosted backend server or supply your own developer key directly (BYOK Mode).</p>
-            </div>
-            
-            <form id="settings-form" onsubmit="return false;">
-                <!-- Connection Mode Selector -->
-                <div class="form-group">
-                    <label for="settings-mode">Connection Mode</label>
-                    <div class="select-wrapper">
-                        <select id="settings-mode">
-                            <option value="hosted" selected>Hosted SaaS Mode (No Setup Required)</option>
-                            <option value="byok">Bring Your Own Key (BYOK Mode)</option>
-                        </select>
-                    </div>
-                </div>
 
-                <div id="byok-settings-group" style="display: none;">
-                    <!-- AI Provider Selector -->
-                    <div class="form-group">
-                        <label for="settings-provider">AI Provider</label>
-                        <div class="select-wrapper">
-                            <select id="settings-provider">
-                                <option value="openai" selected>OpenAI</option>
-                                <option value="anthropic">Anthropic (Claude)</option>
-
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- Dynamic Model Selector -->
-                    <div class="form-group">
-                        <label for="settings-llm-model">Model Target</label>
-                        <div class="select-wrapper">
-                            <select id="settings-llm-model">
-                                <!-- Populated dynamically by app.js -->
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- API Key Input -->
-                    <div class="form-group">
-                        <label for="settings-api-key">API Key</label>
-                        <input type="password" id="settings-api-key" placeholder="Paste your API key" class="text-input">
-                        <span style="font-size: 11px; color: var(--text-muted); display: block; margin-top: 6px; line-height: 1.4;">
-                            🔒 <strong>Security Note:</strong> Your key is stored locally in browser session memory and transmitted to our server proxy via encrypted custom headers (`X-BYOK-API-Key`) for upstream LLM calls. It is never logged, stored on disk, or cached.
-                        </span>
-                    </div>
-                </div>
-
-                <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 10px;">
-                    <button type="button" class="btn btn-secondary" id="clear-settings-btn" style="display: none;">Clear Key</button>
-                    <button type="submit" class="btn btn-primary" id="save-settings-btn">Save Settings</button>
-                </div>
-            </form>
-        </div>
-    </div>
 
     <!-- 5. PASSWORD RECOVERY MODAL -->
       <div class="modal-overlay" id="password-recovery-modal">

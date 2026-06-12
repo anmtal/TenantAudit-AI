@@ -8,13 +8,16 @@
 CREATE TABLE IF NOT EXISTS public.teams (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
-  owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
   stripe_subscription_id TEXT,
   plan_tier TEXT,
   audit_credits INTEGER NOT NULL DEFAULT 0 CONSTRAINT audit_credits_non_negative CHECK (audit_credits >= 0),
   seat_limit INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+ALTER TABLE public.teams DROP CONSTRAINT IF EXISTS teams_owner_id_key;
+ALTER TABLE public.teams ADD CONSTRAINT teams_owner_id_key UNIQUE (owner_id);
 
 ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
 
@@ -38,29 +41,24 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
   email TEXT NOT NULL,
   credits INTEGER NOT NULL DEFAULT 0 CONSTRAINT credits_non_negative CHECK (credits >= 0),
-  byok_credits INTEGER NOT NULL DEFAULT 0 CONSTRAINT byok_credits_non_negative CHECK (byok_credits >= 0),
   first_name TEXT,
   last_name TEXT,
-  company_name TEXT,
   team_id UUID REFERENCES public.teams(id) ON DELETE SET NULL,
+  plan_tier TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS credits INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS byok_credits INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS first_name TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_name TEXT;
-ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS company_name TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS active_session_id TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS team_id UUID REFERENCES public.teams(id) ON DELETE SET NULL;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS plan_tier TEXT;
 
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS credits_non_negative;
 ALTER TABLE public.profiles ADD CONSTRAINT credits_non_negative CHECK (credits >= 0);
-
-ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS byok_credits_non_negative;
-ALTER TABLE public.profiles ADD CONSTRAINT byok_credits_non_negative CHECK (byok_credits >= 0);
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
@@ -137,19 +135,17 @@ BEGIN
     -- Assign to the invited team, delete the invitation
     DELETE FROM public.team_invitations WHERE LOWER(email) = LOWER(new.email);
     
-    INSERT INTO public.profiles (id, email, credits, byok_credits, first_name, last_name, company_name, team_id)
+    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id)
     VALUES (
-      new.id, new.email, 0, 0,
+      new.id, new.email, 0,
       COALESCE(new.raw_user_meta_data->>'first_name', ''),
       COALESCE(new.raw_user_meta_data->>'last_name', ''),
-      COALESCE(new.raw_user_meta_data->>'company_name', ''),
       pending_team_id
     )
     ON CONFLICT (id) DO UPDATE 
     SET email = EXCLUDED.email,
         first_name = COALESCE(EXCLUDED.first_name, profiles.first_name),
         last_name = COALESCE(EXCLUDED.last_name, profiles.last_name),
-        company_name = COALESCE(EXCLUDED.company_name, profiles.company_name),
         team_id = pending_team_id;
   ELSE
     -- No pending invitation: create a new personal team
@@ -161,19 +157,17 @@ BEGIN
     INSERT INTO public.team_credit_grants (team_id, amount_granted, amount_remaining, expires_at)
     VALUES (new_team_id, 1, 1, NOW() + INTERVAL '30 days');
 
-    INSERT INTO public.profiles (id, email, credits, byok_credits, first_name, last_name, company_name, team_id)
+    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id)
     VALUES (
-      new.id, new.email, 0, 0,
+      new.id, new.email, 0,
       COALESCE(new.raw_user_meta_data->>'first_name', ''),
       COALESCE(new.raw_user_meta_data->>'last_name', ''),
-      COALESCE(new.raw_user_meta_data->>'company_name', ''),
       new_team_id
     )
     ON CONFLICT (id) DO UPDATE 
     SET email = EXCLUDED.email,
         first_name = COALESCE(EXCLUDED.first_name, profiles.first_name),
         last_name = COALESCE(EXCLUDED.last_name, profiles.last_name),
-        company_name = COALESCE(EXCLUDED.company_name, profiles.company_name),
         team_id = COALESCE(profiles.team_id, EXCLUDED.team_id);
   END IF;
   
@@ -274,6 +268,7 @@ DECLARE
   user_team_id UUID;
   remaining_to_deduct INTEGER := pages_to_deduct;
   grant_record RECORD;
+  row_locked BOOLEAN;
 BEGIN
   IF plan_mode = 'hosted' THEN
     SELECT team_id INTO user_team_id FROM public.profiles WHERE id = target_user_id;
@@ -285,9 +280,18 @@ BEGIN
         END IF;
     END IF;
 
-    -- Clean expired and calculate balance
-    PERFORM public.recalculate_team_credits(user_team_id);
+    -- Clean expired grants inline to reduce locking overhead
+    UPDATE public.team_credit_grants 
+    SET amount_remaining = 0 
+    WHERE team_id = user_team_id AND expires_at <= NOW() AND amount_remaining > 0;
+
+    -- Lock team row to serialize concurrent deductions securely
     SELECT audit_credits INTO active_balance FROM public.teams WHERE id = user_team_id FOR UPDATE;
+
+    -- Calculate active balance directly from unexpired active grants
+    SELECT COALESCE(SUM(amount_remaining), 0) INTO active_balance 
+    FROM public.team_credit_grants 
+    WHERE team_id = user_team_id AND expires_at > NOW();
 
     IF active_balance >= pages_to_deduct THEN
       -- FIFO Deduction from soonest-expiring grants
@@ -314,20 +318,9 @@ BEGIN
           VALUES (p_transaction_id, user_team_id, target_user_id, pages_to_deduct);
       END IF;
       
-      -- Recalculate cache after deduction
+      -- Recalculate cache AFTER deduction exactly once
       PERFORM public.recalculate_team_credits(user_team_id);
       
-      RETURN TRUE;
-    ELSE
-      RETURN FALSE;
-    END IF;
-    
-  ELSIF plan_mode = 'byok' THEN
-    SELECT byok_credits INTO active_balance FROM public.profiles WHERE id = target_user_id FOR UPDATE;
-    IF active_balance >= pages_to_deduct OR active_balance >= 900000 THEN
-      IF active_balance < 900000 THEN
-        UPDATE public.profiles SET byok_credits = byok_credits - pages_to_deduct WHERE id = target_user_id;
-      END IF;
       RETURN TRUE;
     ELSE
       RETURN FALSE;
@@ -355,10 +348,6 @@ BEGIN
       
       -- Sync UI
       PERFORM public.recalculate_team_credits(user_team_id);
-    END IF;
-  ELSIF plan_mode = 'byok' THEN
-    IF (SELECT byok_credits FROM public.profiles WHERE id = target_user_id) < 900000 THEN
-      UPDATE public.profiles SET byok_credits = byok_credits + pages_to_refund WHERE id = target_user_id;
     END IF;
   END IF;
 END;
@@ -494,15 +483,36 @@ BEGIN
       VALUES (v_user_team_id, v_credits_deducted, v_credits_deducted, NOW() + INTERVAL '30 days');
       PERFORM public.recalculate_team_credits(v_user_team_id);
     END IF;
-  ELSIF p_plan_mode = 'byok' THEN
-    IF (SELECT byok_credits FROM public.profiles WHERE id = p_user_id) < 900000 THEN
-      UPDATE public.profiles 
-      SET byok_credits = byok_credits + v_credits_deducted 
-      WHERE id = p_user_id;
-    END IF;
   END IF;
 
   RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+
+-- --------------------------------------------------------------------
+-- 14. SECURE RPC: Get Team Members (Bypasses per-user profiles RLS safely)
+-- --------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.get_team_members(p_team_id UUID)
+RETURNS TABLE (
+  id UUID,
+  email TEXT,
+  first_name TEXT,
+  last_name TEXT
+) AS $$
+BEGIN
+  -- Security check: Verify that the caller belongs to this team
+  IF EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE public.profiles.id = auth.uid() AND public.profiles.team_id = p_team_id
+  ) THEN
+    RETURN QUERY 
+    SELECT p.id, p.email, p.first_name, p.last_name 
+    FROM public.profiles p 
+    WHERE p.team_id = p_team_id;
+  ELSE
+    RAISE EXCEPTION 'Access denied. You are not a member of this team.';
+  END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

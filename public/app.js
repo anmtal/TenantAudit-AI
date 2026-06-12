@@ -2,12 +2,94 @@
    LeaseAlign AI — Core Application Logic
    ========================================================================== */
 
-// Set workerSrc for PDF.js to function correctly on client side
-if (window.pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+// Dynamic script loading helper
+function loadScript(url, integrity = null, crossorigin = null) {
+    return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[src="${url}"]`);
+        if (existing) {
+            if (existing.getAttribute('data-loaded') === 'true') {
+                resolve();
+                return;
+            }
+            existing.addEventListener('load', resolve);
+            existing.addEventListener('error', reject);
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.src = url;
+        if (integrity) script.integrity = integrity;
+        if (crossorigin) script.crossOrigin = crossorigin;
+        script.async = true;
+        script.setAttribute('data-loaded', 'false');
+
+        script.onload = () => {
+            script.setAttribute('data-loaded', 'true');
+            resolve();
+        };
+        script.onerror = (err) => {
+            script.remove();
+            reject(new Error(`Failed to load script: ${url}`));
+        };
+
+        document.head.appendChild(script);
+    });
+}
+
+async function loadPdfJsIfNeeded() {
+    if (window.pdfjsLib) return;
+    try {
+        console.log("[Dynamic Load] Loading pdf.js library...");
+        await loadScript(
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+            'sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e',
+            'anonymous'
+        );
+        if (window.pdfjsLib) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            console.log("[Dynamic Load] pdf.js and worker loaded successfully.");
+        }
+    } catch (err) {
+        console.error("Failed to dynamically load pdf.js:", err);
+        showToast("Failed to load PDF processing components. Please reload the page.", "error");
+    }
+}
+
+async function loadPdfExportLibraries() {
+    if (window.jspdf && window.html2canvas) return;
+    try {
+        console.log("[Dynamic Load] Loading PDF export libraries (jsPDF and html2canvas)...");
+        const loadJsPdf = loadScript(
+            'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+            'sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk',
+            'anonymous'
+        );
+        const loadHtml2Canvas = loadScript(
+            'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+            'sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H',
+            'anonymous'
+        );
+        await Promise.all([loadJsPdf, loadHtml2Canvas]);
+        console.log("[Dynamic Load] PDF export libraries loaded successfully.");
+    } catch (err) {
+        console.error("Failed to dynamically load PDF export libraries:", err);
+        throw new Error("Failed to load PDF export components. Please check your internet connection.");
+    }
 }
 
 function initializeApp() {
+
+    // --- Toast Notifications ---
+    window.createIconsWithA11y = function() {
+        if (window.lucide) {
+            lucide.createIcons();
+            document.querySelectorAll('[data-lucide], .lucide').forEach(el => {
+                if (!el.hasAttribute('aria-label') && !el.hasAttribute('title')) {
+                    el.setAttribute('aria-hidden', 'true');
+                }
+            });
+        }
+    };
 
     // --- Toast Notifications ---
     window.showToast = function(message, type = 'info') {
@@ -23,9 +105,9 @@ function initializeApp() {
         toast.className = `toast ${type}`;
         
         let iconHtml = '';
-        if (type === 'success') iconHtml = '<i data-lucide="check-circle" class="toast-icon"></i>';
-        else if (type === 'error') iconHtml = '<i data-lucide="alert-circle" class="toast-icon"></i>';
-        else iconHtml = '<i data-lucide="info" class="toast-icon"></i>';
+        if (type === 'success') iconHtml = '<i data-lucide="check-circle" class="toast-icon" aria-hidden="true"></i>';
+        else if (type === 'error') iconHtml = '<i data-lucide="alert-circle" class="toast-icon" aria-hidden="true"></i>';
+        else iconHtml = '<i data-lucide="info" class="toast-icon" aria-hidden="true"></i>';
         
         const title = type.charAt(0).toUpperCase() + type.slice(1);
         
@@ -35,13 +117,13 @@ function initializeApp() {
                 <div class="toast-title"></div>
                 <div class="toast-message"></div>
             </div>
-            <button class="toast-close"><i data-lucide="x" style="width: 14px; height: 14px;"></i></button>
+            <button class="toast-close" aria-label="Close Notification"><i data-lucide="x" style="width: 14px; height: 14px;" aria-hidden="true"></i></button>
         `;
         toast.querySelector('.toast-title').textContent = title;
         toast.querySelector('.toast-message').textContent = message;
         
         container.appendChild(toast);
-        lucide.createIcons();
+        createIconsWithA11y();
         
         // Trigger animation
         requestAnimationFrame(() => {
@@ -66,11 +148,11 @@ function initializeApp() {
 
     // Helper to generate or retrieve a unique session ID for single-seat login enforcement
     function getOrGenerateSessionId(forceNew = false) {
-        let sid = localStorage.getItem('ta_session_id');
+        let sid = sessionStorage.getItem('ta_session_id');
         if (!sid || forceNew) {
             sid = generateUUID();
-            localStorage.setItem('ta_session_id', sid);
-            localStorage.setItem('ta_session_timestamp', Date.now().toString());
+            sessionStorage.setItem('ta_session_id', sid);
+            sessionStorage.setItem('ta_session_timestamp', Date.now().toString());
         }
         return sid;
     }
@@ -93,7 +175,6 @@ function initializeApp() {
         if (loginPassword) loginPassword.value = '';
         if (registerFirstName) registerFirstName.value = '';
         if (registerLastName) registerLastName.value = '';
-        if (registerCompany) registerCompany.value = '';
         if (loginErrorMsg) {
             loginErrorMsg.textContent = '';
             loginErrorMsg.style.display = 'none';
@@ -139,11 +220,65 @@ function initializeApp() {
         if (uploadPanel) uploadPanel.style.display = 'block';
 
         // 7. Clear user-specific session trackers
-        localStorage.removeItem('ta_session_id');
-        localStorage.removeItem('ta_session_timestamp');
+        sessionStorage.removeItem('ta_session_id');
+        sessionStorage.removeItem('ta_session_timestamp');
+        localStorage.removeItem('ta_user_email');
+        localStorage.removeItem('ta_hosted_credits');
+        isDemoMode = false;
 
         // 8. Dismiss any active visual loaders
         hideLoader();
+        
+        const scannedBanner = document.getElementById('scanned-warning-banner');
+        if (scannedBanner) scannedBanner.style.display = 'none';
+        window.isAuditTruncated = false;
+        window.auditPagesProcessed = 0;
+    }
+
+    function resetAuditState() {
+        console.log("[Reset Audit State] Clearing uploaded files and resetting comparison matrix view...");
+        filesState.lease = null;
+        filesState.estoppel = null;
+        extractedText.lease = '';
+        extractedText.estoppel = '';
+        auditData = null;
+
+        if (leaseFileInput) leaseFileInput.value = '';
+        if (estoppelFileInput) estoppelFileInput.value = '';
+
+        if (leaseDropZone) {
+            leaseDropZone.classList.remove('file-selected');
+            if (leaseFileInfo) {
+                leaseFileInfo.textContent = 'No file selected';
+                leaseFileInfo.style.display = 'none';
+            }
+            const removeLeaseBtn = document.getElementById('remove-lease-file-btn');
+            if (removeLeaseBtn) removeLeaseBtn.style.display = 'none';
+        }
+
+        if (estoppelDropZone) {
+            estoppelDropZone.classList.remove('file-selected');
+            if (estoppelFileInfo) {
+                estoppelFileInfo.textContent = 'No file selected';
+                estoppelFileInfo.style.display = 'none';
+            }
+            const removeEstoppelBtn = document.getElementById('remove-estoppel-file-btn');
+            if (removeEstoppelBtn) removeEstoppelBtn.style.display = 'none';
+        }
+
+        if (startAuditBtn) startAuditBtn.disabled = true;
+        if (resultsPanel) resultsPanel.style.display = 'none';
+        if (uploadPanel) uploadPanel.style.display = 'block';
+        
+        const verificationDrawer = document.getElementById('verification-drawer');
+        if (verificationDrawer) verificationDrawer.style.display = 'none';
+        
+        hideLoader();
+        
+        const scannedBanner = document.getElementById('scanned-warning-banner');
+        if (scannedBanner) scannedBanner.style.display = 'none';
+        window.isAuditTruncated = false;
+        window.auditPagesProcessed = 0;
     }
 
     // --- State Variables ---
@@ -158,16 +293,17 @@ function initializeApp() {
     };
 
     let auditData = null;
-    let currentAuditTransactionId = null;
+
     let isLoggedIn = false;
+    let isDemoMode = false;
     let hostedCredits = 0;
-    let byokCredits = 0;
     let userEmail = '';
     let supabase = null;
     let supabaseUrl = '';
     let supabaseAnonKey = '';
     let isSignUpMode = false;
-    let activePlanType = 'hosted'; // 'hosted' or 'byok'
+    let activePlanType = 'hosted';
+    let nextExpiryDate = null;
 
     // --- DOM Selectors ---
     const homeView = document.getElementById('home-view');
@@ -194,18 +330,34 @@ function initializeApp() {
     const authToggleContainer = document.getElementById('auth-toggle-container');
     const registerFirstName = document.getElementById('register-first-name');
     const registerLastName = document.getElementById('register-last-name');
-    const registerCompany = document.getElementById('register-company');
 
     const userEmailDisplay = document.getElementById('user-email-display');
     const creditsCountDisplay = document.getElementById('credits-count-display');
     const creditsTopupTrigger = document.getElementById('credits-topup-trigger');
         
-    const creditsModal = document.getElementById('credits-modal');
-    const closeCreditsBtn = document.getElementById('close-credits-btn');
-    const creditsForm = document.getElementById('credits-form');
-    const creditsAmount = document.getElementById('credits-amount');
-    const buyPlanHosted = document.getElementById('buy-plan-hosted');
-    const buyPlanByok = document.getElementById('buy-plan-byok');
+    const creditsModal = null;
+    const closeCreditsBtn = null;
+    const creditsForm = null;
+    const creditsAmount = null;
+    const buyPlanHosted = null;
+
+    // --- Pricing Toggles & Grid Logic ---
+    const btnMonthly = document.getElementById('toggle-monthly');
+    const btnAnnual = document.getElementById('toggle-annual');
+    
+    const hostedMonthly = document.getElementById('hosted-grid-monthly');
+    const hostedAnnual = document.getElementById('hosted-grid-annual');
+
+    let currentPeriod = 'monthly';
+
+    function updateGrids() {
+        if (!hostedMonthly || !hostedAnnual) return;
+        hostedMonthly.style.display = 'none';
+        hostedAnnual.style.display = 'none';
+
+        if (currentPeriod === 'monthly') hostedMonthly.style.display = 'grid';
+        else hostedAnnual.style.display = 'grid';
+    }
 
     let selectedTopupPlan = 'hosted';
 
@@ -268,30 +420,7 @@ function initializeApp() {
     const exportCsvBtn = document.getElementById('export-csv-btn');
     const exportPdfBtn = document.getElementById('export-pdf-btn');
     
-    // Settings Modal Selectors
-    const openSettingsBtn = document.getElementById('open-settings-btn');
-    const closeSettingsBtn = document.getElementById('close-settings-btn');
-    const settingsModal = document.getElementById('settings-modal');
-    const settingsForm = document.getElementById('settings-form');
-    const settingsMode = document.getElementById('settings-mode');
-    const byokSettingsGroup = document.getElementById('byok-settings-group');
-    const settingsProvider = document.getElementById('settings-provider');
-    const settingsLlmModel = document.getElementById('settings-llm-model');
-    const settingsApiKey = document.getElementById('settings-api-key');
-    const clearSettingsBtn = document.getElementById('clear-settings-btn');
 
-    // Supported Models by Provider
-    const providerModels = {
-        openai: [
-            { value: 'gpt-4o-mini', label: 'GPT-4o-Mini (Fast, Cheap)' },
-            { value: 'gpt-4o', label: 'GPT-4o (Deep Legal Audit)' }
-        ],
-        anthropic: [
-            { value: 'claude-sonnet-4-6', label: 'Claude 4.6 Sonnet (Latest)' },
-            { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus (Most Capable)' },
-            { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (Fast & Cheap)' }
-        ]
-    };
 
     // --- Session Router & Multi-View Display Control ---
     function showView(viewId) {
@@ -309,8 +438,92 @@ function initializeApp() {
             loginView.style.display = 'block';
         } else if (viewId === 'dashboard') {
             dashboardView.style.display = 'block';
+            loadPdfJsIfNeeded(); // Dynamically load pdf.js when dashboard view is active
         }
     }
+
+    function syncSignUpUI() {
+        if (isSignUpMode) {
+            if (loginTitle) loginTitle.textContent = "Create an Account";
+            if (loginSubtitle) loginSubtitle.textContent = "Sign up for LeaseAlign AI to start auditing commercial leases.";
+            if (loginSubmitBtn) loginSubmitBtn.textContent = "Register Account";
+            
+            document.querySelectorAll('.register-only').forEach(el => el.style.display = 'block');
+            if (registerFirstName) registerFirstName.required = true;
+            if (registerLastName) registerLastName.required = true;
+            
+            const strengthContainer = document.getElementById('password-strength-container');
+            if (strengthContainer) strengthContainer.style.display = 'none';
+            
+            if (authToggleContainer) authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
+        } else {
+            if (loginTitle) loginTitle.textContent = "Sign In to LeaseAlign AI";
+            if (loginSubtitle) loginSubtitle.textContent = "Enter your credentials to access your transaction dashboard";
+            if (loginSubmitBtn) loginSubmitBtn.textContent = "Sign In";
+            
+            document.querySelectorAll('.register-only').forEach(el => el.style.display = 'none');
+            if (registerFirstName) registerFirstName.required = false;
+            if (registerLastName) registerLastName.required = false;
+            
+            const strengthContainer = document.getElementById('password-strength-container');
+            if (strengthContainer) strengthContainer.style.display = 'none';
+            
+            if (authToggleContainer) authToggleContainer.innerHTML = 'Don\'t have an account? <a href="#" id="auth-toggle-link">Sign Up</a>';
+        }
+    }
+
+    window.handleHashRoute = function() {
+        const hash = window.location.hash || '#home';
+        console.log("[Router] Routing to:", hash);
+
+        // Security check: if not logged in, they can only go to #home, #login, #register, #forgot-password, #signup-confirm
+        if (!isLoggedIn && !isDemoMode) {
+            if (hash === '#dashboard') {
+                window.location.hash = '#login';
+                return;
+            }
+        } else {
+            // If logged in, #login or #register should redirect to #dashboard
+            if (hash === '#login' || hash === '#register' || hash === '#forgot-password' || hash === '#signup-confirm') {
+                window.location.hash = '#dashboard';
+                return;
+            }
+        }
+
+        const defaultLoginCard = document.querySelector('.glass-card.login-card:not(#forgot-password-card):not(#signup-confirm-card)');
+        const forgotPasswordCard = document.getElementById('forgot-password-card');
+        const signupConfirmCard = document.getElementById('signup-confirm-card');
+
+        if (hash === '#home') {
+            showView('home');
+        } else if (hash === '#login') {
+            isSignUpMode = false;
+            syncSignUpUI();
+            if (defaultLoginCard) defaultLoginCard.style.display = 'block';
+            if (forgotPasswordCard) forgotPasswordCard.style.display = 'none';
+            if (signupConfirmCard) signupConfirmCard.style.display = 'none';
+            showView('login');
+        } else if (hash === '#register') {
+            isSignUpMode = true;
+            syncSignUpUI();
+            if (defaultLoginCard) defaultLoginCard.style.display = 'block';
+            if (forgotPasswordCard) forgotPasswordCard.style.display = 'none';
+            if (signupConfirmCard) signupConfirmCard.style.display = 'none';
+            showView('login');
+        } else if (hash === '#forgot-password') {
+            if (defaultLoginCard) defaultLoginCard.style.display = 'none';
+            if (forgotPasswordCard) forgotPasswordCard.style.display = 'block';
+            if (signupConfirmCard) signupConfirmCard.style.display = 'none';
+            showView('login');
+        } else if (hash === '#signup-confirm') {
+            if (defaultLoginCard) defaultLoginCard.style.display = 'none';
+            if (forgotPasswordCard) forgotPasswordCard.style.display = 'none';
+            if (signupConfirmCard) signupConfirmCard.style.display = 'block';
+            showView('login');
+        } else if (hash === '#dashboard') {
+            showView('dashboard');
+        }
+    };
 
     function updateNavUI() {
         if (homeLoginBtn) {
@@ -327,93 +540,52 @@ function initializeApp() {
         }
     }
 
-    function updateCreditsPillColor(credits) {
-        if (!creditsTopupTrigger) return;
-        creditsTopupTrigger.classList.remove('credits-low', 'credits-empty');
+    function updateCreditsPillColor(credits, element) {
+        if (!element) return;
+        element.classList.remove('credits-low', 'credits-empty');
         if (credits === 0) {
-            creditsTopupTrigger.classList.add('credits-empty');
+            element.classList.add('credits-empty');
         } else if (credits <= 15) {
-            creditsTopupTrigger.classList.add('credits-low');
+            element.classList.add('credits-low');
         }
     }
 
     function updateCreditsDisplay() {
-        const mode = localStorage.getItem('ta_connection_mode') || 'hosted';
-        const apiKey = sessionStorage.getItem('ta_api_key');
+        const displayVal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
+        creditsCountDisplay.textContent = displayVal;
+        if (homeCreditsCount) homeCreditsCount.textContent = displayVal;
         
         const suffixEl = document.getElementById('credits-count-suffix');
         const homeSuffixEl = document.getElementById('home-credits-suffix');
+        if (suffixEl) { suffixEl.style.display = 'inline'; suffixEl.textContent = "Audits Left"; }
+        if (homeSuffixEl) { homeSuffixEl.style.display = 'inline'; homeSuffixEl.textContent = "Audits Left"; }
 
-        if (mode === 'byok') {
-            if (!apiKey) {
-                hostedCredits = 0;
-                creditsCountDisplay.textContent = "API Key Required";
-                if (homeCreditsCount) homeCreditsCount.textContent = "API Key Required";
-                if (suffixEl) suffixEl.style.display = 'none';
-                if (homeSuffixEl) homeSuffixEl.style.display = 'none';
-                
-                if (creditsTopupTrigger) {
-                    creditsTopupTrigger.classList.remove('credits-low', 'credits-empty');
-                    creditsTopupTrigger.style.color = 'var(--color-orange)';
-                    creditsTopupTrigger.style.borderColor = 'rgba(249, 115, 22, 0.4)';
-                    creditsTopupTrigger.style.background = 'rgba(249, 115, 22, 0.08)';
-                }
-            } else {
-                hostedCredits = 999999; // BYOK is always Unlimited
-                creditsCountDisplay.textContent = "Unlimited";
-                if (homeCreditsCount) homeCreditsCount.textContent = "Unlimited";
-                
-                if (suffixEl) { suffixEl.style.display = 'inline'; suffixEl.textContent = "Audits"; }
-                if (homeSuffixEl) { homeSuffixEl.style.display = 'inline'; homeSuffixEl.textContent = "Audits"; }
-
-                if (creditsTopupTrigger) {
-                    creditsTopupTrigger.classList.remove('credits-low', 'credits-empty');
-                    creditsTopupTrigger.style.color = 'var(--color-emerald)';
-                    creditsTopupTrigger.style.borderColor = 'rgba(16, 185, 129, 0.25)';
-                    creditsTopupTrigger.style.background = 'rgba(16, 185, 129, 0.08)';
-                }
-            }
-        } else {
-            const displayVal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
-            creditsCountDisplay.textContent = displayVal;
-            if (homeCreditsCount) homeCreditsCount.textContent = displayVal;
-            
-            if (suffixEl) { suffixEl.style.display = 'inline'; suffixEl.textContent = "Audits Left"; }
-            if (homeSuffixEl) { homeSuffixEl.style.display = 'inline'; homeSuffixEl.textContent = "Audits Left"; }
-
-            if (creditsTopupTrigger) {
-                creditsTopupTrigger.style.color = '';
-                creditsTopupTrigger.style.borderColor = '';
-                creditsTopupTrigger.style.background = '';
-                updateCreditsPillColor(hostedCredits);
-            }
+        // Update title/tooltips with next grant expiration info
+        let titleTooltip = "Click to purchase more credits";
+        if (nextExpiryDate) {
+            const dateObj = new Date(nextExpiryDate);
+            const dateStr = dateObj.toLocaleDateString();
+            titleTooltip = `Soonest credits expire on ${dateStr}. Click to purchase more credits.`;
         }
 
-        // Sync header mode switcher toggle buttons
-        const headerModeToggle = document.getElementById('header-mode-toggle');
-        if (headerModeToggle) {
-            const btns = headerModeToggle.querySelectorAll('.mode-toggle-btn');
-            btns.forEach(btn => {
-                const btnMode = btn.getAttribute('data-mode');
-                if (btnMode === mode) {
-                    btn.classList.add('active');
-                } else {
-                    btn.classList.remove('active');
-                }
-            });
+        if (creditsTopupTrigger) {
+            creditsTopupTrigger.style.color = '';
+            creditsTopupTrigger.style.borderColor = '';
+            creditsTopupTrigger.style.background = '';
+            creditsTopupTrigger.title = titleTooltip;
+            updateCreditsPillColor(hostedCredits, creditsTopupTrigger);
+        }
+        if (homeCreditsDisplay) {
+            homeCreditsDisplay.title = titleTooltip;
+            updateCreditsPillColor(hostedCredits, homeCreditsDisplay);
         }
 
         // Sync Sync Top-up modal current balance display
         const topupBalanceValue = document.getElementById('topup-balance-value');
         if (topupBalanceValue) {
-            if (selectedTopupPlan === 'byok') {
-                topupBalanceValue.textContent = `Unlimited BYOK Audits`;
-                topupBalanceValue.style.color = 'var(--color-emerald)';
-            } else {
-                const displayBal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
-                topupBalanceValue.textContent = `${displayBal} Hosted SaaS Audits`;
-                topupBalanceValue.style.color = 'var(--color-purple)';
-            }
+            const displayBal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
+            topupBalanceValue.textContent = `${displayBal} Hosted SaaS Audits`;
+            topupBalanceValue.style.color = 'var(--color-purple)';
         }
     }
 
@@ -447,17 +619,15 @@ function initializeApp() {
             const user = await authRes.json();
 
             // Load plan type and active session ID from metadata
-            const planType = user.user_metadata?.plan_type || 'hosted';
-            activePlanType = planType;
-            console.log("User plan type loaded from metadata:", activePlanType);
+            activePlanType = 'hosted';
             
             let activeSessionId = user.user_metadata?.active_session_id;
             
-            // Fetch credits, byok_credits (bypassing session_id table column to avoid migrations mismatch)
+            // Fetch credits, plan_tier, and team credits/tier
             let profileData = null;
             const { data, error } = await supabase
                 .from('profiles')
-                .select('credits, byok_credits, teams(audit_credits)')
+                .select('credits, plan_tier, team_id, teams(id, audit_credits, plan_tier)')
                 .eq('id', user.id)
                 .single();
                 
@@ -466,7 +636,27 @@ function initializeApp() {
             } else {
                 profileData = data;
             }
-            
+
+            nextExpiryDate = null;
+            if (profileData && (profileData.team_id || (profileData.teams && profileData.teams.id))) {
+                const teamId = profileData.team_id || profileData.teams.id;
+                try {
+                    const { data: grants, error: grantsErr } = await supabase
+                        .from('team_credit_grants')
+                        .select('expires_at')
+                        .eq('team_id', teamId)
+                        .gt('amount_remaining', 0)
+                        .gt('expires_at', new Date().toISOString())
+                        .order('expires_at', { ascending: true })
+                        .limit(1);
+                    
+                    if (!grantsErr && grants && grants.length > 0) {
+                        nextExpiryDate = grants[0].expires_at;
+                    }
+                } catch (err) {
+                    console.warn("Failed to query next grant expiration date:", err);
+                }
+            }
             
             // Seat enforcement checks have been removed to support multi-seat plans.
 
@@ -475,13 +665,23 @@ function initializeApp() {
                     ? profileData.teams.audit_credits
                     : profileData.credits || 0;
 
-                console.log("Fetched profile credits. Hosted:", teamAuditCredits, "BYOK:", profileData.byok_credits);
+                console.log("Fetched profile credits. Hosted:", teamAuditCredits);
                 hostedCredits = teamAuditCredits;
-                byokCredits = profileData.byok_credits || 0;
+
+                // Toggle payment warning banner if plan_tier is 'past_due'
+                const userPlanTier = profileData.teams ? profileData.teams.plan_tier : null;
+
+                const warningBanner = document.getElementById('payment-warning-banner');
+                if (warningBanner) {
+                    if (userPlanTier === 'past_due') {
+                        warningBanner.style.display = 'flex';
+                    } else {
+                        warningBanner.style.display = 'none';
+                    }
+                }
             } else {
                 console.log("No profile data returned for user:", user.id);
             }
-            applyPlanRestrictions(activePlanType);
             updateCreditsDisplay();
         } catch (e) {
             console.error("Failed to load user profile:", e);
@@ -731,6 +931,51 @@ function initializeApp() {
                     leaseQuote: "No landlord default noted.",
                     estoppelQuote: "No landlord defaults.",
                     reason: "No defaults in either document."
+                },
+                {
+                    term: "Tenant Improvement Allowance",
+                    leaseVal: "$50,000.00",
+                    estoppelVal: "$50,000.00",
+                    status: "match",
+                    leaseQuote: "Landlord shall provide a Tenant Improvement Allowance of $50,000.00",
+                    estoppelQuote: "TI Allowance of $50,000.00 has been fully disbursed and accepted.",
+                    reason: "TI allowance amounts and disbursement status align."
+                },
+                {
+                    term: "Co-Tenancy Clause",
+                    leaseVal: "Required (Anchor tenant open)",
+                    estoppelVal: "Required (Anchor tenant open)",
+                    status: "match",
+                    leaseQuote: "Co-tenancy requires anchor grocery store to remain open.",
+                    estoppelQuote: "Co-tenancy condition is currently satisfied.",
+                    reason: "Co-tenancy requirements and status match."
+                },
+                {
+                    term: "Termination Right",
+                    leaseVal: "Early termination after Year 5",
+                    estoppelVal: "Early termination after Year 5",
+                    status: "match",
+                    leaseQuote: "Tenant has the right to terminate early after the 5th lease year with 6 months notice.",
+                    estoppelQuote: "Early termination option exists after Year 5.",
+                    reason: "Early termination rights match."
+                },
+                {
+                    term: "SNDA Status",
+                    leaseVal: "Required",
+                    estoppelVal: "Required / Executed",
+                    status: "match",
+                    leaseQuote: "Tenant shall execute a Subordination, Non-Disturbance and Attornment Agreement (SNDA).",
+                    estoppelQuote: "SNDA has been executed and delivered.",
+                    reason: "SNDA requirements and execution status match."
+                },
+                {
+                    term: "Permitted Use",
+                    leaseVal: "Retail coffee shop and beverage sales",
+                    estoppelVal: "Retail coffee shop and beverage sales",
+                    status: "match",
+                    leaseQuote: "The Premises shall be used solely for a retail coffee shop and related beverage sales.",
+                    estoppelQuote: "Permitted Use: Retail coffee shop.",
+                    reason: "Permitted use matches the retail operations."
                 }
             ]
         };
@@ -747,11 +992,7 @@ function initializeApp() {
             const res = await fetch('/api/config?t=' + Date.now());
             const config = await res.json();
             
-            // Initialize Sentry client-side if DSN is returned and SDK is loaded
-            if (config.sentryDsn && window.Sentry) {
-                window.Sentry.init({ dsn: config.sentryDsn });
-                console.log("Sentry Client initialized successfully.");
-            }
+
 
             if (config.supabaseUrl && config.supabaseAnonKey && window.supabase) {
                 supabaseUrl = config.supabaseUrl;
@@ -767,9 +1008,10 @@ function initializeApp() {
                     }
                     if (session && session.user) {
                         isLoggedIn = true;
+                        isDemoMode = false;
+                        localStorage.removeItem('ta_hosted_credits');
                         userEmail = session.user.email;
                         userEmailDisplay.textContent = userEmail;
-                        showView('dashboard');
                         updateNavUI();
                         
                         // Sync active session ID to enforce single-seat logins cryptographically
@@ -795,7 +1037,7 @@ function initializeApp() {
                                         showToast("🚫 Login Blocked: This account is currently active on another device. Please wait 30 seconds or log out from the other device.", 'error');
                                         await supabase.auth.signOut();
                                         isLoggedIn = false;
-                                        showView('home');
+                                        window.location.hash = '#home';
                                         updateNavUI();
                                         return;
                                     } else {
@@ -812,7 +1054,7 @@ function initializeApp() {
                         
                         // Check if there was a pending package selection before login
                         if (window.pendingPurchase) {
-                        const { plan, amount, price, seats, packageName } = window.pendingPurchase;
+                        const { plan, amount, price, seats, packageName, interval } = window.pendingPurchase;
                         window.pendingPurchase = null; // Clear state
                         showLoader("Connecting to payment checkout...");
                         try {
@@ -831,7 +1073,8 @@ function initializeApp() {
                                     price: parseInt(price, 10),
                                     seatCount: parseInt(seats, 10),
                                     packageName: packageName,
-                                    isSubscription: true
+                                    isSubscription: true,
+                                    interval: interval
                                 })
                             });
                             const sessionData = await response.json();
@@ -887,22 +1130,41 @@ function initializeApp() {
                             window.history.replaceState({}, document.title, window.location.pathname);
                             showToast("Payment canceled. No credits were added.", 'info');
                         }
+
+                        // Redirect to dashboard if logged in and on landing or auth pages
+                        const currentHash = window.location.hash;
+                        if (currentHash === '#login' || currentHash === '#register' || currentHash === '#forgot-password' || currentHash === '#signup-confirm' || currentHash === '#home' || !currentHash) {
+                            window.location.hash = '#dashboard';
+                        } else {
+                            window.handleHashRoute();
+                        }
                     } else {
                         isLoggedIn = false;
                         userEmail = '';
-                        showView('home');
                         updateNavUI();
                         resetAppSessionState();
+                        if (window.location.hash === '#dashboard') {
+                            window.location.hash = '#home';
+                        } else {
+                            handleHashRoute();
+                        }
                     }
                 });
             } else {
                 console.warn("Supabase configs not loaded. Auth will not work.");
-                showView('home');
+                if (localStorage.getItem('ta_logged_in') === 'true') {
+                    isLoggedIn = true;
+                    userEmail = localStorage.getItem('ta_user_email') || 'mock-user@example.com';
+                    if (userEmailDisplay) userEmailDisplay.textContent = userEmail;
+                    window.location.hash = '#dashboard';
+                } else {
+                    window.location.hash = '#home';
+                }
                 updateNavUI();
             }
         } catch (e) {
             console.error("Failed to initialize Supabase:", e);
-            showView('home');
+            window.location.hash = '#home';
             updateNavUI();
         } finally {
             document.body.setAttribute('data-initialized', 'true');
@@ -912,40 +1174,29 @@ function initializeApp() {
     // Navigation triggers
     if (homeLoginBtn) {
         homeLoginBtn.addEventListener('click', () => {
-            if (isLoggedIn) {
-                showView('dashboard');
-            } else {
-                showView('login');
-            }
+            window.location.hash = isLoggedIn ? '#dashboard' : '#login';
         });
     }
     if (heroGetStartedBtn) {
         heroGetStartedBtn.addEventListener('click', () => {
-            if (isLoggedIn) {
-                showView('dashboard');
-            } else {
-                showView('login');
-            }
+            window.location.hash = isLoggedIn ? '#dashboard' : '#login';
         });
     }
     const heroViewDemoBtn = document.getElementById('hero-view-demo-btn');
     if (heroViewDemoBtn) {
         heroViewDemoBtn.addEventListener('click', () => {
             console.log("Launching interactive demo...");
+            isDemoMode = true;
             isLoggedIn = true;
             userEmail = "demo-user@leasealign.ai";
             if (userEmailDisplay) userEmailDisplay.textContent = userEmail;
             if (localStorage.getItem('ta_hosted_credits') === null) {
                 localStorage.setItem('ta_hosted_credits', '10');
             }
-            if (localStorage.getItem('ta_byok_credits') === null) {
-                localStorage.setItem('ta_byok_credits', '0');
-            }
             localStorage.setItem('ta_user_email', userEmail);
             getOrGenerateSessionId(true);
             hostedCredits = parseInt(localStorage.getItem('ta_hosted_credits') || '0', 10);
-            byokCredits = parseInt(localStorage.getItem('ta_byok_credits') || '0', 10);
-            showView('dashboard');
+            window.location.hash = '#dashboard';
             updateNavUI();
             updateCreditsDisplay();
             loadDemoAuditData();
@@ -954,65 +1205,24 @@ function initializeApp() {
     if (loginToHomeLink) {
         loginToHomeLink.addEventListener('click', (e) => {
             e.preventDefault();
-            showView('home');
+            window.location.hash = '#home';
         });
     }
     const dashboardHomeBtn = document.getElementById('dashboard-home-btn');
     if (dashboardHomeBtn) {
         dashboardHomeBtn.addEventListener('click', () => {
-            showView('home');
+            window.location.hash = '#home';
         });
     }
 
-    // Pricing Switcher Tab Toggle Logic
-    const switchHostedBtn = document.getElementById('switch-hosted');
-    const switchByokBtn = document.getElementById('switch-byok');
-    const hostedGrid = document.getElementById('hosted-grid');
-    const byokGrid = document.getElementById('byok-grid');
-
-    if (switchHostedBtn && switchByokBtn && hostedGrid && byokGrid) {
-        switchHostedBtn.addEventListener('click', () => {
-            switchHostedBtn.classList.add('active');
-            switchByokBtn.classList.remove('active');
-            hostedGrid.style.display = 'grid';
-            byokGrid.style.display = 'none';
-            
-            // If logged in, sync connection mode as well
-            if (isLoggedIn) {
-                const currentMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                if (currentMode !== 'hosted') {
-                    localStorage.setItem('ta_connection_mode', 'hosted');
-                    if (settingsMode) settingsMode.value = 'hosted';
-                    const savedKey = sessionStorage.getItem('ta_api_key') || '';
-                    updateSettingsUI('hosted', '');
-                    selectedTopupPlan = 'hosted';
-                    if (buyPlanHosted) buyPlanHosted.click();
-                    updateCreditsDisplay();
-                }
-            }
-        });
-
-        switchByokBtn.addEventListener('click', () => {
-            switchByokBtn.classList.add('active');
-            switchHostedBtn.classList.remove('active');
-            hostedGrid.style.display = 'none';
-            byokGrid.style.display = 'flex';
-            
-            // If logged in, sync connection mode as well
-            if (isLoggedIn) {
-                const currentMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-                if (currentMode !== 'byok') {
-                    localStorage.setItem('ta_connection_mode', 'byok');
-                    if (settingsMode) settingsMode.value = 'byok';
-                    const savedKey = sessionStorage.getItem('ta_api_key') || '';
-                    updateSettingsUI('byok', savedKey);
-                    selectedTopupPlan = 'byok';
-                    if (buyPlanByok) buyPlanByok.click();
-                    updateCreditsDisplay();
-                }
-            }
+    const resultsNewAuditBtn = document.getElementById('results-new-audit-btn');
+    if (resultsNewAuditBtn) {
+        resultsNewAuditBtn.addEventListener('click', () => {
+            resetAuditState();
         });
     }
+
+
 
 
 
@@ -1034,7 +1244,10 @@ function initializeApp() {
                 document.querySelectorAll('.register-only').forEach(el => el.style.display = 'block');
                 if (registerFirstName) registerFirstName.required = true;
                 if (registerLastName) registerLastName.required = true;
-                if (registerCompany) registerCompany.required = true;
+                
+                // Keep password strength meter hidden on initial toggle until typing
+                const strengthContainer = document.getElementById('password-strength-container');
+                if (strengthContainer) strengthContainer.style.display = 'none';
                 
                 authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
             } else {
@@ -1045,41 +1258,206 @@ function initializeApp() {
                 document.querySelectorAll('.register-only').forEach(el => el.style.display = 'none');
                 if (registerFirstName) registerFirstName.required = false;
                 if (registerLastName) registerLastName.required = false;
-                if (registerCompany) registerCompany.required = false;
+                
+                // Hide password strength container
+                const strengthContainer = document.getElementById('password-strength-container');
+                if (strengthContainer) strengthContainer.style.display = 'none';
                 
                 authToggleContainer.innerHTML = 'Don\'t have an account? <a href="#" id="auth-toggle-link">Sign Up</a>';
             }
         });
     }
 
+    if (loginPassword) {
+        loginPassword.addEventListener('input', () => {
+            const container = document.getElementById('password-strength-container');
+            if (!container) return;
+            
+            if (!isSignUpMode) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            const val = loginPassword.value;
+            if (val.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            
+            container.style.display = 'block';
+            let criteriaMet = 0;
+            if (val.length >= 8) criteriaMet++;
+            if (/[a-z]/.test(val)) criteriaMet++;
+            if (/[A-Z]/.test(val)) criteriaMet++;
+            if (/[0-9]/.test(val)) criteriaMet++;
+            if (/[^A-Za-z0-9]/.test(val)) criteriaMet++;
+            
+            const pct = (criteriaMet / 5) * 100;
+            const strengthBar = document.getElementById('password-strength-bar');
+            const strengthLabel = document.getElementById('password-strength-label');
+            
+            if (strengthBar) {
+                strengthBar.style.width = `${pct}%`;
+                if (criteriaMet <= 2) {
+                    strengthBar.style.backgroundColor = '#ff4d4d';
+                    if (strengthLabel) strengthLabel.textContent = 'Weak Password';
+                } else if (criteriaMet <= 4) {
+                    strengthBar.style.backgroundColor = '#ffa500';
+                    if (strengthLabel) strengthLabel.textContent = 'Medium Password';
+                } else {
+                    strengthBar.style.backgroundColor = '#2ecc71';
+                    if (strengthLabel) strengthLabel.textContent = 'Strong Password';
+                }
+            }
+        });
+    }
+
     const forgotPasswordLink = document.getElementById('forgot-password-link');
     if (forgotPasswordLink) {
-        forgotPasswordLink.addEventListener('click', async (e) => {
+        forgotPasswordLink.addEventListener('click', (e) => {
             e.preventDefault();
-            let email = loginEmail ? loginEmail.value.trim() : '';
+            window.location.hash = '#forgot-password';
+        });
+    }
+
+    const forgotBackToLogin = document.getElementById('forgot-back-to-login');
+    if (forgotBackToLogin) {
+        forgotBackToLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.location.hash = '#login';
+        });
+    }
+
+    const confirmBackToLogin = document.getElementById('confirm-back-to-login');
+    if (confirmBackToLogin) {
+        confirmBackToLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.location.hash = '#login';
+        });
+    }
+
+    const resendVerificationBtn = document.getElementById('resend-verification-btn');
+    const resendStatusMsg = document.getElementById('resend-status-msg');
+    if (resendVerificationBtn) {
+        resendVerificationBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const email = sessionStorage.getItem('ta_verification_email') || (loginEmail ? loginEmail.value.trim() : '');
             if (!email) {
-                email = window.prompt("Please enter your email address to reset your password:");
-                if (!email || !email.trim()) {
-                    return;
+                showToast('No email found to resend verification. Please sign up again.', 'error');
+                if (resendStatusMsg) {
+                    resendStatusMsg.textContent = 'No email found to resend verification.';
+                    resendStatusMsg.style.color = 'var(--color-red)';
+                    resendStatusMsg.style.display = 'block';
                 }
-                email = email.trim();
+                return;
             }
-            if (supabase) {
-                const originalText = forgotPasswordLink.textContent;
-                forgotPasswordLink.textContent = "Sending...";
-                try {
+            
+            resendVerificationBtn.disabled = true;
+            resendVerificationBtn.textContent = 'Sending...';
+            if (resendStatusMsg) resendStatusMsg.style.display = 'none';
+            
+            try {
+                if (supabase) {
+                    const { error } = await supabase.auth.resend({
+                        type: 'signup',
+                        email: email,
+                        options: {
+                            emailRedirectTo: window.location.origin
+                        }
+                    });
+                    if (error) throw error;
+                    
+                    showToast('Verification email resent successfully!', 'success');
+                    if (resendStatusMsg) {
+                        resendStatusMsg.textContent = 'Verification email resent successfully! Check your inbox.';
+                        resendStatusMsg.style.color = 'var(--color-emerald)';
+                        resendStatusMsg.style.display = 'block';
+                    }
+                } else {
+                    showToast('Verification email resent successfully (Mock Mode)!', 'success');
+                    if (resendStatusMsg) {
+                        resendStatusMsg.textContent = 'Verification email resent (Mock Mode)!';
+                        resendStatusMsg.style.color = 'var(--color-emerald)';
+                        resendStatusMsg.style.display = 'block';
+                    }
+                }
+                
+                let cooldown = 60;
+                const interval = setInterval(() => {
+                    cooldown--;
+                    if (cooldown <= 0) {
+                        clearInterval(interval);
+                        resendVerificationBtn.disabled = false;
+                        resendVerificationBtn.textContent = 'Resend Verification Email';
+                        if (resendStatusMsg) resendStatusMsg.style.display = 'none';
+                    } else {
+                        resendVerificationBtn.textContent = `Resend in ${cooldown}s`;
+                    }
+                }, 1000);
+            } catch (err) {
+                console.error("Resend verification error:", err);
+                showToast("Error: " + err.message, 'error');
+                if (resendStatusMsg) {
+                    resendStatusMsg.textContent = err.message;
+                    resendStatusMsg.style.color = 'var(--color-red)';
+                    resendStatusMsg.style.display = 'block';
+                }
+                resendVerificationBtn.disabled = false;
+                resendVerificationBtn.textContent = 'Resend Verification Email';
+            }
+        });
+    }
+
+    const forgotPasswordForm = document.getElementById('forgot-password-form');
+    const forgotEmail = document.getElementById('forgot-email');
+    const forgotErrorMsg = document.getElementById('forgot-error-msg');
+    const forgotSuccessMsg = document.getElementById('forgot-success-msg');
+    const forgotSubmitBtn = document.getElementById('forgot-submit-btn');
+
+    if (forgotPasswordForm) {
+        forgotPasswordForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = forgotEmail.value.trim();
+            if (!email) return;
+
+            if (forgotErrorMsg) forgotErrorMsg.style.display = 'none';
+            if (forgotSuccessMsg) forgotSuccessMsg.style.display = 'none';
+            if (forgotSubmitBtn) {
+                forgotSubmitBtn.disabled = true;
+                forgotSubmitBtn.textContent = 'Sending...';
+            }
+
+            try {
+                if (supabase) {
                     const { error } = await supabase.auth.resetPasswordForEmail(email, {
                         redirectTo: window.location.origin
                     });
                     if (error) throw error;
-                    showToast("Password reset email sent! Please check your inbox.", 'info');
-                } catch (err) {
-                    showToast("Error resetting password: " + err.message, 'error');
-                } finally {
-                    forgotPasswordLink.textContent = originalText;
+                    
+                    if (forgotSuccessMsg) {
+                        forgotSuccessMsg.textContent = "Password reset email sent! Please check your inbox.";
+                        forgotSuccessMsg.style.display = 'block';
+                    }
+                    showToast("Password reset email sent! Please check your inbox.", 'success');
+                } else {
+                    if (forgotSuccessMsg) {
+                        forgotSuccessMsg.textContent = "Password reset email sent (Mock Mode)! Check your mock inbox.";
+                        forgotSuccessMsg.style.display = 'block';
+                    }
+                    showToast("Password reset email sent (Mock Mode)!", 'success');
                 }
-            } else {
-                showToast("Password reset is not available in mock mode.", 'info');
+            } catch (err) {
+                console.error("Forgot password error:", err);
+                if (forgotErrorMsg) {
+                    forgotErrorMsg.textContent = err.message;
+                    forgotErrorMsg.style.display = 'block';
+                }
+                showToast("Error: " + err.message, 'error');
+            } finally {
+                if (forgotSubmitBtn) {
+                    forgotSubmitBtn.disabled = false;
+                    forgotSubmitBtn.textContent = 'Send Reset Link';
+                }
             }
         });
     }
@@ -1091,6 +1469,22 @@ function initializeApp() {
             const password = loginPassword.value;
 
             if (!email || !password) return;
+
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                showToast('Please enter a valid email address.', 'error');
+                loginErrorMsg.textContent = 'Please enter a valid email address.';
+                loginErrorMsg.style.display = 'block';
+                return;
+            }
+
+            // Clear any stale demo state and local credits explicitly before signing in/up
+            isDemoMode = false;
+            localStorage.removeItem('ta_hosted_credits');
+            localStorage.removeItem('ta_byok_credits');
+            localStorage.removeItem('ta_connection_mode');
+            localStorage.removeItem('ta_user_plan_type');
+            localStorage.removeItem('ta_logged_in');
 
             loginErrorMsg.style.display = 'none';
             loginSubmitBtn.disabled = true;
@@ -1108,19 +1502,31 @@ function initializeApp() {
                             return;
                         }
                         
+                        // Password Strength Validation
+                        const hasLength = password.length >= 8;
+                        const hasLower = /[a-z]/.test(password);
+                        const hasUpper = /[A-Z]/.test(password);
+                        const hasNumber = /[0-9]/.test(password);
+                        const hasSymbol = /[^A-Za-z0-9]/.test(password);
+                        if (!hasLength || !hasLower || !hasUpper || !hasNumber || !hasSymbol) {
+                            showToast('Password must be at least 8 characters long and contain lowercase, uppercase, numbers, and symbols.', 'error');
+                            loginSubmitBtn.disabled = false;
+                            loginSubmitBtn.textContent = originalText;
+                            return;
+                        }
+                        
                         const firstName = registerFirstName ? registerFirstName.value.trim() : '';
                         const lastName = registerLastName ? registerLastName.value.trim() : '';
-                        const company = registerCompany ? registerCompany.value.trim() : '';
 
                         localStorage.setItem('ta_fresh_login', 'true');
+                        sessionStorage.setItem('ta_verification_email', email);
                         const { data, error } = await supabase.auth.signUp({
                             email: email,
                             password: password,
                             options: {
                                 data: {
                                     first_name: firstName,
-                                    last_name: lastName,
-                                    company_name: company
+                                    last_name: lastName
                                 }
                             }
                         });
@@ -1128,7 +1534,11 @@ function initializeApp() {
                             localStorage.removeItem('ta_fresh_login');
                             throw error;
                         }
-                        showToast("🎉 Account created successfully! Please top up your audit credits to begin auditing.", 'success');
+                        showToast("🎉 Registration successful! Please check your email for a verification OTP link/code before logging in.", 'success');
+                        window.location.hash = '#signup-confirm';
+                        loginSubmitBtn.disabled = false;
+                        loginSubmitBtn.textContent = originalText;
+                        return;
                     } else {
                         localStorage.setItem('ta_fresh_login', 'true');
                         const { data, error } = await supabase.auth.signInWithPassword({
@@ -1141,31 +1551,23 @@ function initializeApp() {
                         }
                     }
                 } else {
-                    console.log("Offline mode: initiating mock login/signup.");
-                    isLoggedIn = true;
-                    userEmail = email;
-                    if (userEmailDisplay) userEmailDisplay.textContent = userEmail;
-                    
-                    if (localStorage.getItem('ta_hosted_credits') === null) {
-                        localStorage.setItem('ta_hosted_credits', '10');
-                    }
-                    if (localStorage.getItem('ta_byok_credits') === null) {
-                        localStorage.setItem('ta_byok_credits', '0');
-                    }
-                    localStorage.setItem('ta_user_email', email);
-                    
-                    getOrGenerateSessionId(true);
-                    
-                    hostedCredits = parseInt(localStorage.getItem('ta_hosted_credits') || '0', 10);
-                    byokCredits = parseInt(localStorage.getItem('ta_byok_credits') || '0', 10);
-                    
-                    showView('dashboard');
-                    updateNavUI();
-                    updateCreditsDisplay();
-                    
                     if (isSignUpMode) {
+                        sessionStorage.setItem('ta_verification_email', email);
                         showToast("🎉 Account created successfully (Local Offline Mode)!", 'success');
+                        window.location.hash = '#signup-confirm';
+                        loginSubmitBtn.disabled = false;
+                        loginSubmitBtn.textContent = originalText;
+                        return;
                     } else {
+                        localStorage.setItem('ta_logged_in', 'true');
+                        localStorage.setItem('ta_user_email', email);
+                        isLoggedIn = true;
+                        userEmail = email;
+                        userEmailDisplay.textContent = userEmail;
+                        loginErrorMsg.style.display = 'none';
+                        window.location.hash = '#dashboard';
+                        updateNavUI();
+                        updateCreditsDisplay();
                         showToast("🎉 Logged in successfully (Local Offline Mode).", "success");
                     }
                 }
@@ -1190,7 +1592,7 @@ function initializeApp() {
         } finally {
             isLoggedIn = false;
             userEmail = '';
-            showView('home');
+            window.location.hash = '#home';
             updateNavUI();
             resetAppSessionState();
             
@@ -1231,6 +1633,11 @@ function initializeApp() {
     if (homeCreditsDisplay) {
         homeCreditsDisplay.addEventListener('click', handleTopupClick);
     }
+
+    const warningBillingBtn = document.getElementById('warning-banner-billing-btn');
+    if (warningBillingBtn) {
+        warningBillingBtn.addEventListener('click', handleTopupClick);
+    }
     
     if (closeCreditsBtn) {
         closeCreditsBtn.addEventListener('click', () => {
@@ -1241,33 +1648,6 @@ function initializeApp() {
     if (creditsModal) {
         creditsModal.addEventListener('click', (e) => {
             if (e.target === creditsModal) creditsModal.classList.remove('active');
-        });
-    }
-
-    if (buyPlanHosted && buyPlanByok && creditsAmount) {
-        buyPlanHosted.addEventListener('click', () => {
-            buyPlanHosted.classList.add('active');
-            buyPlanByok.classList.remove('active');
-            selectedTopupPlan = 'hosted';
-            creditsAmount.innerHTML = `
-                <option value="100" selected>Starter: 100 Audit Credits ($49.00)</option>
-                <option value="500">Strip Center: 500 Audit Credits ($149.00)</option>
-                <option value="1500">Neighborhood Center: 1,500 Audit Credits ($399.00)</option>
-                <option value="8000">Annual Package: 8,000 Audit Credits ($999.00)</option>
-                <option value="20000">Enterprise Package: 20,000 Audit Credits ($2,499.00)</option>
-            `;
-            updateCreditsDisplay();
-        });
-
-        buyPlanByok.addEventListener('click', () => {
-            buyPlanByok.classList.add('active');
-            buyPlanHosted.classList.remove('active');
-            selectedTopupPlan = 'byok';
-            creditsAmount.innerHTML = `
-                <option value="149" selected>BYOK Monthly: Unlimited Audits ($149.00/mo)</option>
-                <option value="1299">BYOK Annual: Unlimited Audits ($1,299.00/yr)</option>
-            `;
-            updateCreditsDisplay();
         });
     }
 
@@ -1285,19 +1665,13 @@ function initializeApp() {
                     // Determine price and package name based on amount and plan type
                     let price = 49.00;
                     let packageName = "Starter Package";
-                    let checkoutAmount = 999999;
+                    let checkoutAmount = amount;
                     
-                    if (selectedTopupPlan === 'hosted') {
-                        checkoutAmount = amount;
-                        if (amount === 100) { price = 49.00; packageName = "Starter Package"; }
-                        else if (amount === 500) { price = 149.00; packageName = "Strip Center Package"; }
-                        else if (amount === 1500) { price = 399.00; packageName = "Neighborhood Center Package"; }
-                        else if (amount === 8000) { price = 999.00; packageName = "Annual Package"; }
-                        else if (amount === 20000) { price = 2499.00; packageName = "Enterprise Package"; }
-                    } else {
-                        if (amount === 149) { price = 149.00; packageName = "BYOK Monthly Plan"; }
-                        else if (amount === 1299) { price = 1299.00; packageName = "BYOK Annual Plan"; }
-                    }
+                    if (amount === 100) { price = 49.00; packageName = "Starter Package"; }
+                    else if (amount === 500) { price = 149.00; packageName = "Strip Center Package"; }
+                    else if (amount === 1500) { price = 399.00; packageName = "Neighborhood Center Package"; }
+                    else if (amount === 8000) { price = 999.00; packageName = "Annual Package"; }
+                    else if (amount === 20000) { price = 2499.00; packageName = "Enterprise Package"; }
 
                     creditsModal.classList.remove('active');
                     showLoader("Connecting to payment checkout...");
@@ -1311,7 +1685,7 @@ function initializeApp() {
                         },
                         body: JSON.stringify({
                             amount: checkoutAmount,
-                            planType: selectedTopupPlan,
+                            planType: 'hosted',
                             userId: user.id,
                             price,
                             packageName,
@@ -1332,23 +1706,16 @@ function initializeApp() {
                         throw new Error("Stripe checkout session creation failed. No URL returned.");
                     }
                 } else {
-                    if (selectedTopupPlan === 'byok') {
-                        byokCredits = 999999;
-                    } else {
-                        const isAnnual = (amount === 8000 || amount === 20000);
-                        hostedCredits = (isAnnual ? 0 : hostedCredits) + amount;
-                    }
+                    const isAnnual = (amount === 8000 || amount === 20000);
+                    hostedCredits = (isAnnual ? 0 : hostedCredits) + amount;
                     localStorage.setItem('ta_hosted_credits', hostedCredits);
-                    localStorage.setItem('ta_byok_credits', byokCredits);
-                    localStorage.setItem('ta_user_plan_type', selectedTopupPlan);
+                    localStorage.setItem('ta_user_plan_type', 'hosted');
                     
-                    activePlanType = selectedTopupPlan;
-                    applyPlanRestrictions(activePlanType);
+                    activePlanType = 'hosted';
                     updateCreditsDisplay();
                     
                     creditsModal.classList.remove('active');
-                    const displayAmt = selectedTopupPlan === 'byok' ? "Unlimited" : `+${amount}`;
-                    showToast(`🎉 Offline Demo Mode: Successfully activated your ${selectedTopupPlan.toUpperCase()} plan with ${displayAmt} credits!`, 'success');
+                    showToast(`🎉 Offline Demo Mode: Successfully activated your HOSTED plan with +${amount} credits!`, 'success');
                 }
             } catch (err) {
                 console.error("Top up error:", err);
@@ -1357,153 +1724,14 @@ function initializeApp() {
         });
     }
 
-    function updateModelDropdown(provider, selectedValue) {
-        if (!settingsLlmModel) return;
-        settingsLlmModel.innerHTML = '';
-        const models = providerModels[provider] || [];
-        models.forEach(m => {
-            const opt = document.createElement('option');
-            opt.value = m.value;
-            opt.textContent = m.label;
-            settingsLlmModel.appendChild(opt);
-        });
-        
-        const hasSelectedValue = models.some(m => m.value === selectedValue);
-        if (selectedValue && hasSelectedValue) {
-            settingsLlmModel.value = selectedValue;
-        } else if (models.length > 0) {
-            settingsLlmModel.value = models[0].value;
-        }
-    }
-
-    // --- Plan-Based Settings Restrictions Gating ---
-    function applyPlanRestrictions(planType) {
-        console.log(`[Plan Restrictions] Applying restrictions. Hosted credits: ${hostedCredits}, BYOK credits: ${byokCredits}`);
-        const settingsModeDropdown = document.getElementById('settings-mode');
-        if (!settingsModeDropdown) return;
-        
-        const hostedOption = settingsModeDropdown.querySelector('option[value="hosted"]');
-        const byokOption = settingsModeDropdown.querySelector('option[value="byok"]');
-        
-        const targetMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-        
-        if (hostedOption) hostedOption.disabled = (targetMode === 'byok');
-        if (byokOption) byokOption.disabled = (targetMode === 'hosted');
-        
-        settingsModeDropdown.value = targetMode;
-        
-        const savedApiKey = sessionStorage.getItem('ta_api_key') || '';
-        updateSettingsUI(targetMode, targetMode === 'byok' ? savedApiKey : '');
-    }
-
     // --- Load Saved Settings ---
     function loadSettings() {
-        applyPlanRestrictions(activePlanType);
-
-        const savedMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-        const savedProvider = localStorage.getItem('ta_api_provider') || 'openai';
-        const savedModel = localStorage.getItem('ta_llm_model') || 'gpt-4o-mini';
-        const savedKey = sessionStorage.getItem('ta_api_key') || '';
-        
-        settingsMode.value = savedMode;
-        settingsProvider.value = savedProvider;
-        settingsApiKey.value = savedKey;
-        
-        updateModelDropdown(savedProvider, savedModel);
-        updateSettingsUI(savedMode, savedKey);
-        
-        // Sync landing page pricing switcher to saved mode
-        if (switchHostedBtn && switchByokBtn && hostedGrid && byokGrid) {
-            if (savedMode === 'hosted') {
-                switchHostedBtn.classList.add('active');
-                switchByokBtn.classList.remove('active');
-                hostedGrid.style.display = 'grid';
-                byokGrid.style.display = 'none';
-            } else {
-                switchByokBtn.classList.add('active');
-                switchHostedBtn.classList.remove('active');
-                hostedGrid.style.display = 'none';
-                byokGrid.style.display = 'flex';
-            }
-        }
-        
-        // Sync top-up plan type to match saved connection mode
-        selectedTopupPlan = savedMode;
-        if (savedMode === 'hosted') {
-            if (buyPlanHosted) buyPlanHosted.classList.add('active');
-            if (buyPlanByok) buyPlanByok.classList.remove('active');
-        } else {
-            if (buyPlanByok) buyPlanByok.classList.add('active');
-            if (buyPlanHosted) buyPlanHosted.classList.remove('active');
-        }
-
+        hostedCredits = parseInt(localStorage.getItem('ta_hosted_credits') || '0', 10);
         updateCreditsDisplay();
-    }
-
-    function updateSettingsUI(mode, apiKey) {
-        if (mode === 'hosted') {
-            byokSettingsGroup.style.display = 'none';
-            clearSettingsBtn.style.display = 'none';
-            
-            openSettingsBtn.textContent = '⚙️ Connection: Hosted SaaS';
-            openSettingsBtn.style.borderColor = 'rgba(139, 92, 246, 0.4)';
-            openSettingsBtn.style.color = '#a78bfa';
-        } else {
-            byokSettingsGroup.style.display = 'block';
-            clearSettingsBtn.style.display = apiKey ? 'inline-block' : 'none';
-            
-            if (apiKey) {
-                openSettingsBtn.textContent = '⚙️ Connection: BYOB Active';
-                openSettingsBtn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
-                openSettingsBtn.style.color = '#34d399';
-            } else {
-                openSettingsBtn.textContent = '⚙️ Configure API Key';
-                openSettingsBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
-                openSettingsBtn.style.color = '#f87171';
-            }
-        }
     }
 
     loadSettings();
     initSupabase();
-
-    // Toggle BYOK options when changing connection mode dropdown
-    if (settingsMode) {
-        settingsMode.addEventListener('change', (e) => {
-            const tempKey = settingsApiKey.value.trim();
-            updateSettingsUI(e.target.value, tempKey);
-            
-            // Update displayed credits count immediately when switching dropdown selection
-            const selectedMode = e.target.value;
-            const tempCredits = selectedMode === 'byok' ? 999999 : hostedCredits;
-            const displayVal = tempCredits >= 900000 ? "Unlimited" : tempCredits;
-            creditsCountDisplay.textContent = displayVal;
-            if (homeCreditsCount) {
-                homeCreditsCount.textContent = displayVal;
-            }
-            
-            if (creditsTopupTrigger) {
-                if (selectedMode === 'byok') {
-                    creditsTopupTrigger.classList.remove('credits-low', 'credits-empty');
-                    creditsTopupTrigger.style.color = 'var(--color-emerald)';
-                    creditsTopupTrigger.style.borderColor = 'rgba(16, 185, 129, 0.25)';
-                    creditsTopupTrigger.style.background = 'rgba(16, 185, 129, 0.08)';
-                } else {
-                    creditsTopupTrigger.style.color = '';
-                    creditsTopupTrigger.style.borderColor = '';
-                    creditsTopupTrigger.style.background = '';
-                    updateCreditsPillColor(tempCredits);
-                }
-            }
-        });
-    }
-
-    // Dynamic model loading when changing provider dropdown
-    if (settingsProvider) {
-        settingsProvider.addEventListener('change', (e) => {
-            updateModelDropdown(e.target.value);
-        });
-    }
 
     // --- Modal Listeners ---
     const passwordRecoveryModal = document.getElementById('password-recovery-modal');
@@ -1525,8 +1753,14 @@ function initializeApp() {
                 showToast("Passwords do not match.", "error");
                 return;
             }
-            if (newPassword.length < 6) {
-                showToast("Password must be at least 6 characters.", "error");
+            // Password Strength Validation (Aligned with signup complexity)
+            const hasLength = newPassword.length >= 8;
+            const hasLower = /[a-z]/.test(newPassword);
+            const hasUpper = /[A-Z]/.test(newPassword);
+            const hasNumber = /[0-9]/.test(newPassword);
+            const hasSymbol = /[^A-Za-z0-9]/.test(newPassword);
+            if (!hasLength || !hasLower || !hasUpper || !hasNumber || !hasSymbol) {
+                showToast('Password must be at least 8 characters long and contain lowercase, uppercase, numbers, and symbols.', 'error');
                 return;
             }
             if (!supabase) return;
@@ -1537,144 +1771,6 @@ function initializeApp() {
                 showToast("Password updated successfully!", "success");
                 passwordRecoveryModal.classList.remove('active');
             }
-        });
-    }
-
-    if (openSettingsBtn) {
-        openSettingsBtn.addEventListener('click', () => {
-            applyPlanRestrictions(activePlanType);
-            settingsModal.classList.add('active');
-        });
-    }
-    if (closeSettingsBtn) {
-        closeSettingsBtn.addEventListener('click', () => {
-            settingsModal.classList.remove('active');
-            loadSettings();
-        });
-    }
-    if (settingsModal) {
-        settingsModal.addEventListener('click', (e) => {
-            if (e.target === settingsModal) {
-                settingsModal.classList.remove('active');
-                loadSettings();
-            }
-        });
-    }
-
-    // Header Connection Mode Switcher Toggle Listener
-    const headerModeToggle = document.getElementById('header-mode-toggle');
-    if (headerModeToggle) {
-        const btns = headerModeToggle.querySelectorAll('.mode-toggle-btn');
-        btns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const selectedMode = btn.getAttribute('data-mode');
-                
-                // Save connection mode
-                localStorage.setItem('ta_connection_mode', selectedMode);
-                
-                // Sync settings modal dropdown
-                if (settingsMode) {
-                    settingsMode.value = selectedMode;
-                }
-                
-                // Sync settings UI and key states
-                const savedKey = sessionStorage.getItem('ta_api_key') || '';
-                updateSettingsUI(selectedMode, selectedMode === 'byok' ? savedKey : '');
-                
-                // Sync pricing grid display on landing page
-                if (switchHostedBtn && switchByokBtn && hostedGrid && byokGrid) {
-                    if (selectedMode === 'hosted') {
-                        switchHostedBtn.classList.add('active');
-                        switchByokBtn.classList.remove('active');
-                        hostedGrid.style.display = 'grid';
-                        byokGrid.style.display = 'none';
-                    } else {
-                        switchByokBtn.classList.add('active');
-                        switchHostedBtn.classList.remove('active');
-                        hostedGrid.style.display = 'none';
-                        byokGrid.style.display = 'flex';
-                    }
-                }
-                
-                // Sync top-up plan type
-                selectedTopupPlan = selectedMode;
-                if (selectedMode === 'hosted') {
-                    if (buyPlanHosted) buyPlanHosted.click();
-                } else {
-                    if (buyPlanByok) buyPlanByok.click();
-                }
-
-                // Update credits pill text and count display
-                updateCreditsDisplay();
-
-                // Sync disabled dropdown options
-                applyPlanRestrictions(activePlanType);
-            });
-        });
-    }
-
-    if (settingsForm) {
-        settingsForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const mode = settingsMode.value;
-            const provider = settingsProvider.value;
-            const key = settingsApiKey.value.trim();
-            
-            if (mode === 'byok' && key) {
-                const saveBtn = settingsForm.querySelector('button[type="submit"]');
-                const origText = saveBtn ? saveBtn.textContent : 'Save';
-                if (saveBtn) {
-                    saveBtn.textContent = 'Validating...';
-                    saveBtn.disabled = true;
-                }
-                
-                try {
-                    const headers = { 'Content-Type': 'application/json' };
-                    if (supabase) {
-                        const { data: { session } } = await supabase.auth.getSession();
-                        if (session) {
-                            headers['Authorization'] = `Bearer ${session.access_token}`;
-                        }
-                    }
-                    const resp = await fetch('/api/validate-key', {
-                        method: 'POST',
-                        headers: headers,
-                        body: JSON.stringify({ provider, apiKey: key })
-                    });
-                    const data = await resp.json();
-                    
-                    if (!data.valid) {
-                        showToast(data.error || 'Invalid API Key', 'error');
-                        if (saveBtn) { saveBtn.textContent = origText; saveBtn.disabled = false; }
-                        return;
-                    }
-                } catch (err) {
-                    showToast('Failed to validate key', 'error');
-                    if (saveBtn) { saveBtn.textContent = origText; saveBtn.disabled = false; }
-                    return;
-                }
-                
-                if (saveBtn) { saveBtn.textContent = origText; saveBtn.disabled = false; }
-            }
-            
-            localStorage.setItem('ta_connection_mode', mode);
-            localStorage.setItem('ta_api_provider', provider);
-            localStorage.setItem('ta_llm_model', settingsLlmModel.value);
-            sessionStorage.setItem('ta_api_key', key);
-            settingsModal.classList.remove('active');
-            loadSettings();
-            showToast('Connection configurations saved successfully.', 'success');
-        });
-    }
-
-    if (clearSettingsBtn) {
-        clearSettingsBtn.addEventListener('click', () => {
-            localStorage.removeItem('ta_api_key');
-            settingsApiKey.value = '';
-            settingsModal.classList.remove('active');
-            loadSettings();
-            showToast('API key cleared.', 'info');
         });
     }
 
@@ -1749,8 +1845,29 @@ function initializeApp() {
         });
     }
 
+    function verifyPdfMagicBytes(file) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = function(e) {
+                if (e.target.readyState === FileReader.DONE) {
+                    const arr = new Uint8Array(e.target.result);
+                    if (arr.length >= 4) {
+                        const isPdf = arr[0] === 0x25 && arr[1] === 0x50 && arr[2] === 0x44 && arr[3] === 0x46;
+                        resolve(isPdf);
+                    } else {
+                        resolve(false);
+                    }
+                } else {
+                    resolve(false);
+                }
+            };
+            reader.readAsArrayBuffer(file.slice(0, 4));
+        });
+    }
+
     function clearFileSelection(fileKey, zoneEl, inputEl) {
         filesState[fileKey] = null;
+        extractedText[fileKey] = '';
         inputEl.value = '';
         zoneEl.classList.remove('file-selected');
         
@@ -1764,9 +1881,15 @@ function initializeApp() {
         if (removeBtn) {
             removeBtn.style.display = 'none';
         }
+
+        // Toggle scanned warning banner based on both uploaded files
+        let showWarning = false;
+        if (filesState.lease && (!extractedText.lease || extractedText.lease.trim().length < 200)) showWarning = true;
+        if (filesState.estoppel && (!extractedText.estoppel || extractedText.estoppel.trim().length < 200)) showWarning = true;
         
-        if (startAuditBtn) {
-            // startAuditBtn.disabled = true;
+        const banner = document.getElementById('scanned-warning-banner');
+        if (banner) {
+            banner.style.display = showWarning ? 'flex' : 'none';
         }
     }
 
@@ -1775,6 +1898,12 @@ function initializeApp() {
         const isPdfExtension = file.name && file.name.toLowerCase().endsWith('.pdf');
         if (!isPdfType && !isPdfExtension) {
             showToast('🚫 Only text-based PDF files are supported.', 'error');
+            return;
+        }
+
+        const isValidPdf = await verifyPdfMagicBytes(file);
+        if (!isValidPdf) {
+            showToast('🚫 File validation failed: The file does not appear to be a valid PDF format.', 'error');
             return;
         }
 
@@ -1796,16 +1925,47 @@ function initializeApp() {
         }
 
         filesState[fileKey] = file;
+
+        // Update UI instantly
         zoneEl.classList.add('file-selected');
         
         const fileInfoEl = document.getElementById(`${fileKey}-file-info`);
-        fileInfoEl.textContent = `${file.name} (${formatBytes(file.size)})`;
-        fileInfoEl.style.display = 'block';
+        if (fileInfoEl) {
+            fileInfoEl.textContent = `${file.name} (${formatBytes(file.size)})`;
+            fileInfoEl.style.display = 'block';
+        }
 
         const removeBtn = document.getElementById(`remove-${fileKey}-file-btn`);
         if (removeBtn) {
             removeBtn.style.display = 'inline-flex';
         }
+
+        // Check character length across text layers asynchronously
+        extractTextFromPDF(file).then(extracted => {
+            const textContent = extracted.map(p => p.text).join(' ');
+            extractedText[fileKey] = textContent;
+            
+            let showWarning = false;
+            if (filesState.lease && (!extractedText.lease || extractedText.lease.trim().length < 200)) showWarning = true;
+            if (filesState.estoppel && (!extractedText.estoppel || extractedText.estoppel.trim().length < 200)) showWarning = true;
+            
+            const banner = document.getElementById('scanned-warning-banner');
+            if (banner) {
+                banner.style.display = showWarning ? 'flex' : 'none';
+            }
+        }).catch(e => {
+            console.warn("Could not extract text to check scanned status:", e);
+            extractedText[fileKey] = '';
+            
+            let showWarning = false;
+            if (filesState.lease && (!extractedText.lease || extractedText.lease.trim().length < 200)) showWarning = true;
+            if (filesState.estoppel && (!extractedText.estoppel || extractedText.estoppel.trim().length < 200)) showWarning = true;
+            
+            const banner = document.getElementById('scanned-warning-banner');
+            if (banner) {
+                banner.style.display = showWarning ? 'flex' : 'none';
+            }
+        });
     }
 
     function formatBytes(bytes) {
@@ -1818,6 +1978,7 @@ function initializeApp() {
 
     // --- Client-Side PDF.js Text Extraction ---
     async function extractTextFromPDF(file, onProgress) {
+        await loadPdfJsIfNeeded();
         const fileReader = new FileReader();
         
         return new Promise((resolve, reject) => {
@@ -1850,6 +2011,7 @@ function initializeApp() {
 
     // --- Client-Side Lightweight PDF Page Counting ---
     async function getPDFPageCount(file) {
+        await loadPdfJsIfNeeded();
         const fileReader = new FileReader();
         return new Promise((resolve, reject) => {
             fileReader.onload = async function() {
@@ -1913,7 +2075,7 @@ function initializeApp() {
         return canvas.toDataURL('image/jpeg', 0.85);
     }
 
-    async function extractDocumentFeatures(file, docType, connectionMode, apiProvider, llmModel, apiKey, onProgress) {
+    async function extractDocumentFeatures(file, docType, onProgress) {
         onProgress(0, 0, `Loading ${docType} document...`);
         const pdfDoc = await loadPDFDocument(file);
         const numPages = pdfDoc.numPages;
@@ -1941,6 +2103,7 @@ function initializeApp() {
         if (!isScanned) {
             // Text-extractable document: Pass 1 + Pass 2
             let relevantPageNums = [];
+            let routingFallback = false;
             if (numPages <= 5) {
                 // Small document, use all pages
                 relevantPageNums = Array.from({ length: numPages }, (_, i) => i + 1);
@@ -1954,7 +2117,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 const userPromptOverride = `Here are the snippets of each page in the document:\n\n${snippets}\n\nPlease identify the relevant page numbers.`;
                 
                 try {
-                    const routeRes = await callOpenAIToExtract("", docType, connectionMode, apiProvider, llmModel, apiKey, null, systemPromptOverride, userPromptOverride, true);
+                    const routeRes = await callOpenAIToExtract("", docType, null, systemPromptOverride, userPromptOverride, true);
                     console.log(`[Pass 1 Routing] ${docType} relevant pages returned:`, routeRes);
                     if (routeRes && Array.isArray(routeRes.pageNumbers)) {
                         relevantPageNums = routeRes.pageNumbers;
@@ -1970,8 +2133,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                                        e.message.includes('Unauthorized') || 
                                        e.message.includes('session_mismatch') || 
                                        e.message.includes('credit') || 
-                                       e.message.includes('subscription') || 
-                                       e.message.includes('key');
+                                       e.message.includes('subscription');
                     if (isCritical) throw e;
                 }
                 
@@ -1979,16 +2141,18 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 if (!relevantPageNums || relevantPageNums.length === 0) {
                     console.log(`[Pass 1 Fallback] Defaulting to first 5 pages for ${docType}`);
                     relevantPageNums = Array.from({ length: Math.min(5, numPages) }, (_, i) => i + 1);
+                    routingFallback = true;
                 }
             }
             
             // Pass 2: Extract text from only those relevant pages
             const filtered = pagesText.filter(p => relevantPageNums.includes(p.pageNum));
             const optimizedText = filtered.map(p => `--- PAGE ${p.pageNum} ---\n${p.text}`).join('\n\n');
-            return { isScanned: false, text: optimizedText, pagesUsed: relevantPageNums };
+            return { isScanned: false, text: optimizedText, pagesUsed: relevantPageNums, routingFallback: routingFallback };
         } else {
             // Scanned document: Pass 1 + Pass 2 (Vision)
             let relevantPageNums = [];
+            let routingFallback = false;
             
             // Pass 1: Render first 3 pages and send to vision route to locate Table of Contents / relevant pages
             const numRoutingPages = Math.min(3, numPages);
@@ -2005,7 +2169,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const userPromptOverride = `Identify relevant page numbers based on the Table of Contents or general structure.`;
             
             try {
-                const routeRes = await callOpenAIToExtract("", docType, connectionMode, apiProvider, llmModel, apiKey, imageList, systemPromptOverride, userPromptOverride, true);
+                const routeRes = await callOpenAIToExtract("", docType, imageList, systemPromptOverride, userPromptOverride, true);
                 console.log(`[Pass 1 Vision Routing] ${docType} relevant pages returned:`, routeRes);
                 if (routeRes && Array.isArray(routeRes.pageNumbers)) {
                     relevantPageNums = routeRes.pageNumbers;
@@ -2021,14 +2185,14 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                                    e.message.includes('Unauthorized') || 
                                    e.message.includes('session_mismatch') || 
                                    e.message.includes('credit') || 
-                                   e.message.includes('subscription') || 
-                                   e.message.includes('key');
+                                   e.message.includes('subscription');
                 if (isCritical) throw e;
             }
             
             if (!relevantPageNums || relevantPageNums.length === 0) {
                 console.log(`[Pass 1 Vision Fallback] Defaulting to first 5 pages for scanned ${docType}`);
                 relevantPageNums = Array.from({ length: Math.min(5, numPages) }, (_, i) => i + 1);
+                routingFallback = true;
             }
             
             // Pass 2: Render selected pages to base64 images
@@ -2044,7 +2208,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 finalImages.push(base64Img);
             }
             
-            return { isScanned: true, images: finalImages, pagesUsed: limitedPageNums };
+            return { isScanned: true, images: finalImages, pagesUsed: limitedPageNums, routingFallback: routingFallback };
         }
     }
 
@@ -2071,37 +2235,30 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
     // --- Action: Run Live AI Lease Audit ---
     async function runLiveAudit() {
-        const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-        const apiProvider = localStorage.getItem('ta_api_provider') || 'openai';
-        const llmModel = localStorage.getItem('ta_llm_model') || 'gpt-4o-mini';
-        const apiKey = sessionStorage.getItem('ta_api_key');
-        
-        if (connectionMode === 'byok' && !apiKey) {
-            showToast("⚙️ Please configure your connection API Key first. Click 'API Settings' in the header.", 'info');
-            settingsModal.classList.add('active');
-            return;
-        }
-
+        window.isAuditTruncated = false;
+        window.auditPagesProcessed = 0;
+        window.leaseRoutingFallback = false;
+        window.estoppelRoutingFallback = false;
 
         let maxRetries = 3;
         let lastError = null;
         let success = false;
         
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            let successfulTransactionIds = [];
             try {
                 if (attempt > 1) {
                     showLoader(`Retry attempt ${attempt}/${maxRetries} (Recovering from error...)`);
                     console.log(`[Retry] Attempt ${attempt} of ${maxRetries}`);
                 }
 
-            currentAuditTransactionId = generateUUID();
             showLoader("Initializing audit process...");
             
             const leasePagesCount = await getPDFPageCount(filesState.lease);
             const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);
             const totalPagesNeeded = leasePagesCount + estoppelPagesCount;
             
-            if (connectionMode !== 'byok' && hostedCredits < 3) {
+            if (hostedCredits < 3) {
                 hideLoader();
                 showToast(`🚫 Insufficient audit credits! This audit requires 3 audit credits (1 for lease, 1 for estoppel, and 1 for comparison), but you only have ${hostedCredits} credits left. Please top up your credits.`, 'error');
                 handleTopupClick();
@@ -2112,10 +2269,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const leaseResult = await extractDocumentFeatures(
                 filesState.lease,
                 'lease',
-                connectionMode,
-                apiProvider,
-                llmModel,
-                apiKey,
                 (curr, total, phase) => {
                     if (phase.includes('Loading')) {
                         showLoader(phase);
@@ -2134,15 +2287,12 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     }
                 }
             );
+            window.leaseRoutingFallback = leaseResult.routingFallback || false;
 
             // Step 2: Feature extract estoppel
             const estoppelResult = await extractDocumentFeatures(
                 filesState.estoppel,
                 'estoppel',
-                connectionMode,
-                apiProvider,
-                llmModel,
-                apiKey,
                 (curr, total, phase) => {
                     if (phase.includes('Loading')) {
                         showLoader(phase);
@@ -2161,35 +2311,39 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     }
                 }
             );
+            window.estoppelRoutingFallback = estoppelResult.routingFallback || false;
 
             // Step 3: Run final analyses
-            currentAuditTransactionId = generateUUID();
+            const leaseTxId = generateUUID();
+            successfulTransactionIds.push(leaseTxId);
             showLoader("Analyzing Lease terms with AI...");
             const leaseExtraction = await callOpenAIToExtract(
                 leaseResult.text || "",
                 'lease',
-                connectionMode,
-                apiProvider,
-                llmModel,
-                apiKey,
-                leaseResult.images || null
+                leaseResult.images || null,
+                null,
+                null,
+                false,
+                leaseTxId
             );
             
-            currentAuditTransactionId = generateUUID();
+            const estoppelTxId = generateUUID();
+            successfulTransactionIds.push(estoppelTxId);
             showLoader("Analyzing Estoppel statements with AI...");
             const estoppelExtraction = await callOpenAIToExtract(
                 estoppelResult.text || "",
                 'estoppel',
-                connectionMode,
-                apiProvider,
-                llmModel,
-                apiKey,
-                estoppelResult.images || null
+                estoppelResult.images || null,
+                null,
+                null,
+                false,
+                estoppelTxId
             );
 
-            currentAuditTransactionId = generateUUID();
+            const compareTxId = generateUUID();
+            successfulTransactionIds.push(compareTxId);
             showLoader("Auditing discrepancies...");
-            await performAILinkedAudit(leaseExtraction, estoppelExtraction);
+            await performAILinkedAudit(leaseExtraction, estoppelExtraction, compareTxId);
             
             // Reload profile
             if (supabase) {
@@ -2197,29 +2351,54 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     await loadAuditHistory();
                 } else {
                     // Fallback mock mode
-                    if (connectionMode !== 'byok') {
-                        if (hostedCredits < 900000) {
-                            hostedCredits -= 3;
-                            localStorage.setItem('ta_hosted_credits', hostedCredits);
-                        }
+                    if (hostedCredits < 900000) {
+                        hostedCredits -= 3;
+                        localStorage.setItem('ta_hosted_credits', hostedCredits);
                     }
                     updateCreditsDisplay();
                 }
                 
                 hideLoader();
-                if (connectionMode === 'byok') {
-                    showToast(`🎉 Audit completed successfully using your custom API Key!`, 'success');
-                } else {
-                    const isUnlimited = hostedCredits >= 900000;
-                    const deductMsg = isUnlimited ? "" : ` Deducted 3 audit credits.`;
-                    showToast(`🎉 Audit completed successfully!${deductMsg}`, 'success');
-                }
+                const isUnlimited = hostedCredits >= 900000;
+                const deductMsg = isUnlimited ? "" : ` Deducted 3 audit credits.`;
+                showToast(`🎉 Audit completed successfully!${deductMsg}`, 'success');
     
                 success = true;
                 break; // Break out of retry loop if successful
             } catch (err) {
                 lastError = err;
                 console.error(`[Audit Error] Attempt ${attempt} failed:`, err);
+                
+                // Auto Refund logic for hosted users if it failed (Awaiting refund requests using Promise.all)
+                if (successfulTransactionIds.length > 0) {
+                    console.log("[Refund] Attempting to auto-refund credit for failed transactions:", successfulTransactionIds);
+                    let tokenResponse = '';
+                    if (supabase) {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        tokenResponse = session?.access_token || '';
+                    }
+                    const refundPromises = successfulTransactionIds.map(async (txId) => {
+                        try {
+                            const res = await fetch('/api/refund-credit', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenResponse}` },
+                                body: JSON.stringify({ transactionId: txId, planMode: 'hosted' })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                                console.log(`[Refund] Successfully refunded transaction ${txId}`);
+                            } else {
+                                console.error(`[Refund] Failed to refund transaction ${txId}:`, data.error);
+                            }
+                        } catch (e) {
+                            console.error("Refund failed for transaction " + txId + ":", e);
+                        }
+                    });
+                    await Promise.all(refundPromises);
+                    if (supabase) {
+                        await loadUserProfileAndCredits();
+                    }
+                }
                 
                 // Only retry if it's not a user error (like context length or unauthorized)
                 if (err.message && (err.message.includes('Insufficient') || err.message.includes('Unauthorized') || err.message.includes('Maximum allowed'))) {
@@ -2238,23 +2417,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             console.error(err);
             hideLoader();
             showToast(`Error: ${err.message}`, 'error');
-
-            // Auto Refund logic for hosted users if it failed
-            if (connectionMode === 'hosted' && currentAuditTransactionId) {
-                console.log("[Refund] Attempting to auto-refund credit for failed transaction:", currentAuditTransactionId);
-                const tokenResponse = supabase.auth.session()?.access_token || '';
-                fetch('/api/refund-credit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tokenResponse}` },
-                    body: JSON.stringify({ transactionId: currentAuditTransactionId, planMode: 'hosted' })
-                }).then(res => res.json()).then(data => {
-                    if (data.success) {
-                        showToast("Your audit credit has been auto-refunded due to the failure.", "info");
-                        loadUserProfileAndCredits();
-                    }
-                }).catch(e => console.error("Refund failed:", e));
-            }
-
         }
     }
 
@@ -2262,15 +2424,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         startAuditBtn.addEventListener('click', () => {
             if (!filesState.lease || !filesState.estoppel) {
                 showToast("Please upload both the Base Lease and the Estoppel document to run an audit.", 'error');
-                return;
-            }
-
-            const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-            const apiKey = sessionStorage.getItem('ta_api_key');
-            
-            if (connectionMode === 'byok' && !apiKey) {
-                showToast("⚙️ Please configure your connection API Key first. Click 'API Settings' in the header.", 'info');
-                settingsModal.classList.add('active');
                 return;
             }
 
@@ -2289,12 +2442,12 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     }
 
     // --- API Calls Router (Secure CORS Proxy via Backend) ---
-    async function callOpenAIToExtract(text, docType, connectionMode, provider, model, apiKey, images = null, systemPromptOverride = null, userPromptOverride = null, isRoutingRequest = false) {
+    async function callOpenAIToExtract(text, docType, images = null, systemPromptOverride = null, userPromptOverride = null, isRoutingRequest = false, transactionId = null) {
         // Validation check for empty text/images (skip for routing requests)
         const hasImages = images && Array.isArray(images) && images.length > 0;
         const hasText = text && typeof text === 'string' && text.trim().length > 0;
         if (!isRoutingRequest && !hasImages && !hasText) {
-            throw new Error(`No readable text found in the ${docType}. If this is a scanned document, please enable 'Force OCR' in Settings and try again.`);
+            throw new Error(`No readable text found in the ${docType}. If this is a scanned document, please enable 'Force OCR' and try again.`);
         }
 
         // Build payload based on mode.
@@ -2303,9 +2456,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             text: text,
             images: images,
             docType: docType,
-            connectionMode: connectionMode,
-            provider: connectionMode === 'hosted' ? 'anthropic' : provider,
-            model: connectionMode === 'hosted' ? 'claude-sonnet-4-6' : model,
+            connectionMode: 'hosted',
+            provider: 'anthropic',
+            model: 'claude-sonnet-4-6',
             systemPromptOverride: systemPromptOverride,
             userPromptOverride: userPromptOverride,
             isRoutingRequest: isRoutingRequest
@@ -2317,11 +2470,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
         if (!isRoutingRequest) {
             headers["X-Session-ID"] = getOrGenerateSessionId();
-            headers["X-Transaction-ID"] = currentAuditTransactionId;
-        }
-
-        if (connectionMode === 'byok' && apiKey) {
-            headers["X-BYOK-API-Key"] = apiKey;
+            headers["X-Transaction-ID"] = transactionId;
         }
 
         if (supabase) {
@@ -2343,6 +2492,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         }
 
         const data = await response.json();
+        if (data.truncated) {
+            window.isAuditTruncated = true;
+            window.auditPagesProcessed = (window.auditPagesProcessed || 0) + (data.pagesProcessed || 0);
+        }
         if (data.status === 'completed') {
             return data.data;
         } else if (data.tenantName) {
@@ -2356,7 +2509,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
 
     // --- Comparison Auditor Engine (Lease vs Estoppel) ---
-    async function performAILinkedAudit(leaseJson, estoppelJson) {
+    async function performAILinkedAudit(leaseJson, estoppelJson, transactionId = null) {
         const terms = [
             { key: "tenantName", label: "Tenant Name" },
             { key: "suiteNumber", label: "Suite / Unit Number" },
@@ -2470,8 +2623,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 leaseVal: lease.value,
                 estoppelVal: estoppel.value,
                 status: status,
-                leaseCite: leaseCiteText,
-                estoppelCite: estoppelCiteText,
+                leaseQuote: leaseCiteText,
+                estoppelQuote: estoppelCiteText,
                 verifiedReason: "Verified using local standard rules."
             });
         });
@@ -2479,10 +2632,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         // Calculate baseline score awarding 50% weight for warning entries
         let score = Math.round(((matchCount + (warningCount * 0.5)) / terms.length) * 100);
 
-        const connectionMode = localStorage.getItem('ta_connection_mode') || 'hosted';
-        const apiProvider = localStorage.getItem('ta_api_provider') || 'openai';
-        const llmModel = localStorage.getItem('ta_llm_model') || 'gpt-4o-mini';
-        const activeModelName = connectionMode === 'hosted' ? 'Claude Sonnet (Hosted)' : `${llmModel} (${apiProvider.toUpperCase()})`;
+        const activeModelName = 'Claude Sonnet (Hosted)';
 
         auditData = {
             metadata: {
@@ -2505,44 +2655,33 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         renderAuditResults();
 
         // Perform semantic AI verification if connected
-        const apiKey = sessionStorage.getItem('ta_api_key');
-        const canVerify = connectionMode === 'hosted' || (connectionMode === 'byok' && apiKey);
+        try {
+            console.log("[AI verification] Running semantic compliance comparison in background...");
+            showLoader("AI is verifying compliance audit...");
+            
+            const payload = {
+                leaseJson,
+                estoppelJson
+            };
+            
+            const headers = {
+                "Content-Type": "application/json",
+                "X-Session-ID": getOrGenerateSessionId(),
+                "X-Transaction-ID": transactionId
+            };
 
-        if (canVerify) {
-            try {
-                console.log("[AI verification] Running semantic compliance comparison in background...");
-                showLoader("AI is verifying compliance audit...");
-                
-                const payload = {
-                    leaseJson,
-                    estoppelJson,
-                    connectionMode,
-                    provider: connectionMode === 'hosted' ? 'anthropic' : apiProvider,
-                    model: connectionMode === 'hosted' ? 'claude-sonnet-4-6' : llmModel
-                };
-                
-                const headers = {
-                    "Content-Type": "application/json",
-                    "X-Session-ID": getOrGenerateSessionId(),
-                    "X-Transaction-ID": currentAuditTransactionId
-                };
-
-                if (connectionMode === 'byok' && apiKey) {
-                    headers["X-BYOK-API-Key"] = apiKey;
+            if (supabase) {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                    headers["Authorization"] = `Bearer ${session.access_token}`;
                 }
+            }
 
-                if (supabase) {
-                    const { data: { session } } = await supabase.auth.getSession();
-                    if (session) {
-                        headers["Authorization"] = `Bearer ${session.access_token}`;
-                    }
-                }
-
-                const response = await fetch("/api/compare", {
-                    method: "POST",
-                    headers: headers,
-                    body: JSON.stringify(payload)
-                });
+            const response = await fetch("/api/compare", {
+                method: "POST",
+                headers: headers,
+                body: JSON.stringify(payload)
+            });
 
                 if (response.ok) {
                     const data = await response.json();
@@ -2597,12 +2736,43 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             } finally {
                 hideLoader();
             }
-        }
     }
 
     // --- Render Results UI Panel ---
     function renderAuditResults() {
         if (!auditData) return;
+
+        // Toggle Vision Truncation Warning Banner
+        const truncationBanner = document.getElementById('truncation-warning-banner');
+        if (truncationBanner) {
+            if (window.isAuditTruncated) {
+                truncationBanner.style.display = 'flex';
+                const countSpan = document.getElementById('truncated-pages-count');
+                if (countSpan) countSpan.textContent = window.auditPagesProcessed || '0';
+            } else {
+                truncationBanner.style.display = 'none';
+            }
+        }
+
+        // Toggle Routing Fallback Warning Banner
+        const routingBanner = document.getElementById('routing-warning-banner');
+        if (routingBanner) {
+            if (window.leaseRoutingFallback || window.estoppelRoutingFallback) {
+                routingBanner.style.display = 'flex';
+                const docTypeSpan = document.getElementById('routing-warning-doc-type');
+                if (docTypeSpan) {
+                    if (window.leaseRoutingFallback && window.estoppelRoutingFallback) {
+                        docTypeSpan.textContent = 'Lease and Estoppel files';
+                    } else if (window.leaseRoutingFallback) {
+                        docTypeSpan.textContent = 'Lease file';
+                    } else {
+                        docTypeSpan.textContent = 'Estoppel file';
+                    }
+                }
+            } else {
+                routingBanner.style.display = 'none';
+            }
+        }
 
         // Populate KPIs
         scoreVal.textContent = `${auditData.summary.matchScore}%`;
@@ -2618,6 +2788,42 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         metaLeaseFile.textContent = auditData.metadata.leaseFile;
         metaEstoppelFile.textContent = auditData.metadata.estoppelFile;
         metaAuditModel.textContent = auditData.metadata.auditModel;
+
+        // Inject placeholder rows for legacy audits if they contain less than 16 records
+        const expectedLabels = [
+            "Tenant Name",
+            "Suite / Unit Number",
+            "Premises Size",
+            "Current Monthly Rent",
+            "Lease Expiration Date",
+            "Security Deposit",
+            "Renewal Options",
+            "CAM & Operating Caps",
+            "Lease Guarantor",
+            "Prepaid Rent",
+            "Landlord Default Status",
+            "Tenant Improvement Allowance",
+            "Co-Tenancy Clause",
+            "Termination Right",
+            "SNDA Status",
+            "Permitted Use"
+        ];
+        if (auditData.records) {
+            const currentTerms = auditData.records.map(r => r.term);
+            expectedLabels.forEach(label => {
+                if (!currentTerms.includes(label)) {
+                    auditData.records.push({
+                        term: label,
+                        leaseVal: "Not Audited (Legacy)",
+                        estoppelVal: "Not Audited (Legacy)",
+                        status: "warning",
+                        leaseQuote: "No citation found.",
+                        estoppelQuote: "No citation found.",
+                        reason: "This parameter was not audited in the legacy version of LeaseAlign AI."
+                    });
+                }
+            });
+        }
 
         // Render Table
         auditResultsTbody.innerHTML = '';
@@ -2660,8 +2866,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 const idx = btn.getAttribute('data-index');
                 const rec = auditData.records[idx];
                 
-                leaseQuoteBox.textContent = rec.leaseCite || "No specific paragraph cited.";
-                estoppelQuoteBox.textContent = rec.estoppelCite || "No specific paragraph cited.";
+                leaseQuoteBox.textContent = rec.leaseQuote || rec.leaseCite || "No specific paragraph cited.";
+                estoppelQuoteBox.textContent = rec.estoppelQuote || rec.estoppelCite || "No specific paragraph cited.";
                 
                 verificationDrawer.style.display = 'grid';
                 verificationDrawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -2675,9 +2881,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         resultsPanel.scrollIntoView({ behavior: 'smooth' });
 
         // Update Lucide SVG icons dynamically rendered in the table
-        if (window.lucide) {
-            lucide.createIcons();
-        }
+        createIconsWithA11y();
     }
 
     // --- Helper Score Dial Animation ---
@@ -2714,8 +2918,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     `"${r.leaseVal.replace(/"/g, '""')}"`,
                     `"${r.estoppelVal.replace(/"/g, '""')}"`,
                     `"${r.status.toUpperCase()}"`,
-                    `"${(r.leaseCite || '').replace(/"/g, '""')}"`,
-                    `"${(r.estoppelCite || '').replace(/"/g, '""')}"`
+                    `"${(r.leaseQuote || r.leaseCite || '').replace(/"/g, '""')}"`,
+                    `"${(r.estoppelQuote || r.estoppelCite || '').replace(/"/g, '""')}"`
                 ].join(","));
             });
 
@@ -2741,6 +2945,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             showLoader("Generating PDF Report...");
             
             try {
+                await loadPdfExportLibraries();
                 const { jsPDF } = window.jspdf;
                 
                 // Create a temporary container for rendering
@@ -2828,11 +3033,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                                     <td style="font-weight: 600; padding: 10px; border: 1px solid #e5e7eb; vertical-align: top; color: #111827;">${escapeHtml(r.term)}</td>
                                     <td style="padding: 10px; border: 1px solid #e5e7eb; vertical-align: top;">
                                         <div style="font-weight: 600; color: #1f2937;">${escapeHtml(r.leaseVal)}</div>
-                                        ${r.leaseCite ? `<div style="font-size: 9px; color: #4b5563; margin-top: 5px; padding-top: 5px; border-top: 1px dashed #e5e7eb; font-style: italic; line-height: 1.3;">Quote: "${escapeHtml(r.leaseCite)}"</div>` : ''}
+                                        ${(r.leaseQuote || r.leaseCite) ? `<div style="font-size: 9px; color: #4b5563; margin-top: 5px; padding-top: 5px; border-top: 1px dashed #e5e7eb; font-style: italic; line-height: 1.3;">Quote: "${escapeHtml(r.leaseQuote || r.leaseCite)}"</div>` : ''}
                                     </td>
                                     <td style="padding: 10px; border: 1px solid #e5e7eb; vertical-align: top;">
                                         <div style="font-weight: 600; color: #1f2937;">${escapeHtml(r.estoppelVal)}</div>
-                                        ${r.estoppelCite ? `<div style="font-size: 9px; color: #4b5563; margin-top: 5px; padding-top: 5px; border-top: 1px dashed #e5e7eb; font-style: italic; line-height: 1.3;">Quote: "${escapeHtml(r.estoppelCite)}"</div>` : ''}
+                                        ${(r.estoppelQuote || r.estoppelCite) ? `<div style="font-size: 9px; color: #4b5563; margin-top: 5px; padding-top: 5px; border-top: 1px dashed #e5e7eb; font-style: italic; line-height: 1.3;">Quote: "${escapeHtml(r.estoppelQuote || r.estoppelCite)}"</div>` : ''}
                                     </td>
                                     <td style="text-align: center; vertical-align: middle; padding: 10px; border: 1px solid #e5e7eb;">
                                         <span style="font-size: 8px; font-weight: 700; text-transform: uppercase; padding: 3px 6px; border-radius: 4px; display: inline-block; background: ${badgeBg}; color: ${badgeColor}; font-family: sans-serif;">${statusText}</span>
@@ -2914,9 +3119,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     }
 
     // Initialize Lucide icons on page load
-    if (window.lucide) {
-        lucide.createIcons();
-    }
+    createIconsWithA11y();
 
     // Verify seat restrictions in real-time when switching back to this browser/tab
     window.addEventListener('focus', () => {
@@ -2947,7 +3150,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     await loadAuditHistory();
                 } else {
                     hostedCredits = parseInt(localStorage.getItem('ta_hosted_credits') || '0', 10);
-                    byokCredits = parseInt(localStorage.getItem('ta_byok_credits') || '0', 10);
                 }
                 updateNavUI();
                 showView('dashboard');
@@ -2962,35 +3164,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         }
     });
 
-    // --- Pricing Toggles & Grid Logic ---
-    const btnMonthly = document.getElementById('toggle-monthly');
-    const btnAnnual = document.getElementById('toggle-annual');
-    const btnHosted = document.getElementById('switch-hosted');
-    const btnByok = document.getElementById('switch-byok');
-    
-    const hostedMonthly = document.getElementById('hosted-grid-monthly');
-    const hostedAnnual = document.getElementById('hosted-grid-annual');
-    const byokMonthly = document.getElementById('byok-grid-monthly');
-    const byokAnnual = document.getElementById('byok-grid-annual');
 
-    let currentPeriod = 'monthly';
-    let currentMode = 'hosted';
-
-    function updateGrids() {
-        if (!hostedMonthly || !hostedAnnual || !byokMonthly || !byokAnnual) return;
-        hostedMonthly.style.display = 'none';
-        hostedAnnual.style.display = 'none';
-        byokMonthly.style.display = 'none';
-        byokAnnual.style.display = 'none';
-
-        if (currentMode === 'hosted') {
-            if (currentPeriod === 'monthly') hostedMonthly.style.display = 'grid';
-            else hostedAnnual.style.display = 'grid';
-        } else {
-            if (currentPeriod === 'monthly') byokMonthly.style.display = 'grid';
-            else byokAnnual.style.display = 'grid';
-        }
-    }
 
     if (btnMonthly && btnAnnual) {
         btnMonthly.addEventListener('click', () => {
@@ -3011,20 +3185,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         });
     }
 
-    if (btnHosted && btnByok) {
-        btnHosted.addEventListener('click', () => {
-            currentMode = 'hosted';
-            btnHosted.classList.add('active');
-            btnByok.classList.remove('active');
-            updateGrids();
-        });
-        btnByok.addEventListener('click', () => {
-            currentMode = 'byok';
-            btnByok.classList.add('active');
-            btnHosted.classList.remove('active');
-            updateGrids();
-        });
-    }
+
 
     // --- Pricing CTA Checkout Listener ---
     const pricingBtns = document.querySelectorAll('.pricing-cta-btn');
@@ -3035,12 +3196,14 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const price = e.target.getAttribute('data-price');
             const seats = e.target.getAttribute('data-seats');
             const pack = e.target.getAttribute('data-pack');
+            const interval = e.target.getAttribute('data-interval') || 'month';
 
-            const purchaseData = { plan, amount, price, seats, packageName: pack };
+            const purchaseData = { plan, amount, price, seats, packageName: pack, interval };
 
-            if (!isLoggedIn) {
+            if (!isLoggedIn || isDemoMode) {
                 window.pendingPurchase = purchaseData;
                 showView('login');
+                showToast("Please sign up or log in to purchase a plan.", "info");
                 return;
             }
 
@@ -3069,7 +3232,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         price: parseInt(price, 10),
                         seatCount: parseInt(seats, 10),
                         packageName: pack,
-                        isSubscription: true
+                        isSubscription: true,
+                        interval: interval
                     })
                 });
                 
@@ -3131,7 +3295,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
             
             // Get all profiles on this team
-            const { data: members, error } = await supabase.from('profiles').select('email, first_name, last_name, id').eq('team_id', profile.team_id);
+            const { data: members, error } = await supabase.rpc('get_team_members', { p_team_id: profile.team_id });
             if (error) throw error;
             
             // Get all pending invites for this team
@@ -3177,10 +3341,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     teamMemberList.innerHTML += `
                         <div class="team-member-item">
                             <div class="team-member-info">
-                                <div class="team-member-avatar">${initial}</div>
+                                <div class="team-member-avatar">${escapeHtml(initial)}</div>
                                 <div class="team-member-details">
-                                    <span class="team-member-name">${name}${isYou}</span>
-                                    <span class="team-member-email">${member.email}</span>
+                                    <span class="team-member-name">${escapeHtml(name)}${escapeHtml(isYou)}</span>
+                                    <span class="team-member-email">${escapeHtml(member.email)}</span>
                                 </div>
                             </div>
                         </div>
@@ -3197,10 +3361,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     teamMemberList.innerHTML += `
                         <div class="team-member-item" style="opacity: 0.7;">
                             <div class="team-member-info">
-                                <div class="team-member-avatar" style="background: var(--bg-surface-secondary, #f3f4f6); color: var(--text-muted, #6b7280);">${initial}</div>
+                                <div class="team-member-avatar" style="background: var(--bg-surface-secondary, #f3f4f6); color: var(--text-muted, #6b7280);">${escapeHtml(initial)}</div>
                                 <div class="team-member-details">
-                                    <span class="team-member-name">${name} <span class="badge" style="font-size: 0.7rem; background: #ffedd5; color: #ea580c; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px;">Pending</span></span>
-                                    <span class="team-member-email">${invite.email}</span>
+                                    <span class="team-member-name">${escapeHtml(name)} <span class="badge" style="font-size: 0.7rem; background: #ffedd5; color: #ea580c; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px;">Pending</span></span>
+                                    <span class="team-member-email">${escapeHtml(invite.email)}</span>
                                 </div>
                             </div>
                         </div>
@@ -3252,6 +3416,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
         });
     }
+
+    window.addEventListener('hashchange', window.handleHashRoute);
+    window.handleHashRoute();
 
 }
 

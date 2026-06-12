@@ -8,3 +8,9 @@ node_modules/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Test reports and outputs
+real_audit_output.json
+test-results/
+playwright-report/
+

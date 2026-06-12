@@ -453,7 +453,10 @@ function initializeApp() {
             if (registerLastName) registerLastName.required = true;
             
             const strengthContainer = document.getElementById('password-strength-container');
-            if (strengthContainer) strengthContainer.style.display = 'none';
+            if (strengthContainer) {
+                const hasPasswordText = loginPassword && loginPassword.value.length > 0;
+                strengthContainer.style.display = hasPasswordText ? 'block' : 'none';
+            }
             
             if (authToggleContainer) authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
         } else {
@@ -1247,7 +1250,10 @@ function initializeApp() {
                 
                 // Keep password strength meter hidden on initial toggle until typing
                 const strengthContainer = document.getElementById('password-strength-container');
-                if (strengthContainer) strengthContainer.style.display = 'none';
+                if (strengthContainer) {
+                    const hasPasswordText = loginPassword && loginPassword.value.length > 0;
+                    strengthContainer.style.display = hasPasswordText ? 'block' : 'none';
+                }
                 
                 authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
             } else {
@@ -1804,6 +1810,137 @@ function initializeApp() {
     setupDragDropZone(leaseDropZone, leaseFileInput, 'lease');
     setupDragDropZone(estoppelDropZone, estoppelFileInput, 'estoppel');
 
+    // TOS & Privacy Modal trigger
+    const tosModal = document.getElementById('tos-modal');
+    const closeTosModalBtn = document.getElementById('close-tos-modal');
+    const tosModalAgreeBtn = document.getElementById('tos-modal-agree-btn');
+    
+    document.addEventListener('click', (e) => {
+        if (e.target && e.target.id === 'tos-link') {
+            e.preventDefault();
+            if (tosModal) tosModal.style.display = 'flex';
+        }
+    });
+
+    if (closeTosModalBtn) {
+        closeTosModalBtn.addEventListener('click', () => {
+            if (tosModal) tosModal.style.display = 'none';
+        });
+    }
+
+    if (tosModalAgreeBtn) {
+        tosModalAgreeBtn.addEventListener('click', () => {
+            if (tosModal) {
+                tosModal.style.display = 'none';
+            }
+            const tosCheckbox = document.getElementById('register-tos-checkbox');
+            if (tosCheckbox) {
+                tosCheckbox.checked = true;
+            }
+        });
+    }
+
+    if (tosModal) {
+        tosModal.addEventListener('click', (e) => {
+            if (e.target === tosModal) {
+                tosModal.style.display = 'none';
+            }
+        });
+    }
+
+    // Load Sample documents
+    const loadSamplesBtn = document.getElementById('load-samples-btn');
+    if (loadSamplesBtn) {
+        loadSamplesBtn.addEventListener('click', async () => {
+            loadSamplesBtn.disabled = true;
+            const originalText = loadSamplesBtn.innerHTML;
+            loadSamplesBtn.innerHTML = '<span class="spinner inline" style="width:12px; height:12px; border-width:2px; margin-right:4px;"></span> Loading...';
+            try {
+                const leaseRes = await fetch('/sample_lease.pdf');
+                if (!leaseRes.ok) throw new Error("Failed to load sample lease");
+                const leaseBlob = await leaseRes.blob();
+                const leaseFile = new File([leaseBlob], "sample_lease.pdf", { type: "application/pdf" });
+                
+                const estoppelRes = await fetch('/sample_estoppel.pdf');
+                if (!estoppelRes.ok) throw new Error("Failed to load sample estoppel");
+                const estoppelBlob = await estoppelRes.blob();
+                const estoppelFile = new File([estoppelBlob], "sample_estoppel.pdf", { type: "application/pdf" });
+                
+                await handleFileSelection(leaseFile, leaseDropZone, 'lease');
+                await handleFileSelection(estoppelFile, estoppelDropZone, 'estoppel');
+                
+                showToast("Sample lease and estoppel documents loaded successfully!", "success");
+            } catch (err) {
+                console.error("Failed to load sample files:", err);
+                showToast("Failed to load sample files. Please upload your own files or try again.", "error");
+            } finally {
+                loadSamplesBtn.disabled = false;
+                loadSamplesBtn.innerHTML = originalText;
+            }
+        });
+    }
+
+    // Wire up filter button clicks
+    const filterAllBtn = document.getElementById('filter-all-btn');
+    const filterMismatchBtn = document.getElementById('filter-mismatch-btn');
+    const filterWarningMismatchBtn = document.getElementById('filter-warning-mismatch-btn');
+    const filterBtns = [filterAllBtn, filterMismatchBtn, filterWarningMismatchBtn];
+
+    function updateFilterBtnStyles(activeBtn) {
+        filterBtns.forEach(btn => {
+            if (btn) {
+                if (btn === activeBtn) {
+                    btn.classList.remove('btn-secondary');
+                    btn.classList.add('btn-primary');
+                } else {
+                    btn.classList.remove('btn-primary');
+                    btn.classList.add('btn-secondary');
+                }
+            }
+        });
+    }
+
+    function filterMatrixRows(activeFilter) {
+        if (!auditResultsTbody) return;
+        const rows = auditResultsTbody.querySelectorAll('tr');
+        rows.forEach(row => {
+            if (activeFilter === 'all') {
+                row.style.display = '';
+            } else if (activeFilter === 'mismatch') {
+                if (row.classList.contains('row-mismatch')) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            } else if (activeFilter === 'warning-mismatch') {
+                if (row.classList.contains('row-mismatch') || row.classList.contains('row-warning')) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    if (filterAllBtn) {
+        filterAllBtn.addEventListener('click', () => {
+            updateFilterBtnStyles(filterAllBtn);
+            filterMatrixRows('all');
+        });
+    }
+    if (filterMismatchBtn) {
+        filterMismatchBtn.addEventListener('click', () => {
+            updateFilterBtnStyles(filterMismatchBtn);
+            filterMatrixRows('mismatch');
+        });
+    }
+    if (filterWarningMismatchBtn) {
+        filterWarningMismatchBtn.addEventListener('click', () => {
+            updateFilterBtnStyles(filterWarningMismatchBtn);
+            filterMatrixRows('warning-mismatch');
+        });
+    }
+
     function setupDragDropZone(zoneEl, inputEl, fileKey) {
         if (!zoneEl || !inputEl) return;
 
@@ -2075,6 +2212,36 @@ function initializeApp() {
         return canvas.toDataURL('image/jpeg', 0.85);
     }
 
+    function parsePageRange(rangeStr, maxPages) {
+        if (!rangeStr || typeof rangeStr !== 'string') return null;
+        const pages = new Set();
+        const parts = rangeStr.split(',');
+        for (let part of parts) {
+            part = part.trim();
+            if (!part) continue;
+            if (part.includes('-')) {
+                const subparts = part.split('-');
+                const start = parseInt(subparts[0].trim(), 10);
+                const end = parseInt(subparts[1].trim(), 10);
+                if (!isNaN(start) && !isNaN(end)) {
+                    const from = Math.min(start, end);
+                    const to = Math.min(Math.max(start, end), maxPages);
+                    for (let p = from; p <= to; p++) {
+                        if (p >= 1 && p <= maxPages) {
+                            pages.add(p);
+                        }
+                    }
+                }
+            } else {
+                const p = parseInt(part, 10);
+                if (!isNaN(p) && p >= 1 && p <= maxPages) {
+                    pages.add(p);
+                }
+            }
+        }
+        return pages.size > 0 ? Array.from(pages).sort((a, b) => a - b) : null;
+    }
+
     async function extractDocumentFeatures(file, docType, onProgress) {
         onProgress(0, 0, `Loading ${docType} document...`);
         const pdfDoc = await loadPDFDocument(file);
@@ -2100,7 +2267,20 @@ function initializeApp() {
         }
         console.log(`[OCR Check] ${docType} document isScanned: ${isScanned}`);
         
+        // Read page range override if present
+        const rangeEl = document.getElementById(`${docType}-page-range`);
+        const rangeStr = rangeEl ? rangeEl.value.trim() : '';
+        const overridePageNums = parsePageRange(rangeStr, numPages);
+        if (overridePageNums) {
+            console.log(`[Page Override] Using manual page range override for ${docType}:`, overridePageNums);
+        }
+
         if (!isScanned) {
+            if (overridePageNums) {
+                const filtered = pagesText.filter(p => overridePageNums.includes(p.pageNum));
+                const optimizedText = filtered.map(p => `--- PAGE ${p.pageNum} ---\n${p.text}`).join('\n\n');
+                return { isScanned: false, text: optimizedText, pagesUsed: overridePageNums, routingFallback: false };
+            }
             // Text-extractable document: Pass 1 + Pass 2
             let relevantPageNums = [];
             let routingFallback = false;
@@ -2150,6 +2330,18 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const optimizedText = filtered.map(p => `--- PAGE ${p.pageNum} ---\n${p.text}`).join('\n\n');
             return { isScanned: false, text: optimizedText, pagesUsed: relevantPageNums, routingFallback: routingFallback };
         } else {
+            if (overridePageNums) {
+                const finalImages = [];
+                // Limit to max 8 pages to protect user vision tokens limits
+                const limitedPageNums = overridePageNums.slice(0, 8);
+                for (let idx = 0; idx < limitedPageNums.length; idx++) {
+                    const pageNum = limitedPageNums[idx];
+                    onProgress(idx + 1, limitedPageNums.length, `Rendering page ${pageNum} for visual OCR audit...`);
+                    const base64Img = await renderPDFPageToImage(pdfDoc, pageNum);
+                    finalImages.push(base64Img);
+                }
+                return { isScanned: true, images: finalImages, pagesUsed: limitedPageNums, routingFallback: false };
+            }
             // Scanned document: Pass 1 + Pass 2 (Vision)
             let relevantPageNums = [];
             let routingFallback = false;
@@ -2258,9 +2450,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);
             const totalPagesNeeded = leasePagesCount + estoppelPagesCount;
             
-            if (hostedCredits < 3) {
+            if (hostedCredits < 1) {
                 hideLoader();
-                showToast(`🚫 Insufficient audit credits! This audit requires 3 audit credits (1 for lease, 1 for estoppel, and 1 for comparison), but you only have ${hostedCredits} credits left. Please top up your credits.`, 'error');
+                showToast(`🚫 Insufficient audits left! This audit requires 1 audit credit, but you only have ${hostedCredits} left. Please top up.`, 'error');
                 handleTopupClick();
                 return;
             }
@@ -2352,7 +2544,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 } else {
                     // Fallback mock mode
                     if (hostedCredits < 900000) {
-                        hostedCredits -= 3;
+                        hostedCredits -= 1;
                         localStorage.setItem('ta_hosted_credits', hostedCredits);
                     }
                     updateCreditsDisplay();
@@ -2360,7 +2552,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 
                 hideLoader();
                 const isUnlimited = hostedCredits >= 900000;
-                const deductMsg = isUnlimited ? "" : ` Deducted 3 audit credits.`;
+                const deductMsg = isUnlimited ? "" : ` Deducted 1 audit credit.`;
                 showToast(`🎉 Audit completed successfully!${deductMsg}`, 'success');
     
                 success = true;
@@ -2829,6 +3021,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         auditResultsTbody.innerHTML = '';
         auditData.records.forEach((rec, idx) => {
             const tr = document.createElement('tr');
+            tr.classList.add(`row-${rec.status}`);
             
             let statusBadge = '';
             if (rec.status === 'match') {
@@ -2879,6 +3072,12 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         
         // Auto scroll to results panel smoothly
         resultsPanel.scrollIntoView({ behavior: 'smooth' });
+
+        // Reset row filter buttons to "Show All" and show all rows
+        if (filterAllBtn) {
+            updateFilterBtnStyles(filterAllBtn);
+            filterMatrixRows('all');
+        }
 
         // Update Lucide SVG icons dynamically rendered in the table
         createIconsWithA11y();
@@ -3093,19 +3292,55 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             } catch (err) {
                 console.error("[PDF Export Error] Failed to generate PDF via jsPDF:", err);
                 showToast("❌ Failed to generate PDF report. Please try again.", 'error');
-                hideLoader();
             }
         });
     }
 
     // --- Loader Controls ---
+    let loaderInterval = null;
+    const loaderTips = [
+        "Analyzing lease formatting structures...",
+        "Identifying base rent escalation schedules...",
+        "Cross-referencing security deposits and options...",
+        "Validating dates against tenant estoppels...",
+        "This may take a minute for complex/large documents...",
+        "Almost done. Merging extraction summaries...",
+        "Running final discrepancy audit matrix..."
+    ];
+
     function showLoader(statusText) {
         auditLoader.style.display = 'flex';
         loaderStatusText.textContent = statusText;
+        
+        // Remove/recreate rotating sub-text if any
+        let subTextEl = document.getElementById('loader-sub-status-text');
+        if (!subTextEl) {
+            subTextEl = document.createElement('div');
+            subTextEl.id = 'loader-sub-status-text';
+            subTextEl.style.fontSize = '12px';
+            subTextEl.style.color = 'rgba(255,255,255,0.6)';
+            subTextEl.style.marginTop = '8px';
+            loaderStatusText.parentNode.appendChild(subTextEl);
+        }
+        
+        if (loaderInterval) clearInterval(loaderInterval);
+        let tipIdx = 0;
+        subTextEl.textContent = loaderTips[tipIdx];
+        
+        loaderInterval = setInterval(() => {
+            tipIdx = (tipIdx + 1) % loaderTips.length;
+            subTextEl.textContent = loaderTips[tipIdx];
+        }, 4000);
     }
 
     function hideLoader() {
         auditLoader.style.display = 'none';
+        if (loaderInterval) {
+            clearInterval(loaderInterval);
+            loaderInterval = null;
+        }
+        const subTextEl = document.getElementById('loader-sub-status-text');
+        if (subTextEl) subTextEl.remove();
     }
 
     function escapeHtml(str) {

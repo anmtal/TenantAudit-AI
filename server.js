@@ -54,7 +54,7 @@ function getCorsOptions() {
     return {
         origin: function (origin, callback) {
             if (!origin) return callback(null, true);
-            const isLocalhost = origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1');
+            const isLocalhost = (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) && process.env.NODE_ENV !== 'production';
             if (allowedOrigins.indexOf(origin) !== -1 || isLocalhost) {
                 callback(null, true);
             } else {
@@ -154,19 +154,29 @@ async function requireAuth(req, res, next) {
                 const payloadJson = JSON.parse(payloadBuffer.toString());
                 const sessionId = payloadJson.session_id;
                 
-                if (sessionId) {
-                    const { data: profile } = await supabaseAdmin.from('profiles').select('active_session_id').eq('id', user.id).single();
-                    if (profile && profile.active_session_id && profile.active_session_id !== sessionId) {
-                        console.error(`[Auth Failure] Concurrent login detected for user ${user.email}.`);
-                        return res.status(401).json({ error: "Unauthorized: Session expired. You have logged in from another device. Please use Team Workspaces for multiple users." });
+                    const { data: profile } = await supabaseAdmin.from('profiles').select('active_session_id, last_active_at').eq('id', user.id).single();
+                    if (profile) {
+                        if (!profile.active_session_id) {
+                            // Auto-Claim Active Session: lock the seat immediately
+                            await supabaseAdmin
+                                .from('profiles')
+                                .update({ active_session_id: sessionId, last_active_at: new Date().toISOString() })
+                                .eq('id', user.id);
+                        } else if (profile.active_session_id !== sessionId) {
+                            console.error(`[Auth Failure] Concurrent login detected for user ${user.email}.`);
+                            return res.status(401).json({ error: "Unauthorized: Session expired. You have logged in from another device. Please use Team Workspaces for multiple users." });
+                        } else {
+                            // Stateful Seat Enforcement: update last_active_at timestamp for active session with 5-minute throttling
+                            const lastActive = profile.last_active_at ? new Date(profile.last_active_at) : new Date(0);
+                            const now = new Date();
+                            if (now - lastActive > 5 * 60 * 1000) {
+                                await supabaseAdmin
+                                    .from('profiles')
+                                    .update({ last_active_at: now.toISOString() })
+                                    .eq('id', user.id);
+                            }
+                        }
                     }
-                    
-                    // Stateful Seat Enforcement: update last_active_at timestamp for active session
-                    await supabaseAdmin
-                        .from('profiles')
-                        .update({ last_active_at: new Date().toISOString() })
-                        .eq('id', user.id);
-                }
             }
         } catch (sessionErr) {
             console.warn("[Session Validation Error] Could not decode or verify session_id:", sessionErr);
@@ -598,8 +608,7 @@ function sanitizeUntrustedText(text) {
     // 1. Normalize Unicode lookalikes (homoglyphs) to standard form
     let sanitized = text.normalize('NFKC');
     
-    // 2. Escape HTML delimiters
-    sanitized = sanitized.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    // 2. Escape HTML delimiters (disabled to prevent quote corruption in LLM prompts)
     
     // 3. Scan and redact potential base64 prompt injections
     const base64Regex = /\b[A-Za-z0-9+/]{20,}={0,2}\b/g;
@@ -678,7 +687,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
         if (supabaseAdmin) {
             const transactionId = req.headers['x-transaction-id'] || null;
-            const creditsToDeduct = isRoutingRequest ? 0 : 1;
+            const creditsToDeduct = 0;
             
             // Atomic pre-deduction of audit credits via RPC (idempotent per transaction)
             const { data: success, error: deductErr } = await supabaseAdmin
@@ -1073,7 +1082,7 @@ For each field, look at all pages and pick the most detailed, legally relevant, 
         // Refund credit if something fails during inference
         if (supabaseAdmin) {
             try {
-                const creditsToRefund = isRoutingRequest ? 0 : 1;
+                const creditsToRefund = 0;
                 const transactionId = req.headers['x-transaction-id'] || null;
                 if (creditsToRefund > 0) {
                     if (transactionId) {
@@ -1355,7 +1364,8 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
                 planType: planType,
                 amount: amount.toString(),
                 seatCount: (seatCount || 1).toString(),
-                planInterval: subscriptionInterval
+                planInterval: subscriptionInterval,
+                packageName: packageName
             },
             success_url: `${origin}/?checkout_success=true&session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${origin}/?checkout_cancel=true`,
@@ -1368,7 +1378,8 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
                     planType: planType,
                     amount: amount.toString(),
                     seatCount: (seatCount || 1).toString(),
-                    planInterval: subscriptionInterval
+                    planInterval: subscriptionInterval,
+                    packageName: packageName
                 }
             };
         }
@@ -1513,14 +1524,9 @@ app.post('/api/cron/purge-old-audits', async (req, res) => {
     const authHeader = req.headers['authorization'];
     const cronSecret = process.env.CRON_SECRET;
     
-    if (cronSecret) {
-        if (!authHeader || authHeader !== `Bearer ${cronSecret}`) {
-            console.warn("[Purge Cron Blocked] Unauthorized request to purge endpoint.");
-            return res.status(401).json({ error: "Unauthorized" });
-        }
-    } else {
-        console.warn("[Purge Cron Warning] CRON_SECRET is not configured on the server. Rejecting cron request.");
-        return res.status(500).json({ error: "Configuration Error: CRON_SECRET is missing." });
+    if (!cronSecret || !authHeader || authHeader !== `Bearer ${cronSecret}`) {
+        console.warn("[Purge Cron Blocked] Unauthorized request to purge endpoint.");
+        return res.status(401).json({ error: "Unauthorized" });
     }
     
     try {

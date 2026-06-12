@@ -3,7 +3,10 @@
   "builds": [
     {
       "src": "server.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
     },
     {
       "src": "public/index.html",
@@ -33,10 +36,5 @@
       "headers": { "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate" },
       "dest": "/public/$1"
     }
-  ],
-  "functions": {
-    "server.js": {
-      "maxDuration": 60
-    }
-  }
+  ]
 }

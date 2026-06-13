@@ -273,4 +273,42 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     await expect(page.locator('#credits-topup-trigger')).toBeHidden();
   });
 
+  test('should require a valid x-transaction-id header on /api/audit and /api/compare', async ({ request }) => {
+    // 1. /api/audit (when not a routing request) should return 400 Bad Request if x-transaction-id is missing
+    const auditResNoTx = await request.post('/api/audit', {
+      data: {
+        text: 'Lease details...',
+        docType: 'lease',
+        isRoutingRequest: false
+      }
+    });
+    expect(auditResNoTx.status()).toBe(400);
+    const auditNoTxJson = await auditResNoTx.json();
+    expect(auditNoTxJson.error).toContain('Missing or invalid transaction ID');
+
+    // 2. /api/audit (when not a routing request) should return 400 Bad Request if x-transaction-id is invalid UUID
+    const auditResInvalidTx = await request.post('/api/audit', {
+      headers: {
+        'x-transaction-id': 'invalid-uuid-123'
+      },
+      data: {
+        text: 'Lease details...',
+        docType: 'lease',
+        isRoutingRequest: false
+      }
+    });
+    expect(auditResInvalidTx.status()).toBe(400);
+
+    // 3. /api/compare should return 400 Bad Request if x-transaction-id is missing
+    const compareResNoTx = await request.post('/api/compare', {
+      data: {
+        leaseJson: {},
+        estoppelJson: {}
+      }
+    });
+    expect(compareResNoTx.status()).toBe(400);
+    const compareNoTxJson = await compareResNoTx.json();
+    expect(compareNoTxJson.error).toContain('Missing or invalid transaction ID');
+  });
+
 });

@@ -732,7 +732,6 @@ function sanitizeUntrustedText(text) {
                 lowerDecoded.includes('ignore') || 
                 lowerDecoded.includes('override') || 
                 lowerDecoded.includes('instruction') || 
-                lowerDecoded.includes('user') ||
                 lowerDecoded.includes('assistant') ||
                 lowerDecoded.includes('prompt')
             ) {
@@ -753,6 +752,13 @@ function sanitizeUntrustedText(text) {
 app.post('/api/audit', requireAuth, async (req, res) => {
     try {
         let { text, images, docType, systemPromptOverride, userPromptOverride, isRoutingRequest } = req.body;
+        
+        if (!isRoutingRequest) {
+            const transactionId = req.headers['x-transaction-id'];
+            if (!transactionId || !/^[0-9a-f-]{36}$/i.test(transactionId)) {
+                return res.status(400).json({ error: "Missing or invalid transaction ID header." });
+            }
+        }
         
         // Security Fix: Strip overrides in hosted mode unless it is a secure routing request
         systemPromptOverride = null;
@@ -1329,6 +1335,11 @@ For each field, look at all pages and pick the most detailed, legally relevant, 
 // Route to handle AI-assisted compliance comparison of lease vs estoppel
 app.post('/api/compare', requireAuth, async (req, res) => {
     try {
+        const transactionId = req.headers['x-transaction-id'];
+        if (!transactionId || !/^[0-9a-f-]{36}$/i.test(transactionId)) {
+            return res.status(400).json({ error: "Missing or invalid transaction ID header." });
+        }
+
         const { leaseJson, estoppelJson } = req.body;
         
         if (!leaseJson || !estoppelJson) {

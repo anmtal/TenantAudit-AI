@@ -361,6 +361,11 @@ function initializeApp() {
         if (currentPeriod === 'monthly') hostedMonthly.style.display = 'grid';
         else if (currentPeriod === 'annual') hostedAnnual.style.display = 'grid';
         else hostedOneTime.style.display = 'grid';
+
+        const cancelText = document.getElementById('cancel-anytime-text');
+        if (cancelText) {
+            cancelText.style.display = (currentPeriod === 'one-time') ? 'none' : 'block';
+        }
     }
 
     let selectedTopupPlan = 'hosted';
@@ -1162,7 +1167,7 @@ function initializeApp() {
                                     price: parseInt(price, 10),
                                     seatCount: parseInt(seats, 10),
                                     packageName: packageName,
-                                    isSubscription: true,
+                                    isSubscription: interval !== 'one-time',
                                     interval: interval
                                 })
                             });

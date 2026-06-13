@@ -2287,3 +2287,26 @@ select option {
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* 1x5 Grid Layout for Monthly & Annual Subscriptions on Desktop */
+@media (min-width: 1025px) {
+    #hosted-grid-monthly,
+    #hosted-grid-annual {
+        grid-template-columns: repeat(5, 1fr) !important;
+        max-width: 1400px !important;
+    }
+    #hosted-grid-monthly .pricing-card,
+    #hosted-grid-annual .pricing-card {
+        padding: 24px 16px !important;
+        gap: 16px !important;
+    }
+    #hosted-grid-monthly .pricing-card .pricing-features-list,
+    #hosted-grid-annual .pricing-card .pricing-features-list {
+        font-size: 12px !important;
+        gap: 10px !important;
+    }
+    #hosted-grid-monthly .pricing-card .pricing-price-box .pricing-price,
+    #hosted-grid-annual .pricing-card .pricing-price-box .pricing-price {
+        font-size: 28px !important;
+    }
+}
+

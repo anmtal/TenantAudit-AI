@@ -1541,6 +1541,22 @@ function initializeApp() {
 
             try {
                 if (supabase) {
+                    const checkRes = await fetch('/api/check-user-exists', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ email })
+                    });
+                    if (!checkRes.ok) {
+                        const errData = await checkRes.json();
+                        throw new Error(errData.error || 'Failed to verify account status.');
+                    }
+                    const { exists } = await checkRes.json();
+                    if (!exists) {
+                        throw new Error('No account exists with this email address.');
+                    }
+
                     const { error } = await supabase.auth.resetPasswordForEmail(email, {
                         redirectTo: window.location.origin
                     });

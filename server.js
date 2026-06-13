@@ -669,6 +669,38 @@ app.get('/api/config', (req, res) => {
     });
 });
 
+// Endpoint to verify if user account exists (used by forgot password)
+app.post('/api/check-user-exists', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        return res.status(400).json({ error: 'Email is required.' });
+    }
+
+    if (!supabaseAdmin) {
+        // Fallback for local offline development when Supabase isn't configured
+        return res.json({ exists: true });
+    }
+
+    try {
+        const { data, error } = await supabaseAdmin
+            .from('profiles')
+            .select('id')
+            .ilike('email', email.trim())
+            .limit(1);
+
+        if (error) {
+            console.error("Database error checking user existence:", error);
+            return res.status(500).json({ error: 'Failed to verify account status.' });
+        }
+
+        const exists = data && data.length > 0;
+        return res.json({ exists });
+    } catch (err) {
+        console.error("System error checking user existence:", err);
+        return res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
 
 // Route to handle dynamic LLM provider extraction proxy
 function sanitizeUntrustedText(text) {

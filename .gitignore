@@ -14,3 +14,5 @@ real_audit_output.json
 test-results/
 playwright-report/
 
+
+.vercel

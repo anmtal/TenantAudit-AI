@@ -1148,42 +1148,57 @@ function initializeApp() {
                         
                         // Check if there was a pending package selection before login
                         if (window.pendingPurchase) {
-                        const { plan, amount, price, seats, packageName, interval } = window.pendingPurchase;
-                        window.pendingPurchase = null; // Clear state
-                        showLoader("Connecting to payment checkout...");
-                        try {
-                            const { data: { user } } = await supabase.auth.getUser();
-                            const { data: { session } } = await supabase.auth.getSession();
-                            const response = await fetch('/api/create-checkout-session', {
-                                method: 'POST',
-                                headers: { 
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${session.access_token}`
-                                },
-                                body: JSON.stringify({
-                                    amount: parseInt(amount, 10),
-                                    planType: plan,
-                                    userId: user.id,
-                                    price: parseInt(price, 10),
-                                    seatCount: parseInt(seats, 10),
-                                    packageName: packageName,
-                                    isSubscription: interval !== 'one-time',
-                                    interval: interval
-                                })
-                            });
-                            const sessionData = await response.json();
-                            hideLoader();
-                            if (sessionData.error) throw new Error(sessionData.error);
-                            if (sessionData.url) {
-                                window.location.href = sessionData.url;
+                            const { plan, amount, price, seats, packageName, interval } = window.pendingPurchase;
+                            window.pendingPurchase = null; // Clear state
+                            
+                            const isOffline = !supabase || 
+                                              (supabase.supabaseUrl && supabase.supabaseUrl.includes('mock.supabase.co')) || 
+                                              localStorage.getItem('ta_logged_in') === 'true';
+                            
+                            if (isOffline) {
+                                let currentCredits = parseInt(localStorage.getItem('ta_hosted_credits') || '0', 10);
+                                const amt = parseInt(amount, 10);
+                                localStorage.setItem('ta_hosted_credits', (currentCredits + amt).toString());
+                                hostedCredits = currentCredits + amt;
+                                updateCreditsDisplay();
+                                showToast(`🎉 Simulated Checkout Success: Added +${amount} credits to your offline balance!`, 'success');
                             } else {
-                                throw new Error("Stripe checkout session creation failed.");
+                                showLoader("Connecting to payment checkout...");
+                                try {
+                                    const { data: { user } } = await supabase.auth.getUser();
+                                    const { data: { session } } = await supabase.auth.getSession();
+                                    if (!session) throw new Error("No active Supabase session.");
+                                    const response = await fetch('/api/create-checkout-session', {
+                                        method: 'POST',
+                                        headers: { 
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${session.access_token}`
+                                        },
+                                        body: JSON.stringify({
+                                            amount: parseInt(amount, 10),
+                                            planType: plan,
+                                            userId: user.id,
+                                            price: parseInt(price, 10),
+                                            seatCount: parseInt(seats, 10),
+                                            packageName: packageName,
+                                            isSubscription: interval !== 'one-time',
+                                            interval: interval
+                                        })
+                                    });
+                                    const sessionData = await response.json();
+                                    hideLoader();
+                                    if (sessionData.error) throw new Error(sessionData.error);
+                                    if (sessionData.url) {
+                                        window.location.href = sessionData.url;
+                                    } else {
+                                        throw new Error("Stripe checkout session creation failed.");
+                                    }
+                                } catch(err) {
+                                    hideLoader();
+                                    showToast("Error initiating checkout: " + err.message, 'error');
+                                }
                             }
-                        } catch(err) {
-                            hideLoader();
-                            showToast("Error initiating checkout: " + err.message, 'error');
                         }
-                    }
 
                         // --- Check for Stripe Redirect Success ---
                         const urlParams = new URLSearchParams(window.location.search);
@@ -3586,12 +3601,12 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     const pricingBtns = document.querySelectorAll('.pricing-cta-btn');
     pricingBtns.forEach(btn => {
         btn.addEventListener('click', async (e) => {
-            const plan = e.target.getAttribute('data-plan'); 
-            const amount = e.target.getAttribute('data-amount');
-            const price = e.target.getAttribute('data-price');
-            const seats = e.target.getAttribute('data-seats');
-            const pack = e.target.getAttribute('data-pack');
-            const interval = e.target.getAttribute('data-interval') || 'month';
+            const plan = e.currentTarget.getAttribute('data-plan'); 
+            const amount = e.currentTarget.getAttribute('data-amount');
+            const price = e.currentTarget.getAttribute('data-price');
+            const seats = e.currentTarget.getAttribute('data-seats');
+            const pack = e.currentTarget.getAttribute('data-pack');
+            const interval = e.currentTarget.getAttribute('data-interval') || 'month';
 
             const purchaseData = { plan, amount, price, seats, packageName: pack, interval };
 
@@ -3607,11 +3622,30 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 return;
             }
 
+            const isOffline = !supabase || 
+                              (supabase.supabaseUrl && supabase.supabaseUrl.includes('mock.supabase.co')) || 
+                              localStorage.getItem('ta_logged_in') === 'true';
+
+            if (isOffline) {
+                showLoader("Simulating payment checkout...");
+                setTimeout(() => {
+                    hideLoader();
+                    let currentCredits = parseInt(localStorage.getItem('ta_hosted_credits') || '0', 10);
+                    const amt = parseInt(amount, 10);
+                    localStorage.setItem('ta_hosted_credits', (currentCredits + amt).toString());
+                    hostedCredits = currentCredits + amt;
+                    updateCreditsDisplay();
+                    showToast(`🎉 Simulated Checkout Success: Added +${amount} credits to your offline balance!`, 'success');
+                }, 1000);
+                return;
+            }
+
             showLoader("Connecting to checkout...");
             try {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (!user) throw new Error("Not authenticated");
                 const { data: { session } } = await supabase.auth.getSession();
+                if (!session) throw new Error("No active Supabase session.");
 
                 const response = await fetch('/api/create-checkout-session', {
                     method: 'POST',

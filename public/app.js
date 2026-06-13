@@ -349,6 +349,15 @@ function initializeApp() {
     const authToggleContainer = document.getElementById('auth-toggle-container');
     const registerFirstName = document.getElementById('register-first-name');
     const registerLastName = document.getElementById('register-last-name');
+    const registerPhone = document.getElementById('register-phone');
+
+    // --- Phone OTP Verification Elements ---
+    const phoneOtpModal = document.getElementById('phone-otp-modal');
+    const phoneOtpInput = document.getElementById('phone-otp-input');
+    const otpPhoneDisplay = document.getElementById('otp-phone-display');
+    const otpErrorMsg = document.getElementById('otp-error-msg');
+    const btnOtpCancel = document.getElementById('btn-otp-cancel');
+    const btnOtpVerify = document.getElementById('btn-otp-verify');
 
     const userEmailDisplay = document.getElementById('user-email-display');
     const creditsCountDisplay = document.getElementById('credits-count-display');
@@ -479,6 +488,7 @@ function initializeApp() {
             document.querySelectorAll('.register-only').forEach(el => el.style.display = 'block');
             if (registerFirstName) registerFirstName.required = true;
             if (registerLastName) registerLastName.required = true;
+            if (registerPhone) registerPhone.required = true;
             
             const strengthContainer = document.getElementById('password-strength-container');
             if (strengthContainer) {
@@ -495,6 +505,7 @@ function initializeApp() {
             document.querySelectorAll('.register-only').forEach(el => el.style.display = 'none');
             if (registerFirstName) registerFirstName.required = false;
             if (registerLastName) registerLastName.required = false;
+            if (registerPhone) registerPhone.required = false;
             
             const strengthContainer = document.getElementById('password-strength-container');
             if (strengthContainer) strengthContainer.style.display = 'none';
@@ -1681,54 +1692,75 @@ function initializeApp() {
             loginSubmitBtn.textContent = isSignUpMode ? "Registering..." : "Signing In...";
 
             try {
-                if (supabase) {
-                    if (isSignUpMode) {
-                        const registerTosCheckbox = document.getElementById('register-tos-checkbox');
-                        if (registerTosCheckbox && !registerTosCheckbox.checked) {
-                            showToast('You must agree to the Terms of Service to register.', 'error');
-                            loginSubmitBtn.disabled = false;
-                            loginSubmitBtn.textContent = originalText;
-                            return;
-                        }
-                        
-                        // Password Strength Validation
-                        const hasLength = password.length >= 8;
-                        const hasLower = /[a-z]/.test(password);
-                        const hasUpper = /[A-Z]/.test(password);
-                        const hasNumber = /[0-9]/.test(password);
-                        const hasSymbol = /[^A-Za-z0-9]/.test(password);
-                        if (!hasLength || !hasLower || !hasUpper || !hasNumber || !hasSymbol) {
-                            showToast('Password must be at least 8 characters long and contain lowercase, uppercase, numbers, and symbols.', 'error');
-                            loginSubmitBtn.disabled = false;
-                            loginSubmitBtn.textContent = originalText;
-                            return;
-                        }
-                        
-                        const firstName = registerFirstName ? registerFirstName.value.trim() : '';
-                        const lastName = registerLastName ? registerLastName.value.trim() : '';
-
-                        localStorage.setItem('ta_fresh_login', 'true');
-                        sessionStorage.setItem('ta_verification_email', email);
-                        const { data, error } = await supabase.auth.signUp({
-                            email: email,
-                            password: password,
-                            options: {
-                                data: {
-                                    first_name: firstName,
-                                    last_name: lastName
-                                }
-                            }
-                        });
-                        if (error) {
-                            localStorage.removeItem('ta_fresh_login');
-                            throw error;
-                        }
-                        showToast("🎉 Registration successful! Please check your email for a verification OTP link/code before logging in.", 'success');
-                        window.location.hash = '#signup-confirm';
+                if (isSignUpMode) {
+                    const registerTosCheckbox = document.getElementById('register-tos-checkbox');
+                    if (registerTosCheckbox && !registerTosCheckbox.checked) {
+                        showToast('You must agree to the Terms of Service to register.', 'error');
                         loginSubmitBtn.disabled = false;
                         loginSubmitBtn.textContent = originalText;
                         return;
-                    } else {
+                    }
+                    
+                    // Password Strength Validation
+                    const hasLength = password.length >= 8;
+                    const hasLower = /[a-z]/.test(password);
+                    const hasUpper = /[A-Z]/.test(password);
+                    const hasNumber = /[0-9]/.test(password);
+                    const hasSymbol = /[^A-Za-z0-9]/.test(password);
+                    if (!hasLength || !hasLower || !hasUpper || !hasNumber || !hasSymbol) {
+                        showToast('Password must be at least 8 characters long and contain lowercase, uppercase, numbers, and symbols.', 'error');
+                        loginSubmitBtn.disabled = false;
+                        loginSubmitBtn.textContent = originalText;
+                        return;
+                    }
+                    
+                    const phone = registerPhone ? registerPhone.value.trim() : '';
+                    if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
+                        showToast('Please enter a valid phone number in international format starting with \'+\' (e.g. +14155552671).', 'error');
+                        loginSubmitBtn.disabled = false;
+                        loginSubmitBtn.textContent = originalText;
+                        return;
+                    }
+
+                    // Call send-otp
+                    try {
+                        const sendOtpRes = await fetch('/api/send-otp', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phoneNumber: phone })
+                        });
+                        const sendOtpData = await sendOtpRes.json();
+                        if (!sendOtpRes.ok) {
+                            throw new Error(sendOtpData.error || 'Failed to send OTP code.');
+                        }
+
+                        // Open OTP verification modal
+                        otpPhoneDisplay.textContent = phone;
+                        otpErrorMsg.style.display = 'none';
+                        phoneOtpInput.value = '';
+                        phoneOtpModal.classList.add('active');
+
+                        // Save current registration details temporarily on window object
+                        window.pendingSignup = {
+                            email,
+                            password,
+                            firstName: registerFirstName ? registerFirstName.value.trim() : '',
+                            lastName: registerLastName ? registerLastName.value.trim() : '',
+                            phone
+                        };
+
+                        loginSubmitBtn.disabled = false;
+                        loginSubmitBtn.textContent = originalText;
+                        return; // Intercept signup
+                    } catch (otpErr) {
+                        showToast(`Verification SMS failed: ${otpErr.message}`, 'error');
+                        loginSubmitBtn.disabled = false;
+                        loginSubmitBtn.textContent = originalText;
+                        return;
+                    }
+                } else {
+                    // Sign In logic
+                    if (supabase) {
                         localStorage.setItem('ta_fresh_login', 'true');
                         const { data, error } = await supabase.auth.signInWithPassword({
                             email: email,
@@ -1738,22 +1770,6 @@ function initializeApp() {
                             localStorage.removeItem('ta_fresh_login');
                             throw error;
                         }
-                    }
-                } else {
-                    if (isSignUpMode) {
-                        const registerTosCheckbox = document.getElementById('register-tos-checkbox');
-                        if (registerTosCheckbox && !registerTosCheckbox.checked) {
-                            showToast('You must agree to the Terms of Service to register.', 'error');
-                            loginSubmitBtn.disabled = false;
-                            loginSubmitBtn.textContent = originalText;
-                            return;
-                        }
-                        sessionStorage.setItem('ta_verification_email', email);
-                        showToast("🎉 Account created successfully (Local Offline Mode)!", 'success');
-                        window.location.hash = '#signup-confirm';
-                        loginSubmitBtn.disabled = false;
-                        loginSubmitBtn.textContent = originalText;
-                        return;
                     } else {
                         localStorage.setItem('ta_logged_in', 'true');
                         localStorage.setItem('ta_user_email', email);
@@ -1774,6 +1790,87 @@ function initializeApp() {
             } finally {
                 loginSubmitBtn.disabled = false;
                 loginSubmitBtn.textContent = originalText;
+            }
+        });
+    }
+
+    // --- Phone Verification OTP Modal Click Listeners ---
+    if (btnOtpCancel) {
+        btnOtpCancel.addEventListener('click', () => {
+            phoneOtpModal.classList.remove('active');
+            window.pendingSignup = null;
+        });
+    }
+
+    if (btnOtpVerify) {
+        btnOtpVerify.addEventListener('click', async () => {
+            const code = phoneOtpInput.value.trim();
+            if (!code || code.length !== 6 || !/^\d+$/.test(code)) {
+                otpErrorMsg.textContent = 'Please enter a valid 6-digit code.';
+                otpErrorMsg.style.display = 'block';
+                return;
+            }
+
+            const pending = window.pendingSignup;
+            if (!pending) {
+                otpErrorMsg.textContent = 'Session expired. Please close this modal and try again.';
+                otpErrorMsg.style.display = 'block';
+                return;
+            }
+
+            btnOtpVerify.disabled = true;
+            btnOtpVerify.textContent = 'Verifying...';
+            otpErrorMsg.style.display = 'none';
+
+            try {
+                const verifyRes = await fetch('/api/verify-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber: pending.phone, code })
+                });
+                const verifyData = await verifyRes.json();
+                if (!verifyRes.ok) {
+                    throw new Error(verifyData.error || 'Failed to verify code.');
+                }
+
+                // Verification successful
+                phoneOtpModal.classList.remove('active');
+                showToast('Phone number verified successfully!', 'success');
+
+                // Proceed with registration
+                if (supabase) {
+                    localStorage.setItem('ta_fresh_login', 'true');
+                    sessionStorage.setItem('ta_verification_email', pending.email);
+                    const { data, error } = await supabase.auth.signUp({
+                        email: pending.email,
+                        password: pending.password,
+                        options: {
+                            data: {
+                                first_name: pending.firstName,
+                                last_name: pending.lastName,
+                                phone: pending.phone,
+                                phone_verified: true
+                            }
+                        }
+                    });
+                    if (error) {
+                        localStorage.removeItem('ta_fresh_login');
+                        throw error;
+                    }
+                    showToast("🎉 Registration successful! Please check your email for a verification OTP link/code before logging in.", 'success');
+                    window.location.hash = '#signup-confirm';
+                } else {
+                    // Offline mock signup
+                    sessionStorage.setItem('ta_verification_email', pending.email);
+                    showToast("🎉 Account created successfully (Local Offline Mode)!", 'success');
+                    window.location.hash = '#signup-confirm';
+                }
+            } catch (err) {
+                otpErrorMsg.textContent = err.message;
+                otpErrorMsg.style.display = 'block';
+            } finally {
+                btnOtpVerify.disabled = false;
+                btnOtpVerify.textContent = 'Verify & Register';
             }
         });
     }

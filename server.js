@@ -26,6 +26,11 @@ if (process.env.NODE_ENV === 'production' && !supabaseAdmin) {
 
 const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 
+const twilio = (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN)
+    ? require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+    : null;
+const TWILIO_VERIFY_SERVICE_SID = process.env.TWILIO_VERIFY_SERVICE_SID || null;
+
 // SECURITY: Crash on startup if Stripe is configured but webhook secret is missing
 if (process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_WEBHOOK_SECRET) {
     console.error('FATAL: STRIPE_SECRET_KEY is configured on startup but STRIPE_WEBHOOK_SECRET is missing. Refusing to start without webhook safeguards.');
@@ -753,6 +758,75 @@ app.post('/api/check-user-exists', async (req, res) => {
     } catch (err) {
         console.error("System error checking user existence:", err);
         return res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
+// Endpoint to send SMS OTP verification code via Twilio
+app.post('/api/send-otp', async (req, res) => {
+    try {
+        const { phoneNumber } = req.body;
+        if (!phoneNumber || !/^\+[1-9]\d{1,14}$/.test(phoneNumber)) {
+            return res.status(400).json({ error: "Invalid phone number format. Must be in E.164 format (e.g. +14155552671)." });
+        }
+
+        // Check if phone number is already registered in Profiles table
+        if (supabaseAdmin) {
+            const { data: existingProfile, error: profileErr } = await supabaseAdmin
+                .from('profiles')
+                .select('id')
+                .eq('phone', phoneNumber)
+                .maybeSingle();
+
+            if (existingProfile) {
+                return res.status(400).json({ error: "This phone number is already associated with another account. Please use a different phone number." });
+            }
+        }
+
+        if (twilio && TWILIO_VERIFY_SERVICE_SID) {
+            console.log(`[Twilio Verify] Sending OTP to ${phoneNumber}`);
+            await twilio.verify.v2.services(TWILIO_VERIFY_SERVICE_SID)
+                .verifications
+                .create({ to: phoneNumber, channel: 'sms' });
+            return res.json({ success: true });
+        } else {
+            console.log(`[Mock Twilio Verify] OTP code '123456' sent to ${phoneNumber}`);
+            return res.json({ success: true, mock: true });
+        }
+    } catch (err) {
+        console.error("[Twilio Verify Send Error]", err);
+        return res.status(500).json({ error: "Failed to send verification SMS: " + err.message });
+    }
+});
+
+// Endpoint to verify SMS OTP code
+app.post('/api/verify-otp', async (req, res) => {
+    try {
+        const { phoneNumber, code } = req.body;
+        if (!phoneNumber || !code) {
+            return res.status(400).json({ error: "Missing phoneNumber or code." });
+        }
+
+        if (twilio && TWILIO_VERIFY_SERVICE_SID) {
+            console.log(`[Twilio Verify] Checking OTP for ${phoneNumber}`);
+            const verificationCheck = await twilio.verify.v2.services(TWILIO_VERIFY_SERVICE_SID)
+                .verificationChecks
+                .create({ to: phoneNumber, code: code });
+            
+            if (verificationCheck.status !== 'approved') {
+                return res.status(400).json({ error: "Invalid verification code. Please check the code and try again." });
+            }
+            return res.json({ success: true });
+        } else {
+            console.log(`[Mock Twilio Verify] Checking OTP code '${code}' for ${phoneNumber}`);
+            if (code === '123456') {
+                return res.json({ success: true });
+            } else {
+                return res.status(400).json({ error: "Invalid verification code. Use mock code 123456 in local development." });
+            }
+        }
+    } catch (err) {
+        console.error("[Twilio Verify Check Error]", err);
+        return res.status(500).json({ error: "Failed to verify SMS code: " + err.message });
     }
 });
 

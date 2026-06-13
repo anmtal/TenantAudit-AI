@@ -83,6 +83,7 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     await passwordInput.fill('weakpass');
     await page.fill('#register-first-name', 'John');
     await page.fill('#register-last-name', 'Doe');
+    await page.fill('#register-phone', '+1234567890');
     await page.fill('#login-email', 'john.doe@example.com');
     await page.check('#register-tos-checkbox');
 

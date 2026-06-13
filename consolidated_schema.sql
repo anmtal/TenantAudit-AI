@@ -57,6 +57,10 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS active_session_id TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS team_id UUID REFERENCES public.teams(id) ON DELETE SET NULL;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS plan_tier TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS free_credit_granted BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS unique_profiles_phone;
+ALTER TABLE public.profiles ADD CONSTRAINT unique_profiles_phone UNIQUE (phone);
 
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS credits_non_negative;
 ALTER TABLE public.profiles ADD CONSTRAINT credits_non_negative CHECK (credits >= 0);
@@ -118,8 +122,35 @@ DROP POLICY IF EXISTS "Allow users to view their own payments" ON public.process
 CREATE POLICY "Allow users to view their own payments" ON public.processed_payments FOR SELECT USING (auth.uid() = user_id);
 
 -- --------------------------------------------------------------------
--- 5. User Signup Trigger (Auto-Profile & Team Creation)
+-- 5. User Signup Trigger (Auto-Profile & Team Creation) & Twilio Welcome Gift
 -- --------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.grant_welcome_credit(p_user_id UUID)
+RETURNS VOID AS $$
+DECLARE
+  v_team_id UUID;
+  v_already_granted BOOLEAN;
+BEGIN
+  -- Check if already granted
+  SELECT free_credit_granted, team_id INTO v_already_granted, v_team_id
+  FROM public.profiles
+  WHERE id = p_user_id;
+
+  IF v_team_id IS NOT NULL AND (v_already_granted IS NULL OR v_already_granted = FALSE) THEN
+    -- Grant 1 audit credit (never expiring)
+    INSERT INTO public.team_credit_grants (team_id, amount_granted, amount_remaining, expires_at)
+    VALUES (v_team_id, 1, 1, NULL);
+
+    -- Recalculate team balance
+    PERFORM public.recalculate_team_credits(v_team_id);
+
+    -- Mark as granted
+    UPDATE public.profiles
+    SET free_credit_granted = TRUE
+    WHERE id = p_user_id;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 DECLARE
@@ -136,17 +167,20 @@ BEGIN
     -- Assign to the invited team, delete the invitation
     DELETE FROM public.team_invitations WHERE LOWER(email) = LOWER(new.email);
     
-    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id)
+    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id, phone, free_credit_granted)
     VALUES (
       new.id, new.email, 0,
       COALESCE(new.raw_user_meta_data->>'first_name', ''),
       COALESCE(new.raw_user_meta_data->>'last_name', ''),
-      pending_team_id
+      pending_team_id,
+      new.raw_user_meta_data->>'phone',
+      FALSE
     )
     ON CONFLICT (id) DO UPDATE 
     SET email = EXCLUDED.email,
         first_name = COALESCE(EXCLUDED.first_name, profiles.first_name),
         last_name = COALESCE(EXCLUDED.last_name, profiles.last_name),
+        phone = COALESCE(EXCLUDED.phone, profiles.phone),
         team_id = pending_team_id;
   ELSE
     -- No pending invitation: create a new personal team
@@ -154,18 +188,26 @@ BEGIN
     VALUES (COALESCE(new.raw_user_meta_data->>'first_name', 'Personal') || '''s Team', new.id, 0, 1)
     RETURNING id INTO new_team_id;
 
-    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id)
+    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id, phone, free_credit_granted)
     VALUES (
       new.id, new.email, 0,
       COALESCE(new.raw_user_meta_data->>'first_name', ''),
       COALESCE(new.raw_user_meta_data->>'last_name', ''),
-      new_team_id
+      new_team_id,
+      new.raw_user_meta_data->>'phone',
+      FALSE
     )
     ON CONFLICT (id) DO UPDATE 
     SET email = EXCLUDED.email,
         first_name = COALESCE(EXCLUDED.first_name, profiles.first_name),
         last_name = COALESCE(EXCLUDED.last_name, profiles.last_name),
+        phone = COALESCE(EXCLUDED.phone, profiles.phone),
         team_id = COALESCE(profiles.team_id, EXCLUDED.team_id);
+  END IF;
+
+  -- Grant welcome credit if both email and phone are verified immediately on insertion
+  IF new.email_confirmed_at IS NOT NULL AND (new.raw_user_meta_data->>'phone_verified')::boolean = true THEN
+    PERFORM public.grant_welcome_credit(new.id);
   END IF;
   
   RETURN new;
@@ -176,6 +218,22 @@ DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Trigger to watch for user updates (for email confirmation transitions)
+CREATE OR REPLACE FUNCTION public.handle_user_update()
+RETURNS trigger AS $$
+BEGIN
+  IF NEW.email_confirmed_at IS NOT NULL AND (NEW.raw_user_meta_data->>'phone_verified')::boolean = true THEN
+    PERFORM public.grant_welcome_credit(NEW.id);
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_updated ON auth.users;
+CREATE TRIGGER on_auth_user_updated
+  AFTER UPDATE OF email_confirmed_at ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_user_update();
 
 -- --------------------------------------------------------------------
 -- 6. Legacy Data Migration (Fix Missing Teams & 1:1 Credit Conversion)

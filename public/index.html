@@ -521,6 +521,10 @@
                         <label for="register-last-name">Last Name</label>
                         <input type="text" id="register-last-name" class="text-input" placeholder="Last Name">
                     </div>
+                    <div class="form-group register-only" style="display: none;">
+                        <label for="register-phone">Mobile Phone Number (with Country Code, e.g. +14155552671)</label>
+                        <input type="tel" id="register-phone" class="text-input" placeholder="+14155552671">
+                    </div>
                     <div class="form-group">
                         <label for="login-email">Email Address</label>
                         <input type="email" id="login-email" class="text-input" placeholder="name@company.com" required>
@@ -1086,6 +1090,22 @@
 
     <!-- Toast Container -->
     <div id="toast-container"></div>
+
+    <!-- PHONE VERIFICATION OTP MODAL -->
+    <div class="modal-overlay" id="phone-otp-modal">
+        <div class="modal-card" style="max-width: 400px; text-align: center;">
+            <h3 style="margin-bottom: 10px; color: var(--text-primary);"><i data-lucide="smartphone" class="inline-icon" style="color: var(--color-purple); width: 24px; height: 24px; vertical-align: middle; margin-right: 8px;"></i>Verify Phone Number</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 14px; line-height: 1.5;">We sent a 6-digit verification code to <strong id="otp-phone-display" style="color: #fff;"></strong>. Enter it below to complete signup.</p>
+            <div class="form-group" style="margin-bottom: 20px;">
+                <input type="text" id="phone-otp-input" class="text-input" placeholder="000000" style="text-align: center; font-size: 1.5rem; letter-spacing: 0.2em; font-weight: bold;" maxlength="6">
+            </div>
+            <div id="otp-error-msg" style="display: none; color: #f87171; font-size: 0.85rem; margin-bottom: 15px; text-align: center;"></div>
+            <div style="display: flex; gap: 10px; justify-content: center; margin-top: 15px;">
+                <button type="button" class="btn btn-secondary" id="btn-otp-cancel" style="width: auto; padding: 10px 20px;">Cancel</button>
+                <button type="button" class="primary-btn" id="btn-otp-verify" style="width: auto; padding: 10px 20px;">Verify & Register</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Terms of Service & Privacy Policy Modal -->
     <div class="modal-overlay" id="tos-modal">

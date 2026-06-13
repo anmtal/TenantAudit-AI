@@ -1476,7 +1476,6 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
     const interval = planConfig.interval;
 
     // Secure verification: client userId must match authentic authenticated userId
-    console.log("CHECKOUT VERIFICATION DEBUG:", { userId, reqUserId: req.user?.id, hasAdmin: !!supabaseAdmin });
     if (supabaseAdmin && userId !== req.user.id) {
         return res.status(403).json({ error: "Forbidden: Authenticated user ID mismatch." });
     }

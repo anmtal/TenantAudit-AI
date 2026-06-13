@@ -217,6 +217,8 @@ CREATE TABLE IF NOT EXISTS public.audit_transactions (
 ALTER TABLE public.audit_transactions ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE public.audit_transactions ADD COLUMN IF NOT EXISTS credits_deducted INTEGER NOT NULL DEFAULT 1;
 
+ALTER TABLE public.audit_transactions ENABLE ROW LEVEL SECURITY;
+
 -- --------------------------------------------------------------------
 -- 8. Ledger: Team Credit Grants Table
 -- --------------------------------------------------------------------
@@ -232,6 +234,8 @@ CREATE TABLE IF NOT EXISTS public.team_credit_grants (
       OR (expires_at IS NOT NULL)
     )
 );
+
+ALTER TABLE public.team_credit_grants ENABLE ROW LEVEL SECURITY;
 
 CREATE INDEX IF NOT EXISTS idx_team_credit_grants_expires ON public.team_credit_grants (team_id, expires_at);
 
@@ -509,25 +513,8 @@ DROP FUNCTION IF EXISTS public.register_active_session(TEXT);
 
 CREATE OR REPLACE FUNCTION public.register_active_session(p_session_id TEXT)
 RETURNS BOOLEAN AS $$
-DECLARE
-  current_active_session TEXT;
-  current_last_active TIMESTAMP WITH TIME ZONE;
 BEGIN
-  -- Get existing session info
-  SELECT active_session_id, last_active_at 
-  INTO current_active_session, current_last_active 
-  FROM public.profiles 
-  WHERE id = auth.uid();
-
-  -- If there is another active session that was active within the last 5 minutes, reject the takeover
-  IF current_active_session IS NOT NULL 
-     AND current_active_session != p_session_id 
-     AND current_last_active IS NOT NULL 
-     AND current_last_active > (NOW() - INTERVAL '5 minutes') THEN
-    RETURN FALSE;
-  END IF;
-
-  -- Otherwise, set the new active session and update the active timestamp
+  -- Always set the new active session and update the active timestamp (allow concurrent takeovers/switches)
   UPDATE public.profiles 
   SET active_session_id = p_session_id,
       last_active_at = NOW()

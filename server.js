@@ -66,7 +66,7 @@ function getCorsOptions() {
     };
 }
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 50000) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 45000) {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -99,6 +99,18 @@ const apiLimiter = rateLimit({
     legacyHeaders: false,
 });
 app.use('/api/', apiLimiter);
+
+const expensiveApiLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 15, // Limit to 15 requests per 10 minutes
+    keyGenerator: (req) => {
+        return req.user?.id || req.ip;
+    },
+    message: { error: 'Too many expensive API requests, please try again after 10 minutes.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: false
+});
 
 
 // Disable caching and add Security Headers to prevent XSS and clickjacking
@@ -148,6 +160,12 @@ async function requireAuth(req, res, next) {
             return res.status(401).json({ error: "Unauthorized: Invalid or expired session token." });
         }
 
+        // Email Verification Guard (production only)
+        if (process.env.NODE_ENV === 'production' && !user.email_confirmed_at) {
+            console.error(`[Auth Failure] Email not confirmed for user ${user.email} in production.`);
+            return res.status(403).json({ error: "Forbidden: Please confirm your email address before accessing this resource." });
+        }
+
         // Cryptographic Session Seat Enforcement
         try {
             const payloadBase64Url = token.split('.')[1];
@@ -158,15 +176,12 @@ async function requireAuth(req, res, next) {
                 
                     const { data: profile } = await supabaseAdmin.from('profiles').select('active_session_id, last_active_at').eq('id', user.id).single();
                     if (profile) {
-                        if (!profile.active_session_id) {
-                            // Auto-Claim Active Session: lock the seat immediately
+                        if (!profile.active_session_id || profile.active_session_id !== sessionId) {
+                            // Auto-Claim/Takeover Active Session: lock the seat immediately/overwrite it
                             await supabaseAdmin
                                 .from('profiles')
                                 .update({ active_session_id: sessionId, last_active_at: new Date().toISOString() })
                                 .eq('id', user.id);
-                        } else if (profile.active_session_id !== sessionId) {
-                            console.error(`[Auth Failure] Concurrent login detected for user ${user.email}.`);
-                            return res.status(401).json({ error: "Unauthorized: Session expired. You have logged in from another device. Please use Team Workspaces for multiple users." });
                         } else {
                             // Stateful Seat Enforcement: update last_active_at timestamp for active session with 5-minute throttling
                             const lastActive = profile.last_active_at ? new Date(profile.last_active_at) : new Date(0);
@@ -595,6 +610,46 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                 console.error("Error processing invoice payment failed webhook:", err);
             }
         }
+    } else if (event.type === 'customer.subscription.updated') {
+        const subscription = event.data.object;
+        const { userId, planType, amount, seatCount, planInterval, packageName } = subscription.metadata || {};
+        
+        if (userId && planType && amount) {
+            try {
+                console.log(`[Stripe Webhook] Processing subscription update for user ${userId}: plan ${planType}, amount ${amount}`);
+                if (supabaseAdmin) {
+                    const amt = parseInt(amount, 10);
+                    const seats = parseInt(seatCount || '1', 10);
+                    
+                    if (planType === 'hosted') {
+                        const { data: team, error: teamFetchErr } = await supabaseAdmin
+                            .from('teams')
+                            .select('id')
+                            .eq('owner_id', userId)
+                            .single();
+                            
+                        if (teamFetchErr && teamFetchErr.code !== 'PGRST116') {
+                            throw teamFetchErr;
+                        }
+                        
+                        if (team) {
+                            const { error: updateTeamErr } = await supabaseAdmin
+                                .from('teams')
+                                .update({ 
+                                    seat_limit: seats,
+                                    stripe_subscription_id: subscription.id,
+                                    plan_tier: packageName || `hosted_${amt}`
+                                })
+                                .eq('id', team.id);
+                            if (updateTeamErr) throw updateTeamErr;
+                            console.log(`[Stripe Webhook] Successfully updated team ${team.id} plan on subscription update.`);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("[Stripe Webhook] Error processing subscription update:", err);
+            }
+        }
     } else if (event.type === 'customer.subscription.deleted') {
         const subscription = event.data.object;
         const { userId, planType } = subscription.metadata || {};
@@ -749,7 +804,7 @@ function sanitizeUntrustedText(text) {
 
 
 
-app.post('/api/audit', requireAuth, async (req, res) => {
+app.post('/api/audit', requireAuth, expensiveApiLimiter, async (req, res) => {
     try {
         let { text, images, docType, systemPromptOverride, userPromptOverride, isRoutingRequest } = req.body;
         
@@ -952,29 +1007,67 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 const data = await response.json();
                 extractedData = await safeExtractAndParseJSON(data.choices[0].message.content, activeKey, activeProvider);
             } else if (activeProvider === 'anthropic') {
-                response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "x-api-key": activeKey,
-                        "anthropic-version": "2023-06-01"
-                    },
-                    body: JSON.stringify({
-                        model: activeModel,
-                        max_tokens: 4000,
-                        system: systemPrompt,
-                        messages: [
-                            { role: "user", content: messagesContent }
-                        ],
-                        temperature: 0.1
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`Anthropic routing failed with status ${response.status}`);
+                try {
+                    response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "x-api-key": activeKey,
+                            "anthropic-version": "2023-06-01"
+                        },
+                        body: JSON.stringify({
+                            model: activeModel,
+                            max_tokens: 4000,
+                            system: systemPrompt,
+                            messages: [
+                                { role: "user", content: messagesContent }
+                            ],
+                            temperature: 0.1
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Anthropic routing failed with status ${response.status}`);
+                    }
+                    const data = await response.json();
+                    extractedData = await safeExtractAndParseJSON(data.content[0].text, activeKey, activeProvider);
+                } catch (anthropicErr) {
+                    console.warn(`[Routing Fallback] Anthropic failed: ${anthropicErr.message}. Checking for OpenAI fallback...`);
+                    if (process.env.OPENAI_API_KEY) {
+                        console.log("[Routing Fallback] Triggering OpenAI gpt-4o fallback...");
+                        const fallbackKey = process.env.OPENAI_API_KEY;
+                        const fallbackModel = "gpt-4o";
+                        const openAiMessagesContent = [
+                            { type: "text", text: userPrompt }
+                        ];
+                        for (const img of images) {
+                            openAiMessagesContent.push({ type: "image_url", image_url: { url: img } });
+                        }
+                        const fallbackResponse = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Authorization": `Bearer ${fallbackKey}`
+                            },
+                            body: JSON.stringify({
+                                model: fallbackModel,
+                                messages: [
+                                    { role: "system", content: systemPrompt },
+                                    { role: "user", content: openAiMessagesContent }
+                                ],
+                                response_format: { type: "json_object" },
+                                temperature: 0.1
+                            })
+                        });
+                        if (!fallbackResponse.ok) {
+                            throw new Error(`OpenAI routing fallback failed with status ${fallbackResponse.status}`);
+                        }
+                        const fallbackData = await fallbackResponse.json();
+                        extractedData = await safeExtractAndParseJSON(fallbackData.choices[0].message.content, fallbackKey, 'openai');
+                    } else {
+                        throw anthropicErr;
+                    }
                 }
-                const data = await response.json();
-                extractedData = await safeExtractAndParseJSON(data.content[0].text, activeKey, activeProvider);
             }
             
             return res.json({ 
@@ -996,9 +1089,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             for (let i = 0; i < images.length; i += batchSize) {
                 // Time Guard: Break early if total time exceeds 45s (preventing Vercel's 60s timeout)
                 if (Date.now() - startTime > 45000) {
-                    console.warn(`[Time Guard Warning] Vision OCR processing took ${Math.round((Date.now() - startTime)/1000)}s. Breaking loop early at page ${i + 1}/${images.length} to prevent server timeout.`);
-                    isTruncated = true;
-                    break;
+                    console.warn(`[Time Guard Warning] Vision OCR processing took ${Math.round((Date.now() - startTime)/1000)}s. Timing out with 408 to prevent incomplete visual OCR matrix return.`);
+                    return res.status(408).json({ error: "Request Timeout: Vision OCR processing took longer than 45 seconds. Please split your document into smaller parts and retry." });
                 }
                 const batch = images.slice(i, i + batchSize);
                 const batchPromises = batch.map(async (img, index) => {
@@ -1054,34 +1146,70 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                                     }
                                 }
                             ];
-                            const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
-                                method: "POST",
-                                headers: {
-                                    "Content-Type": "application/json",
-                                    "x-api-key": activeKey,
-                                    "anthropic-version": "2023-06-01"
-                                },
-                                body: JSON.stringify({
-                                    model: activeModel,
-                                    max_tokens: 4000,
-                                    system: systemPrompt,
-                                    messages: [
-                                        { role: "user", content: messagesContent }
-                                    ],
-                                    temperature: 0.1
-                                })
-                            });
-                            
-                            if (!response.ok) {
-                                let errMsg = `Anthropic returned status ${response.status} on page ${pageIdx + 1}`;
-                                try {
-                                    const errJson = await response.json();
-                                    errMsg = errJson.error?.message || errMsg;
-                                } catch(e) {}
-                                throw new Error(errMsg);
+                            try {
+                                const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
+                                    method: "POST",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                        "x-api-key": activeKey,
+                                        "anthropic-version": "2023-06-01"
+                                    },
+                                    body: JSON.stringify({
+                                        model: activeModel,
+                                        max_tokens: 4000,
+                                        system: systemPrompt,
+                                        messages: [
+                                            { role: "user", content: messagesContent }
+                                        ],
+                                        temperature: 0.1
+                                    })
+                                });
+                                
+                                if (!response.ok) {
+                                    let errMsg = `Anthropic returned status ${response.status} on page ${pageIdx + 1}`;
+                                    try {
+                                        const errJson = await response.json();
+                                        errMsg = errJson.error?.message || errMsg;
+                                    } catch(e) {}
+                                    throw new Error(errMsg);
+                                }
+                                const data = await response.json();
+                                return await safeExtractAndParseJSON(data.content[0].text, activeKey, activeProvider);
+                            } catch (anthropicErr) {
+                                console.warn(`[OCR Fallback] Anthropic page OCR failed on page ${pageIdx + 1}: ${anthropicErr.message}. Checking for OpenAI fallback...`);
+                                if (process.env.OPENAI_API_KEY) {
+                                    console.log(`[OCR Fallback] Triggering OpenAI gpt-4o fallback for page ${pageIdx + 1}...`);
+                                    const fallbackKey = process.env.OPENAI_API_KEY;
+                                    const fallbackModel = "gpt-4o";
+                                    const openAiMessagesContent = [
+                                        { type: "text", text: pageUserPrompt },
+                                        { type: "image_url", image_url: { url: img } }
+                                    ];
+                                    const fallbackResponse = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
+                                        method: "POST",
+                                        headers: {
+                                            "Content-Type": "application/json",
+                                            "Authorization": `Bearer ${fallbackKey}`
+                                        },
+                                        body: JSON.stringify({
+                                            model: fallbackModel,
+                                            messages: [
+                                                { role: "system", content: systemPrompt },
+                                                { role: "user", content: openAiMessagesContent }
+                                            ],
+                                            response_format: { type: "json_object" },
+                                            temperature: 0.1
+                                        })
+                                    });
+                                    if (!fallbackResponse.ok) {
+                                        throw new Error(`OpenAI OCR fallback failed with status ${fallbackResponse.status} on page ${pageIdx + 1}`);
+                                    }
+                                    const fallbackData = await fallbackResponse.json();
+                                    return await safeExtractAndParseJSON(fallbackData.choices[0].message.content, fallbackKey, 'openai');
+                                } else {
+                                    throw anthropicErr;
+                                }
                             }
-                            const data = await response.json();
-                            return await safeExtractAndParseJSON(data.content[0].text, activeKey, activeProvider);
                         } else {
                             throw new Error("Invalid provider.");
                         }
@@ -1150,28 +1278,61 @@ For each field, look at all pages and pick the most detailed, legally relevant, 
                     }
                 } else {
                     // Anthropic
-                    const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
-                        method: "POST",
-                        headers: {
-                            "x-api-key": activeKey,
-                            "anthropic-version": "2023-06-01",
-                            "content-type": "application/json"
-                        },
-                        body: JSON.stringify({
-                            model: activeModel,
-                            max_tokens: 4000,
-                            system: mergeSystemPrompt,
-                            messages: [
-                                { role: "user", content: mergeUserPrompt }
-                            ],
-                            temperature: 0.1
-                        })
-                    });
-                    if (response.ok) {
-                        const resJson = await response.json();
-                        mergeJson = await safeExtractAndParseJSON(resJson.content[0].text, activeKey, activeProvider);
-                    } else {
-                        throw new Error(`Anthropic merge failed with status ${response.status}`);
+                    try {
+                        const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
+                            method: "POST",
+                            headers: {
+                                "x-api-key": activeKey,
+                                "anthropic-version": "2023-06-01",
+                                "content-type": "application/json"
+                            },
+                            body: JSON.stringify({
+                                model: activeModel,
+                                max_tokens: 4000,
+                                system: mergeSystemPrompt,
+                                messages: [
+                                    { role: "user", content: mergeUserPrompt }
+                                ],
+                                temperature: 0.1
+                            })
+                        });
+                        if (response.ok) {
+                            const resJson = await response.json();
+                            mergeJson = await safeExtractAndParseJSON(resJson.content[0].text, activeKey, activeProvider);
+                        } else {
+                            throw new Error(`Anthropic merge failed with status ${response.status}`);
+                        }
+                    } catch (anthropicErr) {
+                        console.warn(`[Merge Fallback] Anthropic merge failed: ${anthropicErr.message}. Checking for OpenAI fallback...`);
+                        if (process.env.OPENAI_API_KEY) {
+                            console.log("[Merge Fallback] Triggering OpenAI gpt-4o fallback...");
+                            const fallbackKey = process.env.OPENAI_API_KEY;
+                            const fallbackModel = "gpt-4o";
+                            const fallbackResponse = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "Authorization": `Bearer ${fallbackKey}`
+                                },
+                                body: JSON.stringify({
+                                    model: fallbackModel,
+                                    messages: [
+                                        { role: "system", content: mergeSystemPrompt },
+                                        { role: "user", content: mergeUserPrompt }
+                                    ],
+                                    response_format: { type: "json_object" },
+                                    temperature: 0.1
+                                })
+                            });
+                            if (fallbackResponse.ok) {
+                                const fallbackData = await fallbackResponse.json();
+                                mergeJson = await safeExtractAndParseJSON(fallbackData.choices[0].message.content, fallbackKey, 'openai');
+                            } else {
+                                throw new Error(`OpenAI merge fallback failed with status ${fallbackResponse.status}`);
+                            }
+                        } else {
+                            throw anthropicErr;
+                        }
                     }
                 }
             } catch (mergeErr) {
@@ -1251,35 +1412,67 @@ For each field, look at all pages and pick the most detailed, legally relevant, 
                 extractedData = await safeExtractAndParseJSON(data.choices[0].message.content, activeKey, activeProvider);
             } 
             else if (activeProvider === 'anthropic') {
-                const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "x-api-key": activeKey,
-                        "anthropic-version": "2023-06-01"
-                    },
-                    body: JSON.stringify({
-                        model: activeModel,
-                        max_tokens: 4000,
-                        system: systemPrompt,
-                        messages: [
-                            { role: "user", content: [{ type: "text", text: userPrompt }] }
-                        ],
-                        temperature: 0.1
-                    })
-                });
+                try {
+                    const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "x-api-key": activeKey,
+                            "anthropic-version": "2023-06-01"
+                        },
+                        body: JSON.stringify({
+                            model: activeModel,
+                            max_tokens: 4000,
+                            system: systemPrompt,
+                            messages: [
+                                { role: "user", content: [{ type: "text", text: userPrompt }] }
+                            ],
+                            temperature: 0.1
+                        })
+                    });
 
-                if (!response.ok) {
-                    let errMsg = `Anthropic returned status ${response.status}`;
-                    try {
-                        const errJson = await response.json();
-                        errMsg = errJson.error?.message || errJson.message || errMsg;
-                    } catch(e) {}
-                    throw new Error(errMsg);
+                    if (!response.ok) {
+                        let errMsg = `Anthropic returned status ${response.status}`;
+                        try {
+                            const errJson = await response.json();
+                            errMsg = errJson.error?.message || errJson.message || errMsg;
+                        } catch(e) {}
+                        throw new Error(errMsg);
+                    }
+
+                    const data = await response.json();
+                    extractedData = await safeExtractAndParseJSON(data.content[0].text, activeKey, activeProvider);
+                } catch (anthropicErr) {
+                    console.warn(`[Text Mode Fallback] Anthropic failed: ${anthropicErr.message}. Checking for OpenAI fallback...`);
+                    if (process.env.OPENAI_API_KEY) {
+                        console.log("[Text Mode Fallback] Triggering OpenAI gpt-4o fallback...");
+                        const fallbackKey = process.env.OPENAI_API_KEY;
+                        const fallbackModel = "gpt-4o";
+                        const fallbackResponse = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                "Authorization": `Bearer ${fallbackKey}`
+                            },
+                            body: JSON.stringify({
+                                model: fallbackModel,
+                                messages: [
+                                    { role: "system", content: systemPrompt },
+                                    { role: "user", content: userPrompt }
+                                ],
+                                response_format: { type: "json_object" },
+                                temperature: 0.1
+                            })
+                        });
+                        if (!fallbackResponse.ok) {
+                            throw new Error(`OpenAI text fallback failed with status ${fallbackResponse.status}`);
+                        }
+                        const fallbackData = await fallbackResponse.json();
+                        extractedData = await safeExtractAndParseJSON(fallbackData.choices[0].message.content, fallbackKey, 'openai');
+                    } else {
+                        throw anthropicErr;
+                    }
                 }
-
-                const data = await response.json();
-                extractedData = await safeExtractAndParseJSON(data.content[0].text, activeKey, activeProvider);
             } else {
                 throw new Error("Invalid provider.");
             }
@@ -1333,7 +1526,7 @@ For each field, look at all pages and pick the most detailed, legally relevant, 
 });
 
 // Route to handle AI-assisted compliance comparison of lease vs estoppel
-app.post('/api/compare', requireAuth, async (req, res) => {
+app.post('/api/compare', requireAuth, expensiveApiLimiter, async (req, res) => {
     try {
         const transactionId = req.headers['x-transaction-id'];
         if (!transactionId || !/^[0-9a-f-]{36}$/i.test(transactionId)) {
@@ -1348,7 +1541,7 @@ app.post('/api/compare', requireAuth, async (req, res) => {
 
         if (supabaseAdmin) {
             const transactionId = req.headers['x-transaction-id'] || null;
-            // Atomic pre-deduction of 1 audit credit via RPC (idempotent per transaction)
+            // Atomic pre-deduction of 1 audit credits via RPC (idempotent per transaction)
             const { data: success, error: deductErr } = await supabaseAdmin
                 .rpc('deduct_user_credits', { 
                     target_user_id: req.user.id, 
@@ -1359,7 +1552,7 @@ app.post('/api/compare', requireAuth, async (req, res) => {
 
             if (deductErr || !success) {
                 console.warn(`[Blocked] User ${req.user.email} attempted hosted comparison with insufficient credits.`);
-                return res.status(403).json({ error: "Forbidden: Insufficient audit credits. This comparison requires 1 audit credit." });
+                return res.status(403).json({ error: "Forbidden: Insufficient audit credits." });
             }
             console.log(`[Authorized & Deducted] Hosted comparison request by ${req.user.email} (needs 1 credit)`);
         }
@@ -1450,32 +1643,66 @@ Please compare all fields and return the structured JSON report.`;
         } 
         
         else if (activeProvider === 'anthropic') {
-            const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "x-api-key": activeKey,
-                    "anthropic-version": "2023-06-01"
-                },
-                body: JSON.stringify({
-                    model: activeModel,
-                    max_tokens: 2000,
-                    system: systemPrompt,
-                    messages: [
-                        { role: "user", content: [{ type: "text", text: userPrompt }] }
-                    ],
-                    temperature: 0.1
-                })
-            });
+            try {
+                const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "x-api-key": activeKey,
+                        "anthropic-version": "2023-06-01"
+                    },
+                    body: JSON.stringify({
+                        model: activeModel,
+                        max_tokens: 2000,
+                        system: systemPrompt,
+                        messages: [
+                            { role: "user", content: [{ type: "text", text: userPrompt }] }
+                        ],
+                        temperature: 0.1
+                    })
+                });
 
-            if (!response.ok) {
-                const errJson = await response.json().catch(() => ({}));
-                throw new Error(errJson.error?.message || `Anthropic returned status ${response.status}`);
+                if (!response.ok) {
+                    const errJson = await response.json().catch(() => ({}));
+                    throw new Error(errJson.error?.message || `Anthropic returned status ${response.status}`);
+                }
+
+                const data = await response.json();
+                const resultData = await safeExtractAndParseJSON(data.content[0].text, activeKey, activeProvider);
+                res.json({ status: 'completed', data: resultData });
+            } catch (anthropicErr) {
+                console.warn(`[Compare Fallback] Anthropic comparison failed: ${anthropicErr.message}. Checking for OpenAI fallback...`);
+                if (process.env.OPENAI_API_KEY) {
+                    console.log("[Compare Fallback] Triggering OpenAI gpt-4o fallback...");
+                    const fallbackKey = process.env.OPENAI_API_KEY;
+                    const fallbackModel = "gpt-4o";
+                    const fallbackResponse = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${fallbackKey}`
+                        },
+                        body: JSON.stringify({
+                            model: fallbackModel,
+                            messages: [
+                                { role: "system", content: systemPrompt },
+                                { role: "user", content: userPrompt }
+                            ],
+                            response_format: { type: "json_object" },
+                            temperature: 0.1
+                        })
+                    });
+                    if (!fallbackResponse.ok) {
+                        const errJson = await fallbackResponse.json().catch(() => ({}));
+                        throw new Error(errJson.error?.message || `OpenAI comparison fallback failed with status ${fallbackResponse.status}`);
+                    }
+                    const fallbackData = await fallbackResponse.json();
+                    const resultData = await safeExtractAndParseJSON(fallbackData.choices[0].message.content, fallbackKey, 'openai');
+                    res.json({ status: 'completed', data: resultData });
+                } else {
+                    throw anthropicErr;
+                }
             }
-
-            const data = await response.json();
-            const resultData = await safeExtractAndParseJSON(data.content[0].text, activeKey, activeProvider);
-            res.json({ status: 'completed', data: resultData });
         } 
         
         else {
@@ -1617,7 +1844,7 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
     } catch (err) {
         console.error("Error creating checkout session:", err);
         if (Sentry) Sentry.captureException(err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: "Failed to create checkout session. Please try again or contact support." });
     }
 });
 
@@ -1741,12 +1968,101 @@ app.get('/api/verify-checkout-session', requireAuth, async (req, res) => {
     } catch (err) {
         console.error("Error verifying checkout session:", err);
         if (Sentry) Sentry.captureException(err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: "Failed to verify checkout session. Please try again or contact support." });
     }
 });
 
 
-// Secure Decoupled daily cron endpoint for 30-day audits purge
+// Subscription Status Check
+app.get('/api/subscription-status', requireAuth, async (req, res) => {
+    try {
+        if (!supabaseAdmin) {
+            return res.json({ active: false });
+        }
+        const { data: profile, error: profileErr } = await supabaseAdmin
+            .from('profiles')
+            .select('team_id, teams(plan_tier, stripe_subscription_id, owner_id)')
+            .eq('id', req.user.id)
+            .single();
+
+        if (profileErr || !profile || !profile.team_id || !profile.teams) {
+            return res.status(404).json({ error: "Team not found" });
+        }
+
+        const team = profile.teams;
+        const isOwner = team.owner_id === req.user.id;
+
+        if (!team.stripe_subscription_id) {
+            return res.json({ active: false, planTier: team.plan_tier, isOwner });
+        }
+
+        if (!stripe) {
+            return res.json({ active: true, planTier: team.plan_tier, cancelAtPeriodEnd: false, isOwner });
+        }
+
+        const subscription = await stripe.subscriptions.retrieve(team.stripe_subscription_id);
+        return res.json({
+            active: true,
+            planTier: team.plan_tier,
+            cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            currentPeriodEnd: subscription.current_period_end,
+            isOwner
+        });
+    } catch (err) {
+        console.error("Error fetching subscription status:", err);
+        return res.status(500).json({ error: "Failed to fetch subscription status. Please try again." });
+    }
+});
+
+// Self-Serve Subscription Cancellation
+app.post('/api/cancel-subscription', requireAuth, async (req, res) => {
+    try {
+        if (!supabaseAdmin) {
+            return res.status(400).json({ error: "Database client is not configured." });
+        }
+        if (!stripe) {
+            return res.status(400).json({ error: "Stripe client is not configured." });
+        }
+
+        const { data: profile, error: profileErr } = await supabaseAdmin
+            .from('profiles')
+            .select('team_id, teams(plan_tier, stripe_subscription_id, owner_id)')
+            .eq('id', req.user.id)
+            .single();
+
+        if (profileErr || !profile || !profile.team_id || !profile.teams) {
+            return res.status(404).json({ error: "Team not found" });
+        }
+
+        const team = profile.teams;
+        if (team.owner_id !== req.user.id) {
+            return res.status(403).json({ error: "Forbidden: Only the team owner can cancel the subscription." });
+        }
+
+        if (!team.stripe_subscription_id) {
+            return res.status(400).json({ error: "No active subscription found for this team." });
+        }
+
+        // Set cancel_at_period_end = true to cancel at the end of current cycle (grace period retention)
+        const subscription = await stripe.subscriptions.update(team.stripe_subscription_id, {
+            cancel_at_period_end: true
+        });
+
+        console.log(`[Subscription Cancellation] Set cancel_at_period_end = true for subscription ${team.stripe_subscription_id} (User: ${req.user.email})`);
+
+        return res.json({
+            success: true,
+            cancelAtPeriodEnd: subscription.cancel_at_period_end,
+            currentPeriodEnd: subscription.current_period_end
+        });
+    } catch (err) {
+        console.error("Error canceling subscription:", err);
+        return res.status(500).json({ error: "Failed to cancel subscription. Please try again or contact support." });
+    }
+});
+
+
+// Secure Decoupled daily cron endpoint for 90-day audits purge
 app.post('/api/cron/purge-old-audits', async (req, res) => {
     const authHeader = req.headers['authorization'];
     const cronSecret = process.env.CRON_SECRET;
@@ -1762,7 +2078,7 @@ app.post('/api/cron/purge-old-audits', async (req, res) => {
         }
         
         const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - 30);
+        cutoffDate.setDate(cutoffDate.getDate() - 90);
         
         const { error } = await supabaseAdmin
             .from('audits')
@@ -1771,7 +2087,7 @@ app.post('/api/cron/purge-old-audits', async (req, res) => {
             
         if (error) throw error;
         
-        console.log(`[Purge Cron] Successfully deleted audits older than 30 days.`);
+        console.log(`[Purge Cron] Successfully deleted audits older than 90 days.`);
         return res.json({ success: true, message: "Purge completed successfully" });
     } catch (err) {
         console.error("[Purge Cron Error] Failed to run daily cleanup:", err);

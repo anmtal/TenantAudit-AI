@@ -11,7 +11,7 @@
     
     --text-primary: #f4f4f6;
     --text-secondary: #a1a1ab;
-    --text-muted: #71717c;
+    --text-muted: #9494a3;
     
     --color-purple: #a855f7;
     --color-purple-glow: rgba(168, 85, 247, 0.18);
@@ -368,6 +368,11 @@ h1, h2, h3, h4, h5, h6 {
 .text-input:focus {
     border-color: var(--color-purple);
     box-shadow: 0 0 10px rgba(168, 85, 247, 0.2);
+}
+
+.text-input.input-error {
+    border-color: rgba(239, 68, 68, 0.5) !important;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.15) !important;
 }
 
 /* Buttons */
@@ -835,20 +840,19 @@ h1, h2, h3, h4, h5, h6 {
 
 /* --- Loader Spinner Overlay during Audits --- */
 .loader-overlay {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(8, 8, 10, 0.7);
-    backdrop-filter: blur(4px);
-    z-index: 10;
+    background: rgba(8, 8, 10, 0.85);
+    backdrop-filter: blur(8px);
+    z-index: 9999;
     display: none;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 16px;
-    border-radius: var(--border-radius-lg);
 }
 
 .spinner {

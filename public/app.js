@@ -137,13 +137,16 @@ function initializeApp() {
             setTimeout(() => toast.remove(), 400);
         });
         
-        // Auto-dismiss after 4 seconds
-        setTimeout(() => {
-            if (toast.parentElement) {
-                toast.classList.remove('show');
-                setTimeout(() => toast.remove(), 400);
-            }
-        }, 4000);
+        // Auto-dismiss success/info after 4 seconds, warning after 8 seconds, error does not auto-dismiss
+        if (type !== 'error') {
+            const timeoutDuration = (type === 'warning') ? 8000 : 4000;
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.classList.remove('show');
+                    setTimeout(() => toast.remove(), 400);
+                }
+            }, timeoutDuration);
+        }
     };
 
     // Helper to generate or retrieve a unique session ID for single-seat login enforcement
@@ -164,6 +167,22 @@ function initializeApp() {
             var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);
         });
+    }
+
+    function updateUploadButtonsState() {
+        const startAuditBtn = document.getElementById('start-audit-btn');
+        const clearUploadBtn = document.getElementById('clear-upload-btn');
+        
+        const hasLease = !!filesState.lease;
+        const hasEstoppel = !!filesState.estoppel;
+        
+        if (startAuditBtn) {
+            startAuditBtn.disabled = !(hasLease && hasEstoppel);
+        }
+        
+        if (clearUploadBtn) {
+            clearUploadBtn.style.display = (hasLease || hasEstoppel) ? 'inline-flex' : 'none';
+        }
     }
 
     // Helper to completely clear user state, files, and auth inputs on logout
@@ -213,7 +232,7 @@ function initializeApp() {
         }
 
         // 5. Disable auditing actions
-        if (startAuditBtn) startAuditBtn.disabled = true;
+        updateUploadButtonsState();
 
         // 6. Reset panels views visibility
         if (resultsPanel) resultsPanel.style.display = 'none';
@@ -266,7 +285,7 @@ function initializeApp() {
             if (removeEstoppelBtn) removeEstoppelBtn.style.display = 'none';
         }
 
-        if (startAuditBtn) startAuditBtn.disabled = true;
+        updateUploadButtonsState();
         if (resultsPanel) resultsPanel.style.display = 'none';
         if (uploadPanel) uploadPanel.style.display = 'block';
         
@@ -378,6 +397,7 @@ function initializeApp() {
     const estoppelFileInfo = document.getElementById('estoppel-file-info');
     
     const startAuditBtn = document.getElementById('start-audit-btn');
+    const clearUploadBtn = document.getElementById('clear-upload-btn');
     const auditLoader = document.getElementById('audit-loader');
 
     const rawExtractionModal = document.getElementById('raw-extraction-modal');
@@ -579,17 +599,35 @@ function initializeApp() {
             if (homeCreditsDisplay) homeCreditsDisplay.style.display = 'inline-flex';
         }
 
+        const giftTextEl = document.getElementById('welcome-credits-gift-text');
+        if (giftTextEl) {
+            if (hostedCredits === 0) {
+                giftTextEl.style.color = '#f97316'; // Warning orange
+                giftTextEl.innerHTML = `⚠️ You have 0 audits remaining. <a href="#" id="onboarding-pay-link" style="color: var(--color-purple); text-decoration: underline; font-weight: 600;">Pay to get Audits</a> to start processing documents.`;
+                const payLink = document.getElementById('onboarding-pay-link');
+                if (payLink) {
+                    payLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        handleTopupClick();
+                    });
+                }
+            } else {
+                giftTextEl.style.color = 'var(--color-emerald)';
+                giftTextEl.innerHTML = `🎁 You have ${hostedCredits} audits remaining.`;
+            }
+        }
+
         const suffixEl = document.getElementById('credits-count-suffix');
         const homeSuffixEl = document.getElementById('home-credits-suffix');
         if (suffixEl) { suffixEl.style.display = 'inline'; suffixEl.textContent = "Audits Left"; }
         if (homeSuffixEl) { homeSuffixEl.style.display = 'inline'; homeSuffixEl.textContent = "Audits Left"; }
 
         // Update title/tooltips with next grant expiration info
-        let titleTooltip = "Click to purchase more credits";
+        let titleTooltip = "Click to purchase more audits";
         if (nextExpiryDate) {
             const dateObj = new Date(nextExpiryDate);
             const dateStr = dateObj.toLocaleDateString();
-            titleTooltip = `Soonest credits expire on ${dateStr}. Click to purchase more credits.`;
+            titleTooltip = `Soonest audits expire on ${dateStr}. Click to purchase more audits.`;
         }
 
         if (creditsTopupTrigger) {
@@ -829,14 +867,32 @@ function initializeApp() {
             
             historyListContainer.innerHTML = '';
             if (!data || data.length === 0) {
+                let warningBannerHtml = '';
+                if (hostedCredits === 0) {
+                    warningBannerHtml = `
+                        <div style="background: rgba(249, 115, 22, 0.08); border: 1px dashed rgba(249, 115, 22, 0.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; color: var(--text-primary); font-size: 13px; line-height: 1.5; text-align: center;">
+                            ⚠️ You have 0 audits remaining. <a href="#" id="history-pay-link" style="color: var(--color-purple); text-decoration: underline; font-weight: 600;">Pay to get Audits</a> to start processing documents.
+                        </div>
+                    `;
+                }
                 historyEmptyMsg.innerHTML = `
                     <div style="text-align: center; padding: 30px;">
+                        ${warningBannerHtml}
                         <h3 style="margin-bottom: 10px; color: var(--text-primary);">Welcome to LeaseAlign AI</h3>
                         <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 14px; line-height: 1.5;">You haven't run any audits yet. Get started by uploading a lease and estoppel, or view a sample audit to see how it works.</p>
                         <button id="btn-view-sample" class="primary-btn" style="width: auto; padding: 10px 20px; margin: 0 auto; display: block;">View Sample Audit</button>
                     </div>
                 `;
                 historyEmptyMsg.style.display = 'block';
+                if (hostedCredits === 0) {
+                    const payLink = document.getElementById('history-pay-link');
+                    if (payLink) {
+                        payLink.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            handleTopupClick();
+                        });
+                    }
+                }
                 document.getElementById('btn-view-sample').addEventListener('click', () => {
                     loadDemoAuditData();
                     document.getElementById('history-panel').style.display = 'none';
@@ -1173,7 +1229,7 @@ function initializeApp() {
                                 localStorage.setItem('ta_hosted_credits', (currentCredits + amt).toString());
                                 hostedCredits = currentCredits + amt;
                                 updateCreditsDisplay();
-                                showToast(`🎉 Simulated Checkout Success: Added +${amount} credits to your offline balance!`, 'success');
+                                showToast(`🎉 Simulated Checkout Success: Added +${amount} audits to your offline balance!`, 'success');
                             } else {
                                 showLoader("Connecting to payment checkout...");
                                 try {
@@ -1234,7 +1290,7 @@ function initializeApp() {
                                     window.history.replaceState({}, document.title, window.location.pathname);
                                     
                                     const displayAmt = amt >= 900000 ? "Unlimited" : `+${amount}`;
-                                    showToast(`🎉 Payment Verified! Successfully activated your ${planType.toUpperCase()} plan with ${displayAmt} credits.`, 'success');
+                                    showToast(`🎉 Payment Verified! Successfully activated your ${planType.toUpperCase()} plan with ${displayAmt} audits.`, 'success');
                                 } else {
                                     showToast("Stripe Checkout verification failed: " + (data.error || "Unknown error"), 'error');
                                 }
@@ -1249,7 +1305,7 @@ function initializeApp() {
                         // --- Check for Stripe Redirect Cancel ---
                         if (urlParams.get('checkout_cancel') === 'true') {
                             window.history.replaceState({}, document.title, window.location.pathname);
-                            showToast("Payment canceled. No credits were added.", 'info');
+                            showToast("Payment canceled. No audits were added.", 'info');
                         }
 
                         // Redirect to dashboard if logged in and on landing or auth pages
@@ -1855,11 +1911,10 @@ function initializeApp() {
                     updateCreditsDisplay();
                     
                     creditsModal.classList.remove('active');
-                    showToast(`🎉 Offline Demo Mode: Successfully activated your HOSTED plan with +${amount} credits!`, 'success');
+                    showToast(`🎉 Offline Demo Mode: Successfully activated your HOSTED plan with +${amount} audits!`, 'success');
                 }
             } catch (err) {
-                console.error("Top up error:", err);
-                showToast(`🚫 Credit update failed: ${err.message}`, 'error');
+                showToast(`🚫 Audit update failed: ${err.message}`, 'error');
             }
         });
     }
@@ -2162,6 +2217,8 @@ function initializeApp() {
             removeBtn.style.display = 'none';
         }
 
+        updateUploadButtonsState();
+
         // Toggle scanned warning banner based on both uploaded files
         let showWarning = false;
         if (filesState.lease && (!extractedText.lease || extractedText.lease.trim().length < 200)) showWarning = true;
@@ -2219,6 +2276,8 @@ function initializeApp() {
         if (removeBtn) {
             removeBtn.style.display = 'inline-flex';
         }
+
+        updateUploadButtonsState();
 
         // Check character length across text layers asynchronously
         extractTextFromPDF(file).then(extracted => {
@@ -2598,7 +2657,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             
             if (hostedCredits < 1) {
                 hideLoader();
-                showToast(`🚫 Insufficient audits left! This audit requires 1 audit credit, but you only have ${hostedCredits} left. Please top up.`, 'error');
+                showToast(`🚫 Insufficient audits left! This audit requires 1 audit, but you only have ${hostedCredits} left. Please top up.`, 'error');
                 handleTopupClick();
                 return;
             }
@@ -2691,6 +2750,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     // Fallback mock mode
                     if (hostedCredits < 900000) {
                         hostedCredits -= 1;
+                        if (hostedCredits < 0) hostedCredits = 0;
                         localStorage.setItem('ta_hosted_credits', hostedCredits);
                     }
                     updateCreditsDisplay();
@@ -2698,7 +2758,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 
                 hideLoader();
                 const isUnlimited = hostedCredits >= 900000;
-                const deductMsg = isUnlimited ? "" : ` Deducted 1 audit credit.`;
+                const deductMsg = isUnlimited ? "" : ` Deducted 1 audit.`;
                 showToast(`🎉 Audit completed successfully!${deductMsg}`, 'success');
     
                 success = true;
@@ -2765,16 +2825,22 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 return;
             }
 
-            // Open disclaimer modal
-            if (disclaimerAgreeCheckbox) disclaimerAgreeCheckbox.checked = false;
-            if (disclaimerProceedBtn) disclaimerProceedBtn.disabled = true;
-            if (disclaimerModal) disclaimerModal.classList.add('active');
+            // Check if disclaimer was already agreed to
+            if (localStorage.getItem('ta_disclaimer_agreed') === 'true') {
+                runLiveAudit();
+            } else {
+                // Open disclaimer modal
+                if (disclaimerAgreeCheckbox) disclaimerAgreeCheckbox.checked = false;
+                if (disclaimerProceedBtn) disclaimerProceedBtn.disabled = true;
+                if (disclaimerModal) disclaimerModal.classList.add('active');
+            }
         });
     }
 
     if (disclaimerProceedBtn) {
         disclaimerProceedBtn.addEventListener('click', () => {
             if (disclaimerModal) disclaimerModal.classList.remove('active');
+            localStorage.setItem('ta_disclaimer_agreed', 'true');
             runLiveAudit();
         });
     }
@@ -2992,9 +3058,34 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         // Render baseline instantly to the screen
         renderAuditResults();
 
+        const auditStatusBadge = document.getElementById('audit-status-badge');
+        const gaugeSummaryText = document.getElementById('gauge-summary-text');
+
+        if (auditStatusBadge) {
+            auditStatusBadge.style.display = 'inline-block';
+            auditStatusBadge.textContent = 'AI Verification Pending';
+            auditStatusBadge.style.backgroundColor = 'rgba(249, 115, 22, 0.1)';
+            auditStatusBadge.style.color = 'var(--color-orange)';
+            auditStatusBadge.style.borderColor = 'rgba(249, 115, 22, 0.2)';
+        }
+        if (gaugeSummaryText) {
+            gaugeSummaryText.textContent = 'Baseline matches found (AI verification pending)';
+            gaugeSummaryText.style.color = 'var(--color-orange)';
+        }
+
         // Perform semantic AI verification if connected
         try {
             console.log("[AI verification] Running semantic compliance comparison in background...");
+            if (auditStatusBadge) {
+                auditStatusBadge.textContent = 'AI Verifying...';
+                auditStatusBadge.style.backgroundColor = 'rgba(168, 85, 247, 0.1)';
+                auditStatusBadge.style.color = 'var(--color-purple)';
+                auditStatusBadge.style.borderColor = 'rgba(168, 85, 247, 0.2)';
+            }
+            if (gaugeSummaryText) {
+                gaugeSummaryText.textContent = 'Running semantic AI compliance check...';
+                gaugeSummaryText.style.color = 'var(--color-purple)';
+            }
             showLoader("AI is verifying compliance audit...");
             
             const payload = {
@@ -3067,6 +3158,16 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     
                     // Re-render UI with premium AI-verified badges
                     renderAuditResults();
+                    if (auditStatusBadge) {
+                        auditStatusBadge.textContent = 'AI Verified';
+                        auditStatusBadge.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+                        auditStatusBadge.style.color = 'var(--color-emerald)';
+                        auditStatusBadge.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+                    }
+                    if (gaugeSummaryText) {
+                        gaugeSummaryText.textContent = 'Audit results verified by AI';
+                        gaugeSummaryText.style.color = 'var(--color-emerald)';
+                    }
                     console.log("[AI Verification] Compliance audit successfully verified & refined semantically.");
 
                     // Save audit to database if logged in and not in demo mode
@@ -3101,10 +3202,30 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 } else {
                     const errData = await response.json().catch(() => ({}));
                     console.error("[AI Verification Failed] Backend returned status error:", errData.error || response.status);
+                    if (auditStatusBadge) {
+                        auditStatusBadge.textContent = 'AI Failed';
+                        auditStatusBadge.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                        auditStatusBadge.style.color = 'var(--color-orange)';
+                        auditStatusBadge.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+                    }
+                    if (gaugeSummaryText) {
+                        gaugeSummaryText.textContent = 'Verification failed (showing baseline matches)';
+                        gaugeSummaryText.style.color = 'var(--text-secondary)';
+                    }
                 }
                 }
             } catch (e) {
                 console.error("[AI Verification Error] Network or client failure:", e);
+                if (auditStatusBadge) {
+                    auditStatusBadge.textContent = 'AI Failed';
+                    auditStatusBadge.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                    auditStatusBadge.style.color = 'var(--color-orange)';
+                    auditStatusBadge.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+                }
+                if (gaugeSummaryText) {
+                    gaugeSummaryText.textContent = 'Verification failed (showing baseline matches)';
+                    gaugeSummaryText.style.color = 'var(--text-secondary)';
+                }
             } finally {
                 hideLoader();
             }
@@ -3654,7 +3775,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     localStorage.setItem('ta_hosted_credits', (currentCredits + amt).toString());
                     hostedCredits = currentCredits + amt;
                     updateCreditsDisplay();
-                    showToast(`🎉 Simulated Checkout Success: Added +${amount} credits to your offline balance!`, 'success');
+                    showToast(`🎉 Simulated Checkout Success: Added +${amount} audits to your offline balance!`, 'success');
                 }, 1000);
                 return;
             }
@@ -3715,6 +3836,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
             teamModal.classList.add('active');
             loadTeamMembers();
+            loadSubscriptionStatus();
         });
         
         closeTeamBtn.addEventListener('click', () => {
@@ -3864,6 +3986,210 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
         });
     }
+
+    async function loadSubscriptionStatus() {
+        const billingSection = document.getElementById('subscription-billing-section');
+        const planDisplay = document.getElementById('billing-plan-display');
+        const expiryDisplay = document.getElementById('billing-expiry-display');
+        const cancelBtn = document.getElementById('cancel-subscription-btn');
+        if (!billingSection || !planDisplay || !expiryDisplay || !cancelBtn) return;
+
+        billingSection.style.display = 'none';
+
+        // Check if we are in local offline mode
+        const isOffline = localStorage.getItem('ta_logged_in') !== 'true';
+        if (isOffline) {
+            const planTier = localStorage.getItem('ta_user_plan_type') || 'free';
+            if (planTier && planTier !== 'free' && planTier !== 'null') {
+                billingSection.style.display = 'block';
+                planDisplay.textContent = planTier.charAt(0).toUpperCase() + planTier.slice(1) + ' Plan';
+                expiryDisplay.textContent = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString();
+                
+                const isCancelled = localStorage.getItem('ta_mock_cancelled') === 'true';
+                if (isCancelled) {
+                    cancelBtn.disabled = true;
+                    cancelBtn.textContent = 'Scheduled to Cancel';
+                    cancelBtn.style.borderColor = 'var(--border-color)';
+                    cancelBtn.style.color = 'var(--text-muted)';
+                    cancelBtn.style.background = 'transparent';
+                    cancelBtn.style.cursor = 'not-allowed';
+                } else {
+                    cancelBtn.disabled = false;
+                    cancelBtn.textContent = 'Cancel Subscription';
+                    cancelBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                    cancelBtn.style.color = '#f87171';
+                    cancelBtn.style.background = 'rgba(239, 68, 68, 0.05)';
+                    cancelBtn.style.cursor = 'pointer';
+                }
+            }
+            return;
+        }
+
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+
+            const response = await fetch('/api/subscription-status', {
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`
+                }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.active) {
+                    billingSection.style.display = 'block';
+                    planDisplay.textContent = data.planTier || 'Active Subscription';
+                    
+                    if (data.currentPeriodEnd) {
+                        const dateStr = new Date(data.currentPeriodEnd * 1000).toLocaleDateString();
+                        expiryDisplay.textContent = dateStr;
+                    } else {
+                        expiryDisplay.textContent = 'N/A';
+                    }
+
+                    if (!data.isOwner) {
+                        cancelBtn.disabled = true;
+                        cancelBtn.textContent = 'Contact Owner to Cancel';
+                        cancelBtn.style.borderColor = 'var(--border-color)';
+                        cancelBtn.style.color = 'var(--text-muted)';
+                        cancelBtn.style.background = 'transparent';
+                        cancelBtn.style.cursor = 'not-allowed';
+                    } else if (data.cancelAtPeriodEnd) {
+                        cancelBtn.disabled = true;
+                        cancelBtn.textContent = 'Scheduled to Cancel';
+                        cancelBtn.style.borderColor = 'var(--border-color)';
+                        cancelBtn.style.color = 'var(--text-muted)';
+                        cancelBtn.style.background = 'transparent';
+                        cancelBtn.style.cursor = 'not-allowed';
+                    } else {
+                        cancelBtn.disabled = false;
+                        cancelBtn.textContent = 'Cancel Subscription';
+                        cancelBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+                        cancelBtn.style.color = '#f87171';
+                        cancelBtn.style.background = 'rgba(239, 68, 68, 0.05)';
+                        cancelBtn.style.cursor = 'pointer';
+                    }
+                } else {
+                    billingSection.style.display = 'none';
+                }
+            }
+        } catch (err) {
+            console.error("Failed to load subscription status:", err);
+        }
+    }
+
+    const cancelSubscriptionBtn = document.getElementById('cancel-subscription-btn');
+    if (cancelSubscriptionBtn) {
+        cancelSubscriptionBtn.addEventListener('click', async () => {
+            if (!confirm("Are you sure you want to cancel your subscription? Your remaining audits and team seats will stay active until the end of the billing period, but it will not renew and you won't be charged again.")) {
+                return;
+            }
+
+            // Check if we are in local offline mode
+            const isOffline = localStorage.getItem('ta_logged_in') !== 'true';
+            if (isOffline) {
+                localStorage.setItem('ta_mock_cancelled', 'true');
+                showToast("🎉 Subscription cancelled successfully (offline mock mode)!", 'success');
+                loadSubscriptionStatus();
+                return;
+            }
+
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                showToast("Please log in to manage your subscription.", 'error');
+                return;
+            }
+
+            showLoader("Canceling subscription...");
+            try {
+                const response = await fetch('/api/cancel-subscription', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${session.access_token}`
+                    }
+                });
+
+                hideLoader();
+                if (response.ok) {
+                    showToast("🎉 Subscription cancelled successfully! Your plan will remain active until the end of the billing period.", 'success');
+                    loadSubscriptionStatus();
+                } else {
+                    const errData = await response.json();
+                    showToast(`Error: ${errData.error || 'Failed to cancel subscription'}`, 'error');
+                }
+            } catch (err) {
+                hideLoader();
+                showToast("Failed to connect to billing server. Please try again.", 'error');
+                console.error("Subscription cancel error:", err);
+            }
+        });
+    }
+
+    // Real-time email validation
+    const validateEmail = (el) => {
+        if (!el) return;
+        const val = el.value.trim();
+        if (val === '') {
+            el.classList.remove('input-error');
+        } else if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+            el.classList.remove('input-error');
+        } else {
+            el.classList.add('input-error');
+        }
+    };
+    
+    if (loginEmail) {
+        loginEmail.addEventListener('input', () => validateEmail(loginEmail));
+    }
+    if (forgotEmail) {
+        forgotEmail.addEventListener('input', () => validateEmail(forgotEmail));
+    }
+
+    // Clear Uploads button wiring
+    if (clearUploadBtn) {
+        clearUploadBtn.addEventListener('click', () => {
+            resetAuditState();
+        });
+    }
+
+    // Modal Focus Trap
+    function setupModalFocusTrap(modalId) {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        
+        modal.addEventListener('keydown', (e) => {
+            if (e.key !== 'Tab') return;
+            
+            const focusables = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex="0"]');
+            const visibleFocusables = Array.from(focusables).filter(el => {
+                return el.offsetWidth > 0 && el.offsetHeight > 0 && window.getComputedStyle(el).display !== 'none';
+            });
+            
+            if (visibleFocusables.length === 0) return;
+            
+            const first = visibleFocusables[0];
+            const last = visibleFocusables[visibleFocusables.length - 1];
+            
+            if (e.shiftKey) {
+                if (document.activeElement === first) {
+                    last.focus();
+                    e.preventDefault();
+                }
+            } else {
+                if (document.activeElement === last) {
+                    first.focus();
+                    e.preventDefault();
+                }
+            }
+        });
+    }
+
+    setupModalFocusTrap('password-recovery-modal');
+    setupModalFocusTrap('disclaimer-modal');
+    setupModalFocusTrap('raw-extraction-modal');
+    setupModalFocusTrap('team-modal');
+    setupModalFocusTrap('tos-modal');
 
     window.addEventListener('hashchange', window.handleHashRoute);
     window.handleHashRoute();

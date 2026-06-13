@@ -40,7 +40,9 @@ const PLANS_CATALOG = {
     "Starter Annual": { price: 950, amount: 60, seats: 1, interval: 'year' },
     "Pro Annual": { price: 2868, amount: 900, seats: 3, interval: 'year' },
     "Team Annual": { price: 4788, amount: 1800, seats: 5, interval: 'year' },
-    "Business Annual": { price: 9588, amount: 6000, seats: 20, interval: 'year' }
+    "Business Annual": { price: 9588, amount: 6000, seats: 20, interval: 'year' },
+    "10 Audits Pack": { price: 399, amount: 10, seats: 1, interval: 'one-time' },
+    "100 Audits Pack": { price: 2999, amount: 100, seats: 1, interval: 'one-time' }
 };
 
 const allowedOrigins = [
@@ -84,7 +86,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 50000) {
 }
 
 const app = express();
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 8080;
 
 // Middleware
 app.use(cors(getCorsOptions()));
@@ -392,7 +394,59 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-    if (event.type === 'invoice.payment_succeeded') {
+    if (event.type === 'checkout.session.completed') {
+        const session = event.data.object;
+        if (session.payment_status === 'paid' && session.metadata && session.metadata.planInterval === 'one-time') {
+            const { userId, planType, amount, planInterval, packageName } = session.metadata;
+            try {
+                if (userId && planType && amount) {
+                    console.log(`[Stripe Webhook] Processing one-off payment for user ${userId}: plan ${planType}, amount ${amount}`);
+                    if (supabaseAdmin) {
+                        const { error: insertErr } = await supabaseAdmin
+                            .from('processed_payments')
+                            .insert({
+                                session_id: session.id,
+                                user_id: userId,
+                                amount: parseInt(amount, 10)
+                            });
+                        if (insertErr) {
+                            if (insertErr.code === '23505') {
+                                console.log(`[Stripe Webhook] Replay detected: session already processed.`);
+                                return res.json({ received: true });
+                            }
+                            throw insertErr;
+                        }
+                        
+                        const amt = parseInt(amount, 10);
+                        if (planType === 'hosted') {
+                            const { data: profile } = await supabaseAdmin
+                                .from('profiles')
+                                .select('team_id')
+                                .eq('id', userId)
+                                .single();
+                                
+                            if (profile && profile.team_id) {
+                                const { error: grantErr } = await supabaseAdmin
+                                    .from('team_credit_grants')
+                                    .insert({
+                                        team_id: profile.team_id,
+                                        amount_granted: amt,
+                                        amount_remaining: amt,
+                                        expires_at: null
+                                    });
+                                if (grantErr) throw grantErr;
+                                
+                                await supabaseAdmin.rpc('recalculate_team_credits', { p_team_id: profile.team_id });
+                                console.log(`[Stripe Webhook] Successfully credited one-off ${amt} credits to team ${profile.team_id}`);
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("[Stripe Webhook] Error processing checkout session completed:", err);
+            }
+        }
+    } else if (event.type === 'invoice.payment_succeeded') {
         const invoice = event.data.object;
         if (invoice.subscription) {
             try {
@@ -1437,8 +1491,8 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
         const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
         
         const amtVal = parseInt(amount, 10);
-        const stripeIsSubscription = isSubscription === undefined ? true : isSubscription;
-        let subscriptionInterval = interval === 'year' ? 'year' : 'month';
+        const stripeIsSubscription = planConfig.interval === 'one-time' ? false : (isSubscription === undefined ? true : isSubscription);
+        let subscriptionInterval = planConfig.interval === 'one-time' ? 'one-time' : (interval === 'year' ? 'year' : 'month');
 
         const displayAmount = (parseInt(amount, 10) >= 900000) ? 'Unlimited' : amount;
         
@@ -1565,19 +1619,19 @@ app.get('/api/verify-checkout-session', requireAuth, async (req, res) => {
                     
                     if (planType === 'hosted') {
                         if (profile.team_id) {
-                            let planInterval = session.metadata ? session.metadata.planInterval : null;
-                            if (!planInterval && session.subscription) {
-                                try {
-                                    const subscription = await stripe.subscriptions.retrieve(session.subscription);
-                                    if (subscription && subscription.items && subscription.items.data && subscription.items.data[0] && subscription.items.data[0].plan) {
-                                        planInterval = subscription.items.data[0].plan.interval;
-                                    }
-                                } catch (subErr) {
-                                    console.error("[Stripe Verification] Failed to retrieve subscription details:", subErr);
-                                }
-                            }
-                            const expiryDays = planInterval === 'year' ? 365 : 30;
-                            const expiresAt = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString();
+                             let planInterval = session.metadata ? session.metadata.planInterval : null;
+                             if (!planInterval && session.subscription) {
+                                 try {
+                                     const subscription = await stripe.subscriptions.retrieve(session.subscription);
+                                     if (subscription && subscription.items && subscription.items.data && subscription.items.data[0] && subscription.items.data[0].plan) {
+                                         planInterval = subscription.items.data[0].plan.interval;
+                                     }
+                                 } catch (subErr) {
+                                     console.error("[Stripe Verification] Failed to retrieve subscription details:", subErr);
+                                 }
+                             }
+                             const expiryDays = planInterval === 'year' ? 365 : (planInterval === 'one-time' ? null : 30);
+                             const expiresAt = expiryDays ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString() : null;
                             
                             const { error: insertErr } = await supabaseAdmin
                                 .from('team_credit_grants')

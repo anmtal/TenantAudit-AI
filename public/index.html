@@ -148,7 +148,8 @@
                 <!-- Hosted API Plans (5 Tiers) -->
                 <div style="margin-bottom: 20px; text-align: center;">
                     <button class="btn btn-primary" id="toggle-monthly" style="margin-right: 10px;">Monthly Billing</button>
-                    <button class="btn btn-secondary" id="toggle-annual">Annual Billing</button>
+                    <button class="btn btn-secondary" id="toggle-annual" style="margin-right: 10px;">Annual Billing</button>
+                    <button class="btn btn-secondary" id="toggle-one-time">Pay-As-You-Go Packs</button>
                 </div>
                                 <div class="pricing-grid" id="hosted-grid-monthly" style="display: grid; max-width: 1200px; margin: 0 auto; width: 100%;">
                     <!-- Starter -->
@@ -276,6 +277,42 @@
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Dedicated Account Manager</li>
                         </ul>
                         <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="6000" data-price="9588" data-seats="20" data-interval="year" data-pack="Business Annual">Get Plan</button>
+                    </div>
+                </div>
+
+                <!-- Hosted SaaS Plans PAY-AS-YOU-GO -->
+                <div class="pricing-grid" id="hosted-grid-one-time" style="display: none; max-width: 1200px; margin: 0 auto; width: 100%;">
+                    <!-- 10 Audits Pack -->
+                    <div class="pricing-card">
+                        <span class="pricing-tier">10 AUDITS PACK</span>
+                        <div class="pricing-price-box">
+                            <span class="pricing-price">$399</span><span class="pricing-period">/one-time</span>
+                        </div>
+                        <div style="text-align: center;"><span class="discount-badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; font-weight: 600;">Never Expires</span></div>
+                        <ul class="pricing-features-list">
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 10 Audit Credits</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Use anytime (non-expiring)</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Shared team balance</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Full Discrepancy Matrix</li>
+                        </ul>
+                        <button class="btn btn-secondary pricing-cta-btn" data-plan="hosted" data-amount="10" data-price="399" data-seats="1" data-interval="one-time" data-pack="10 Audits Pack">Buy Pack</button>
+                    </div>
+
+                    <!-- 100 Audits Pack -->
+                    <div class="pricing-card" style="border-color: var(--color-purple); box-shadow: 0 0 20px rgba(168,85,247,0.1);">
+                        <div class="popular-badge">Best Value</div>
+                        <span class="pricing-tier">100 AUDITS PACK</span>
+                        <div class="pricing-price-box">
+                            <span class="pricing-price">$2,999</span><span class="pricing-period">/one-time</span>
+                        </div>
+                        <div style="text-align: center;"><span class="discount-badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; font-weight: 600;">Never Expires</span></div>
+                        <ul class="pricing-features-list">
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 100 Audit Credits</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Use anytime (non-expiring)</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Shared team balance</li>
+                            <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> Priority support & processing</li>
+                        </ul>
+                        <button class="btn btn-primary pricing-cta-btn" data-plan="hosted" data-amount="100" data-price="2999" data-seats="1" data-interval="one-time" data-pack="100 Audits Pack">Buy Pack</button>
                     </div>
                 </div>
 

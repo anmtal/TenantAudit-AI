@@ -248,10 +248,10 @@ BEGIN
   SET amount_remaining = 0 
   WHERE team_id = p_team_id AND expires_at <= NOW() AND amount_remaining > 0;
   
-  -- Calculate sum of all unexpired, remaining credits
+  -- Calculate sum of all unexpired, remaining credits (including those that never expire)
   SELECT COALESCE(SUM(amount_remaining), 0) INTO active_balance 
   FROM public.team_credit_grants 
-  WHERE team_id = p_team_id AND expires_at > NOW();
+  WHERE team_id = p_team_id AND (expires_at > NOW() OR expires_at IS NULL);
   
   -- Update the cached value on teams table for UI/real-time
   UPDATE public.teams SET audit_credits = active_balance WHERE id = p_team_id;
@@ -292,15 +292,15 @@ BEGIN
     -- Calculate active balance directly from unexpired active grants
     SELECT COALESCE(SUM(amount_remaining), 0) INTO active_balance 
     FROM public.team_credit_grants 
-    WHERE team_id = user_team_id AND expires_at > NOW();
+    WHERE team_id = user_team_id AND (expires_at > NOW() OR expires_at IS NULL);
 
     IF active_balance >= pages_to_deduct THEN
-      -- FIFO Deduction from soonest-expiring grants
+      -- FIFO Deduction from soonest-expiring grants (non-expiring credits NULLS LAST)
       FOR grant_record IN 
           SELECT id, amount_remaining 
           FROM public.team_credit_grants 
-          WHERE team_id = user_team_id AND expires_at > NOW() AND amount_remaining > 0 
-          ORDER BY expires_at ASC 
+          WHERE team_id = user_team_id AND (expires_at > NOW() OR expires_at IS NULL) AND amount_remaining > 0 
+          ORDER BY expires_at ASC NULLS LAST
           FOR UPDATE 
       LOOP
           IF remaining_to_deduct = 0 THEN EXIT; END IF;

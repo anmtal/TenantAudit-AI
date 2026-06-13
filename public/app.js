@@ -344,19 +344,23 @@ function initializeApp() {
     // --- Pricing Toggles & Grid Logic ---
     const btnMonthly = document.getElementById('toggle-monthly');
     const btnAnnual = document.getElementById('toggle-annual');
+    const btnOneTime = document.getElementById('toggle-one-time');
     
     const hostedMonthly = document.getElementById('hosted-grid-monthly');
     const hostedAnnual = document.getElementById('hosted-grid-annual');
+    const hostedOneTime = document.getElementById('hosted-grid-one-time');
 
     let currentPeriod = 'monthly';
 
     function updateGrids() {
-        if (!hostedMonthly || !hostedAnnual) return;
+        if (!hostedMonthly || !hostedAnnual || !hostedOneTime) return;
         hostedMonthly.style.display = 'none';
         hostedAnnual.style.display = 'none';
+        hostedOneTime.style.display = 'none';
 
         if (currentPeriod === 'monthly') hostedMonthly.style.display = 'grid';
-        else hostedAnnual.style.display = 'grid';
+        else if (currentPeriod === 'annual') hostedAnnual.style.display = 'grid';
+        else hostedOneTime.style.display = 'grid';
     }
 
     let selectedTopupPlan = 'hosted';
@@ -1640,6 +1644,13 @@ function initializeApp() {
                     }
                 } else {
                     if (isSignUpMode) {
+                        const registerTosCheckbox = document.getElementById('register-tos-checkbox');
+                        if (registerTosCheckbox && !registerTosCheckbox.checked) {
+                            showToast('You must agree to the Terms of Service to register.', 'error');
+                            loginSubmitBtn.disabled = false;
+                            loginSubmitBtn.textContent = originalText;
+                            return;
+                        }
                         sessionStorage.setItem('ta_verification_email', email);
                         showToast("🎉 Account created successfully (Local Offline Mode)!", 'success');
                         window.location.hash = '#signup-confirm';
@@ -1934,7 +1945,7 @@ function initializeApp() {
     if (tosModal) {
         tosModal.addEventListener('click', (e) => {
             if (e.target === tosModal) {
-                tosModal.style.display = 'none';
+                tosModal.classList.remove('active');
             }
         });
     }
@@ -2540,6 +2551,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const leasePagesCount = await getPDFPageCount(filesState.lease);
             const estoppelPagesCount = await getPDFPageCount(filesState.estoppel);
             const totalPagesNeeded = leasePagesCount + estoppelPagesCount;
+            
+            // Refresh profile and credits before client-side check to prevent stale balance errors
+            await loadUserProfileAndCredits();
             
             if (hostedCredits < 1) {
                 hideLoader();
@@ -3528,13 +3542,15 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
 
 
-    if (btnMonthly && btnAnnual) {
+    if (btnMonthly && btnAnnual && btnOneTime) {
         btnMonthly.addEventListener('click', () => {
             currentPeriod = 'monthly';
             btnMonthly.classList.add('btn-primary');
             btnMonthly.classList.remove('btn-secondary');
             btnAnnual.classList.add('btn-secondary');
             btnAnnual.classList.remove('btn-primary');
+            btnOneTime.classList.add('btn-secondary');
+            btnOneTime.classList.remove('btn-primary');
             updateGrids();
         });
         btnAnnual.addEventListener('click', () => {
@@ -3543,6 +3559,18 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             btnAnnual.classList.remove('btn-secondary');
             btnMonthly.classList.add('btn-secondary');
             btnMonthly.classList.remove('btn-primary');
+            btnOneTime.classList.add('btn-secondary');
+            btnOneTime.classList.remove('btn-primary');
+            updateGrids();
+        });
+        btnOneTime.addEventListener('click', () => {
+            currentPeriod = 'one-time';
+            btnOneTime.classList.add('btn-primary');
+            btnOneTime.classList.remove('btn-secondary');
+            btnMonthly.classList.add('btn-secondary');
+            btnMonthly.classList.remove('btn-primary');
+            btnAnnual.classList.add('btn-secondary');
+            btnAnnual.classList.remove('btn-primary');
             updateGrids();
         });
     }
@@ -3594,7 +3622,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         price: parseInt(price, 10),
                         seatCount: parseInt(seats, 10),
                         packageName: pack,
-                        isSubscription: true,
+                        isSubscription: interval !== 'one-time',
                         interval: interval
                     })
                 });

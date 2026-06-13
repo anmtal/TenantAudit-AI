@@ -151,12 +151,8 @@ BEGIN
   ELSE
     -- No pending invitation: create a new personal team
     INSERT INTO public.teams (name, owner_id, audit_credits, seat_limit)
-    VALUES (COALESCE(new.raw_user_meta_data->>'first_name', 'Personal') || '''s Team', new.id, 1, 1)
+    VALUES (COALESCE(new.raw_user_meta_data->>'first_name', 'Personal') || '''s Team', new.id, 0, 1)
     RETURNING id INTO new_team_id;
-
-    -- Pre-seed 1 free audit credit via a 30-day grant
-    INSERT INTO public.team_credit_grants (team_id, amount_granted, amount_remaining, expires_at)
-    VALUES (new_team_id, 1, 1, NOW() + INTERVAL '30 days');
 
     INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id)
     VALUES (
@@ -229,8 +225,12 @@ CREATE TABLE IF NOT EXISTS public.team_credit_grants (
     team_id UUID REFERENCES public.teams(id) ON DELETE CASCADE NOT NULL,
     amount_granted INTEGER NOT NULL,
     amount_remaining INTEGER NOT NULL,
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+    expires_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT check_subscription_grant_expiry CHECK (
+      (amount_granted NOT IN (5, 75, 150, 500, 60, 900, 1800, 6000)) 
+      OR (expires_at IS NOT NULL)
+    )
 );
 
 CREATE INDEX IF NOT EXISTS idx_team_credit_grants_expires ON public.team_credit_grants (team_id, expires_at);
@@ -456,6 +456,13 @@ BEGIN
   -- Recalculate team credits for both old and new teams
   IF v_old_team_id IS NOT NULL THEN
     PERFORM public.recalculate_team_credits(v_old_team_id);
+    
+    -- Clean up old team if the user was the owner and there are no other members left
+    IF EXISTS (SELECT 1 FROM public.teams WHERE id = v_old_team_id AND owner_id = v_target_user_id) THEN
+      IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE team_id = v_old_team_id AND id != v_target_user_id) THEN
+        DELETE FROM public.teams WHERE id = v_old_team_id;
+      END IF;
+    END IF;
   END IF;
   PERFORM public.recalculate_team_credits(v_team_id);
 
@@ -512,11 +519,11 @@ BEGIN
   FROM public.profiles 
   WHERE id = auth.uid();
 
-  -- If there is another active session that was active within the last 30 seconds, reject the takeover
+  -- If there is another active session that was active within the last 5 minutes, reject the takeover
   IF current_active_session IS NOT NULL 
      AND current_active_session != p_session_id 
      AND current_last_active IS NOT NULL 
-     AND current_last_active > (NOW() - INTERVAL '30 seconds') THEN
+     AND current_last_active > (NOW() - INTERVAL '5 minutes') THEN
     RETURN FALSE;
   END IF;
 

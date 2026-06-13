@@ -248,7 +248,7 @@ async function safeExtractAndParseJSON(rawText, activeKey = null, provider = nul
         // Always try Anthropic fallback first if key is present
         const anthropicKey = process.env.ANTHROPIC_API_KEY || (provider === 'anthropic' ? activeKey : null);
         if (anthropicKey) {
-            console.log("[JSON Repair] Attempting Anthropic (claude-fable-5) syntax repair fallback first...");
+            console.log("[JSON Repair] Attempting Anthropic (claude-opus-4-8) syntax repair fallback first...");
             try {
                 const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
                     method: "POST",
@@ -258,7 +258,7 @@ async function safeExtractAndParseJSON(rawText, activeKey = null, provider = nul
                         "content-type": "application/json"
                     },
                     body: JSON.stringify({
-                        model: "claude-fable-5",
+                        model: "claude-opus-4-8",
                         max_tokens: 4000,
                         system: systemPrompt,
                         messages: [
@@ -451,7 +451,7 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
         if (invoice.subscription) {
             try {
                 const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
-                const { userId, planType, amount, seatCount, planInterval } = subscription.metadata || {};
+                const { userId, planType, amount, seatCount, planInterval, packageName } = subscription.metadata || {};
                 
                 if (userId && planType && amount) {
                     console.log(`Processing subscription renewal for user ${userId}: plan ${planType}, amount ${amount}, seats ${seatCount}`);
@@ -498,7 +498,7 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                                     .update({ 
                                         seat_limit: seats,
                                         stripe_subscription_id: subscription.id,
-                                        plan_tier: `hosted_${amt}`
+                                        plan_tier: packageName || `hosted_${amt}`
                                     })
                                     .eq('id', team.id);
                                 if (updateTeamErr) throw updateTeamErr;
@@ -513,7 +513,7 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                                             audit_credits: 0,
                                             seat_limit: seats,
                                             stripe_subscription_id: subscription.id,
-                                            plan_tier: `hosted_${amt}`
+                                            plan_tier: packageName || `hosted_${amt}`
                                         })
                                         .select('id')
                                         .single();
@@ -787,6 +787,29 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         let activeModel = 'claude-sonnet-4-6';
 
         if (supabaseAdmin) {
+            // Verify that the team has at least 1 credit available before performing extraction
+            const { data: profile, error: profileErr } = await supabaseAdmin
+                .from('profiles')
+                .select('team_id')
+                .eq('id', req.user.id)
+                .single();
+                
+            if (profileErr || !profile || !profile.team_id) {
+                console.warn(`[Blocked] User ${req.user.email} team not found during audit.`);
+                return res.status(403).json({ error: "Forbidden: User team not found." });
+            }
+
+            const { data: team, error: teamErr } = await supabaseAdmin
+                .from('teams')
+                .select('audit_credits')
+                .eq('id', profile.team_id)
+                .single();
+
+            if (teamErr || !team || team.audit_credits < 1) {
+                console.warn(`[Blocked] User ${req.user.email} attempted audit with 0 credits.`);
+                return res.status(403).json({ error: "Forbidden: Insufficient audit credits. This audit requires at least 1 audit credit from your team balance." });
+            }
+
             const transactionId = req.headers['x-transaction-id'] || null;
             const creditsToDeduct = 0;
             
@@ -1491,6 +1514,10 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
     
     if (!planType || !userId || !packageName) {
         return res.status(400).json({ error: "Missing required fields for checkout session" });
+    }
+
+    if (!/^[0-9a-f-]{36}$/.test(userId)) {
+        return res.status(400).json({ error: 'Invalid userId format.' });
     }
 
     if (planType !== 'hosted') {

@@ -181,29 +181,96 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     await expect(page.locator('#pricing-section')).toBeInViewport();
   });
 
-  test('should verify demo mode stripe checkout block and credit wipe on login', async ({ page }) => {
+  test('should verify live demo redirect to login, auto-loading demo audit, and credit hiding on zero balance', async ({ page }) => {
+    // 1. Mock config
+    await page.route('**/api/config**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ supabaseUrl: 'https://mock.supabase.co', supabaseAnonKey: 'mock-key' }),
+      });
+    });
+
+    // 2. Mock GET **/auth/v1/user
+    await page.route('**/auth/v1/user**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'mock-user-id',
+          email: 'test@example.com',
+          user_metadata: { plan_type: 'hosted' }
+        })
+      });
+    });
+
+    // 3. Mock POST **/auth/v1/token
+    await page.route('**/auth/v1/token**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          access_token: 'mock-token',
+          token_type: 'bearer',
+          expires_in: 3600,
+          refresh_token: 'mock-refresh-token',
+          user: {
+            id: 'mock-user-id',
+            email: 'test@example.com',
+            user_metadata: { plan_type: 'hosted' }
+          }
+        })
+      });
+    });
+
+    // 4. Mock GET **/rest/v1/profiles
+    await page.route('**/rest/v1/profiles**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          credits: 0,
+          byok_credits: 0,
+          plan_tier: null,
+          teams: {
+            audit_credits: 0,
+            plan_tier: 'free'
+          }
+        })
+      });
+    });
+
+    // 5. Mock POST **/rest/v1/rpc/register_active_session
+    await page.route('**/rest/v1/rpc/register_active_session**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(true)
+      });
+    });
+
     await page.goto('/');
     await page.waitForSelector('body[data-initialized="true"]', { timeout: 15000 });
 
-    // Start live demo
+    // Click Try Live Demo when not logged in
     await page.click('#hero-view-demo-btn');
-    await expect(page.locator('#dashboard-view')).toBeVisible();
-    await expect(page.locator('#user-email-display')).toHaveText('demo-user@leasealign.ai');
-
-    // Scroll to pricing on home view
-    await page.click('#credits-topup-trigger');
-    await expect(page.locator('#pricing-section')).toBeInViewport();
-
-    // Try purchasing a pricing package - should block and redirect to login screen
-    const buyButton = page.locator('.pricing-cta-btn').first();
-    await buyButton.click();
-
-    // Verify it redirects to login screen
+    
+    // Verify it redirects to login screen with a toast
     await expect(page.locator('#login-view')).toBeVisible();
-    // Resolve strict locator warning by looking for the specific warning toast
-    const toast = page.locator('.toast.info', { hasText: 'Please sign up or log in to purchase a plan.' });
+    const toast = page.locator('.toast.info', { hasText: 'Please log in or sign up to experience the live demo.' });
     await expect(toast).toBeVisible();
-    await expect(toast.locator('.toast-message')).toContainText('Please sign up or log in to purchase a plan.');
+
+    // Log in
+    await page.fill('#login-email', 'test@example.com');
+    await page.fill('#login-password', 'password');
+    await page.click('#login-submit-btn');
+
+    // Verify it takes us to dashboard and shows the demo audit results
+    await expect(page.locator('#dashboard-view')).toBeVisible();
+    await expect(page.locator('#meta-tenant-name')).toHaveText('Starbucks Corporation');
+
+    // Verify no credits show in the dashboard (credits pill is hidden) because they haven't purchased anything
+    await expect(page.locator('#credits-topup-trigger')).toBeHidden();
   });
 
 });

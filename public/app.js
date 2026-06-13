@@ -417,7 +417,6 @@ function initializeApp() {
     const kpiExpiryDate = document.getElementById('kpi-expiry-date');
     
     const metaTenantName = document.getElementById('meta-tenant-name');
-    const metaAuditModel = document.getElementById('meta-audit-model');
     const metaLeaseFile = document.getElementById('meta-lease-file');
     const metaEstoppelFile = document.getElementById('meta-estoppel-file');
     
@@ -534,6 +533,10 @@ function initializeApp() {
             showView('login');
         } else if (hash === '#dashboard') {
             showView('dashboard');
+            if (sessionStorage.getItem('ta_load_demo_audit') === 'true') {
+                sessionStorage.removeItem('ta_load_demo_audit');
+                loadDemoAuditData();
+            }
         }
     };
 
@@ -567,6 +570,15 @@ function initializeApp() {
         creditsCountDisplay.textContent = displayVal;
         if (homeCreditsCount) homeCreditsCount.textContent = displayVal;
         
+        // Hide credits display if they have 0 credits (e.g. they haven't purchased anything)
+        if (hostedCredits === 0) {
+            if (creditsTopupTrigger) creditsTopupTrigger.style.display = 'none';
+            if (homeCreditsDisplay) homeCreditsDisplay.style.display = 'none';
+        } else {
+            if (creditsTopupTrigger) creditsTopupTrigger.style.display = 'inline-flex';
+            if (homeCreditsDisplay) homeCreditsDisplay.style.display = 'inline-flex';
+        }
+
         const suffixEl = document.getElementById('credits-count-suffix');
         const homeSuffixEl = document.getElementById('home-credits-suffix');
         if (suffixEl) { suffixEl.style.display = 'inline'; suffixEl.textContent = "Audits Left"; }
@@ -1294,21 +1306,14 @@ function initializeApp() {
     const heroViewDemoBtn = document.getElementById('hero-view-demo-btn');
     if (heroViewDemoBtn) {
         heroViewDemoBtn.addEventListener('click', () => {
-            console.log("Launching interactive demo...");
-            isDemoMode = true;
-            isLoggedIn = true;
-            userEmail = "demo-user@leasealign.ai";
-            if (userEmailDisplay) userEmailDisplay.textContent = userEmail;
-            if (localStorage.getItem('ta_hosted_credits') === null) {
-                localStorage.setItem('ta_hosted_credits', '10');
+            console.log("Try Live Demo clicked...");
+            sessionStorage.setItem('ta_load_demo_audit', 'true');
+            if (isLoggedIn) {
+                window.location.hash = '#dashboard';
+            } else {
+                showToast("Please log in or sign up to experience the live demo.", "info");
+                window.location.hash = '#login';
             }
-            localStorage.setItem('ta_user_email', userEmail);
-            getOrGenerateSessionId(true);
-            hostedCredits = parseInt(localStorage.getItem('ta_hosted_credits') || '0', 10);
-            window.location.hash = '#dashboard';
-            updateNavUI();
-            updateCreditsDisplay();
-            loadDemoAuditData();
         });
     }
     if (loginToHomeLink) {
@@ -3154,7 +3159,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         metaTenantName.textContent = auditData.metadata.tenantName;
         metaLeaseFile.textContent = auditData.metadata.leaseFile;
         metaEstoppelFile.textContent = auditData.metadata.estoppelFile;
-        metaAuditModel.textContent = auditData.metadata.auditModel;
 
         // Inject placeholder rows for legacy audits if they contain less than 16 records
         const expectedLabels = [
@@ -3348,11 +3352,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         </div>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 25px; background: #f9fafb; padding: 14px; border-radius: 8px; border: 1px solid #f3f4f6; font-size: 12px;">
+                    <div style="display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 25px; background: #f9fafb; padding: 14px; border-radius: 8px; border: 1px solid #f3f4f6; font-size: 12px;">
                         <div><strong style="color: #374151;">Tenant Name:</strong> ${escapeHtml(auditData.metadata.tenantName)}</div>
-                        <div><strong style="color: #374151;">Audit Model:</strong> ${escapeHtml(auditData.metadata.auditModel)}</div>
-                        <div style="grid-column: span 2; margin-top: 4px;"><strong style="color: #374151;">Source Lease File:</strong> ${escapeHtml(auditData.metadata.leaseFile)}</div>
-                        <div style="grid-column: span 2; margin-top: 4px;"><strong style="color: #374151;">Source Estoppel File:</strong> ${escapeHtml(auditData.metadata.estoppelFile)}</div>
+                        <div style="margin-top: 4px;"><strong style="color: #374151;">Source Lease File:</strong> ${escapeHtml(auditData.metadata.leaseFile)}</div>
+                        <div style="margin-top: 4px;"><strong style="color: #374151;">Source Estoppel File:</strong> ${escapeHtml(auditData.metadata.estoppelFile)}</div>
                     </div>
 
                     <h3 style="font-size: 14px; font-weight: 700; color: #111827; margin: 0 0 12px 0; border-left: 4px solid #7c3aed; padding-left: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Outfit', sans-serif;">Executive Audit Summary</h3>

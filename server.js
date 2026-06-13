@@ -191,7 +191,7 @@ async function requireAuth(req, res, next) {
 }
 
 // Helper function to safely extract and parse JSON from LLM responses (handling code blocks & markdown fences)
-async function safeExtractAndParseJSON(rawText, activeKey = process.env.ANTHROPIC_API_KEY, provider = 'anthropic') {
+async function safeExtractAndParseJSON(rawText, activeKey = null, provider = null) {
     if (typeof rawText !== 'string') {
         return rawText;
     }
@@ -241,68 +241,83 @@ async function safeExtractAndParseJSON(rawText, activeKey = process.env.ANTHROPI
             console.error("[JSON Parse Error] Basic JS repair failed.");
         }
 
-        // If JS repairs fail, try LLM-based repair fallback (bulletproof)
-        if (activeKey) {
-            console.log("[JSON Repair] Attempting LLM syntax repair fallback...");
+        const systemPrompt = "You are a JSON syntax repair assistant. Fix the provided invalid JSON string to make it parseable by standard JSON.parse(). Do not alter any key names, value contents, or structures unless required to make the syntax valid. Return ONLY the raw, repaired JSON object. Do not include markdown code block fences, explanations, or introductory text.";
+
+        // Always try Anthropic fallback first if key is present
+        const anthropicKey = process.env.ANTHROPIC_API_KEY || (provider === 'anthropic' ? activeKey : null);
+        if (anthropicKey) {
+            console.log("[JSON Repair] Attempting Anthropic (claude-fable-5) syntax repair fallback first...");
             try {
-                let repairedText = "";
-                if (provider === 'openai') {
-                    const response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            "Authorization": `Bearer ${activeKey}`
-                        },
-                        body: JSON.stringify({
-                            model: "gpt-4o-mini",
-                            messages: [
-                                {
-                                    role: "system",
-                                    content: "You are a JSON syntax repair assistant. Fix the provided invalid JSON string to make it parseable by standard JSON.parse(). Do not alter any key names, value contents, or structures unless required to make the syntax valid. Return ONLY the raw, repaired JSON object. Do not include markdown code block fences, explanations, or introductory text."
-                                },
-                                {
-                                    role: "user",
-                                    content: cleanText
-                                }
-                            ],
-                            temperature: 0
-                        })
-                    });
-                    if (response.ok) {
-                        const resJson = await response.json();
-                        repairedText = resJson.choices[0].message.content.trim();
+                const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
+                    method: "POST",
+                    headers: {
+                        "x-api-key": anthropicKey,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        model: "claude-fable-5",
+                        max_tokens: 4000,
+                        system: systemPrompt,
+                        messages: [
+                            { role: "user", content: cleanText }
+                        ],
+                        temperature: 0
+                    })
+                });
+                if (response.ok) {
+                    const resJson = await response.json();
+                    let repairedText = resJson.content[0].text.trim();
+                    if (repairedText) {
+                        repairedText = repairedText.replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/g, '$1').trim();
+                        return JSON.parse(repairedText);
                     }
                 } else {
-                    // Anthropic
-                    const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
-                        method: "POST",
-                        headers: {
-                            "x-api-key": activeKey,
-                            "anthropic-version": "2023-06-01",
-                            "content-type": "application/json"
-                        },
-                        body: JSON.stringify({
-                            model: "claude-3-5-haiku-20241022",
-                            max_tokens: 4000,
-                            system: "You are a JSON syntax repair assistant. Fix the provided invalid JSON string to make it parseable by standard JSON.parse(). Do not alter any key names, value contents, or structures unless required to make the syntax valid. Return ONLY the raw, repaired JSON object. Do not include markdown code block fences, explanations, or introductory text.",
-                            messages: [
-                                { role: "user", content: cleanText }
-                            ],
-                            temperature: 0
-                        })
-                    });
-                    if (response.ok) {
-                        const resJson = await response.json();
-                        repairedText = resJson.content[0].text.trim();
+                    console.warn(`[JSON Repair] Anthropic API returned status ${response.status}`);
+                }
+            } catch (anthropicRepairErr) {
+                console.error("[JSON Repair] Anthropic syntax repair fallback failed:", anthropicRepairErr);
+            }
+        }
+
+        // Try OpenAI fallback if Anthropic key not present or failed
+        const openAIKey = process.env.OPENAI_API_KEY || (provider === 'openai' ? activeKey : null);
+        if (openAIKey) {
+            console.log("[JSON Repair] Attempting OpenAI (gpt-4o) syntax repair fallback...");
+            try {
+                const response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${openAIKey}`
+                    },
+                    body: JSON.stringify({
+                        model: "gpt-4o",
+                        messages: [
+                            {
+                                role: "system",
+                                content: systemPrompt
+                            },
+                            {
+                                role: "user",
+                                content: cleanText
+                            }
+                        ],
+                        temperature: 0
+                    })
+                });
+                if (response.ok) {
+                    const resJson = await response.json();
+                    let repairedText = resJson.choices[0].message.content.trim();
+                    if (repairedText) {
+                        repairedText = repairedText.replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/g, '$1').trim();
+                        return JSON.parse(repairedText);
                     }
+                } else {
+                    console.warn(`[JSON Repair] OpenAI API returned status ${response.status}`);
                 }
-                
-                if (repairedText) {
-                    repairedText = repairedText.replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/g, '$1').trim();
-                    return JSON.parse(repairedText);
-                }
-            } catch (llmRepairErr) {
-                console.error("[JSON Repair] LLM syntax repair fallback failed:", llmRepairErr);
+            } catch (openaiRepairErr) {
+                console.error("[JSON Repair] OpenAI syntax repair fallback failed:", openaiRepairErr);
             }
         }
         
@@ -766,6 +781,94 @@ Please extract the required fields from the document above and return the JSON.`
         let extractedData;
         let isTruncated = false;
         let pagesProcessed = 0;
+        
+        // If it is a routing request with images, perform single-pass vision routing instead of page-by-page OCR extraction
+        if (isRoutingRequest && hasImages) {
+            console.log(`[Audit Proxy] Running single-pass vision routing for scanned commercial ${docType}...`);
+            const systemPrompt = systemPromptOverride || `You are a document routing assistant for scanned PDF audits. Look at the images of pages 1-3. Identify if there is a Table of Contents (TOC) or Index. Based on the TOC or the content, identify the page numbers (1-indexed) in the document that likely contain: basic tenancy terms (premises size, tenant name, start/expiry date), rent schedule, renewal options, security deposit, guarantor, or landlord defaults.
+Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. Do not include any conversational intro or outro text. If no TOC is visible, return a default list of [1, 2, 3, 4, 5].`;
+            const userPrompt = userPromptOverride || `Identify relevant page numbers based on the Table of Contents or general structure.`;
+            
+            const messagesContent = [
+                { type: "text", text: userPrompt }
+            ];
+            
+            for (const img of images) {
+                if (activeProvider === 'openai') {
+                    messagesContent.push({ type: "image_url", image_url: { url: img } });
+                } else if (activeProvider === 'anthropic') {
+                    const match = img.match(/^data:(image\/\w+);base64,(.+)$/);
+                    if (!match) throw new Error("Invalid image format in routing request");
+                    const mediaType = match[1];
+                    const base64Data = match[2];
+                    messagesContent.push({
+                        type: "image",
+                        source: {
+                            type: "base64",
+                            media_type: mediaType,
+                            data: base64Data
+                        }
+                    });
+                }
+            }
+            
+            let response;
+            if (activeProvider === 'openai') {
+                response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${activeKey}`
+                    },
+                    body: JSON.stringify({
+                        model: activeModel,
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: messagesContent }
+                        ],
+                        response_format: { type: "json_object" },
+                        temperature: 0.1
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`OpenAI routing failed with status ${response.status}`);
+                }
+                const data = await response.json();
+                extractedData = await safeExtractAndParseJSON(data.choices[0].message.content, activeKey, activeProvider);
+            } else if (activeProvider === 'anthropic') {
+                response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "x-api-key": activeKey,
+                        "anthropic-version": "2023-06-01"
+                    },
+                    body: JSON.stringify({
+                        model: activeModel,
+                        max_tokens: 4000,
+                        system: systemPrompt,
+                        messages: [
+                            { role: "user", content: messagesContent }
+                        ],
+                        temperature: 0.1
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Anthropic routing failed with status ${response.status}`);
+                }
+                const data = await response.json();
+                extractedData = await safeExtractAndParseJSON(data.content[0].text, activeKey, activeProvider);
+            }
+            
+            return res.json({ 
+                status: 'completed', 
+                data: extractedData,
+                truncated: false,
+                pagesProcessed: images.length
+            });
+        }
         
         // Route calls to corresponding LLM provider
         if (hasImages) {

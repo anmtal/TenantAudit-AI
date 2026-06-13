@@ -2,12 +2,29 @@ const { test, expect } = require('@playwright/test');
 
 test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
 
-  test.beforeEach(({ page }) => {
+  test.beforeEach(async ({ page }) => {
     page.on('console', msg => {
       console.log(`[Browser ${msg.type()}] ${msg.text()}`);
     });
     page.on('pageerror', err => {
       console.error(`[PageError] ${err.message}`);
+    });
+
+    // Mock REST endpoints to keep tests fully offline/local
+    await page.route('**/rest/v1/team_invitations**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    });
+
+    await page.route('**/rest/v1/audits**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
     });
   });
 

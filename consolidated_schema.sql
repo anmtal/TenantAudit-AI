@@ -27,6 +27,7 @@ CREATE POLICY "Allow users to view their team"
   USING (
     id IN (SELECT team_id FROM public.profiles WHERE profiles.id = auth.uid()) 
     OR owner_id = auth.uid()
+    OR id IN (SELECT team_id FROM public.team_invitations WHERE LOWER(email) = LOWER(auth.jwt() ->> 'email'))
   );
 
 DROP POLICY IF EXISTS "Allow owner to update team" ON public.teams;
@@ -369,6 +370,13 @@ CREATE POLICY "Allow team members to view invitations" ON public.team_invitation
     FOR SELECT USING (
         team_id IN (SELECT team_id FROM public.profiles WHERE profiles.id = auth.uid())
         OR invited_by = auth.uid()
+        OR LOWER(email) = LOWER(auth.jwt() ->> 'email')
+    );
+
+DROP POLICY IF EXISTS "Allow recipient to decline invitations" ON public.team_invitations;
+CREATE POLICY "Allow recipient to decline invitations" ON public.team_invitations
+    FOR DELETE USING (
+        LOWER(email) = LOWER(auth.jwt() ->> 'email')
     );
 
 DROP POLICY IF EXISTS "Allow team owner to manage invitations" ON public.team_invitations;
@@ -383,7 +391,6 @@ DECLARE
   inviter_team_id UUID;
   current_seat_limit INTEGER;
   current_member_count INTEGER;
-  target_user_id UUID;
 BEGIN
   -- Security check to prevent IDOR privilege escalation
   IF auth.uid() IS NULL OR auth.uid() != inviter_id THEN
@@ -403,16 +410,86 @@ BEGIN
     RAISE EXCEPTION 'Seat limit reached for this team.';
   END IF;
 
-  SELECT id INTO target_user_id FROM public.profiles WHERE LOWER(email) = LOWER(target_email);
-  IF target_user_id IS NULL THEN
-    -- User not found: store a pending invitation
-    INSERT INTO public.team_invitations (team_id, email, invited_by)
-    VALUES (inviter_team_id, LOWER(target_email), inviter_id)
-    ON CONFLICT (team_id, email) DO NOTHING;
-    RETURN TRUE;
+  -- Always store in team_invitations (existing users must manually accept or decline)
+  INSERT INTO public.team_invitations (team_id, email, invited_by)
+  VALUES (inviter_team_id, LOWER(target_email), inviter_id)
+  ON CONFLICT (team_id, email) DO NOTHING;
+  
+  RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.accept_team_invitation(p_invitation_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_team_id UUID;
+  v_email TEXT;
+  v_target_user_id UUID;
+  v_old_team_id UUID;
+BEGIN
+  -- Get the invitation details
+  SELECT team_id, LOWER(email) INTO v_team_id, v_email 
+  FROM public.team_invitations 
+  WHERE id = p_invitation_id;
+
+  IF v_team_id IS NULL THEN
+    RAISE EXCEPTION 'Invitation not found.';
   END IF;
 
-  UPDATE public.profiles SET team_id = inviter_team_id WHERE id = target_user_id;
+  -- Ensure the authenticated user is the recipient of the invitation
+  SELECT id, team_id INTO v_target_user_id, v_old_team_id 
+  FROM public.profiles 
+  WHERE id = auth.uid() AND LOWER(email) = v_email;
+
+  IF v_target_user_id IS NULL THEN
+    RAISE EXCEPTION 'Unauthorized: You are not the recipient of this invitation.';
+  END IF;
+
+  -- Update the user's team ID
+  UPDATE public.profiles 
+  SET team_id = v_team_id 
+  WHERE id = v_target_user_id;
+
+  -- Delete the invitation after acceptance
+  DELETE FROM public.team_invitations WHERE id = p_invitation_id;
+
+  -- Recalculate team credits for both old and new teams
+  IF v_old_team_id IS NOT NULL THEN
+    PERFORM public.recalculate_team_credits(v_old_team_id);
+  END IF;
+  PERFORM public.recalculate_team_credits(v_team_id);
+
+  RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION public.decline_team_invitation(p_invitation_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_email TEXT;
+  v_target_user_id UUID;
+BEGIN
+  -- Get the invitation details
+  SELECT LOWER(email) INTO v_email 
+  FROM public.team_invitations 
+  WHERE id = p_invitation_id;
+
+  IF v_email IS NULL THEN
+    RAISE EXCEPTION 'Invitation not found.';
+  END IF;
+
+  -- Ensure the authenticated user is the recipient of the invitation
+  SELECT id INTO v_target_user_id 
+  FROM public.profiles 
+  WHERE id = auth.uid() AND LOWER(email) = v_email;
+
+  IF v_target_user_id IS NULL THEN
+    RAISE EXCEPTION 'Unauthorized: You are not the recipient of this invitation.';
+  END IF;
+
+  -- Delete/decline the invitation
+  DELETE FROM public.team_invitations WHERE id = p_invitation_id;
+
   RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

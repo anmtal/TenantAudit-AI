@@ -592,6 +592,81 @@ function initializeApp() {
         }
     }
 
+    async function checkPendingInvitations(userEmail) {
+        if (!supabase || !userEmail) return;
+        const banner = document.getElementById('team-invitation-banner');
+        const bannerText = document.getElementById('team-invitation-text');
+        const acceptBtn = document.getElementById('accept-invitation-btn');
+        const declineBtn = document.getElementById('decline-invitation-btn');
+        
+        if (!banner) return;
+        
+        try {
+            // Query invitations table
+            const { data: invitations, error } = await supabase
+                .from('team_invitations')
+                .select('id, team_id, email, teams(name)')
+                .eq('email', userEmail.toLowerCase());
+                
+            if (error) {
+                console.warn("Could not query team invitations:", error);
+                banner.style.display = 'none';
+                return;
+            }
+            
+            if (invitations && invitations.length > 0) {
+                const invite = invitations[0];
+                const teamName = invite.teams ? invite.teams.name : "another team";
+                if (bannerText) {
+                    bannerText.innerHTML = `You have been invited to join team <strong>${escapeHtml(teamName)}</strong>.`;
+                }
+                banner.style.display = 'flex';
+                
+                // Wire up accept
+                if (acceptBtn) {
+                    acceptBtn.onclick = async () => {
+                        acceptBtn.disabled = true;
+                        try {
+                            const { data, error: acceptErr } = await supabase.rpc('accept_team_invitation', { p_invitation_id: invite.id });
+                            if (acceptErr) throw acceptErr;
+                            showToast("🎉 Successfully joined the team!", "success");
+                            banner.style.display = 'none';
+                            // Reload profile and credits
+                            await loadUserProfileAndCredits();
+                        } catch (err) {
+                            console.error("Failed to accept invitation:", err);
+                            showToast("Failed to join team: " + err.message, "error");
+                            acceptBtn.disabled = false;
+                        }
+                    };
+                }
+                
+                // Wire up decline
+                if (declineBtn) {
+                    declineBtn.onclick = async () => {
+                        declineBtn.disabled = true;
+                        try {
+                            const { data, error: declineErr } = await supabase.rpc('decline_team_invitation', { p_invitation_id: invite.id });
+                            if (declineErr) throw declineErr;
+                            showToast("Invitation declined.", "info");
+                            banner.style.display = 'none';
+                            await loadUserProfileAndCredits();
+                        } catch (err) {
+                            console.error("Failed to decline invitation:", err);
+                            showToast("Failed to decline invitation: " + err.message, "error");
+                            declineBtn.disabled = false;
+                        }
+                    };
+                }
+            } else {
+                banner.style.display = 'none';
+            }
+        } catch (err) {
+            console.error("Error in checkPendingInvitations:", err);
+            banner.style.display = 'none';
+        }
+    }
+
     async function loadUserProfileAndCredits() {
         if (!supabase) {
             console.log("loadUserProfileAndCredits: Supabase client not initialized.");
@@ -685,6 +760,10 @@ function initializeApp() {
             } else {
                 console.log("No profile data returned for user:", user.id);
             }
+            
+            // Check for pending team invitations (non-blocking)
+            checkPendingInvitations(session.user.email);
+            
             updateCreditsDisplay();
         } catch (e) {
             console.error("Failed to load user profile:", e);
@@ -756,7 +835,10 @@ function initializeApp() {
                 
                 let discrepanciesHtml = '';
                 if (item.records && Array.isArray(item.records)) {
-                    const mismatches = item.records.filter(r => r.status === 'mismatch' || r.status === 'warning');
+                    const mismatches = item.records.filter(r => {
+                        const s = (r.status || '').toLowerCase();
+                        return s === 'mismatch' || s === 'warning';
+                    });
                     if (mismatches.length > 0) {
                         discrepanciesHtml = `<div class="history-detail-item" style="color: #ef4444; font-weight: 500;"><span>Discrepancies:</span> ${mismatches.map(m => escapeHtml(m.term)).join(', ')}</div>`;
                     } else {
@@ -1815,23 +1897,32 @@ function initializeApp() {
     const closeTosModalBtn = document.getElementById('close-tos-modal');
     const tosModalAgreeBtn = document.getElementById('tos-modal-agree-btn');
     
+    const openTosModal = (e) => {
+        if (e) e.preventDefault();
+        if (tosModal) tosModal.classList.add('active');
+    };
+
+    const tosLink = document.getElementById('tos-link');
+    if (tosLink) {
+        tosLink.addEventListener('click', openTosModal);
+    }
+    
     document.addEventListener('click', (e) => {
-        if (e.target && e.target.id === 'tos-link') {
-            e.preventDefault();
-            if (tosModal) tosModal.style.display = 'flex';
+        if (e.target && (e.target.id === 'tos-link' || e.target.closest('#tos-link'))) {
+            openTosModal(e);
         }
     });
 
     if (closeTosModalBtn) {
         closeTosModalBtn.addEventListener('click', () => {
-            if (tosModal) tosModal.style.display = 'none';
+            if (tosModal) tosModal.classList.remove('active');
         });
     }
 
     if (tosModalAgreeBtn) {
         tosModalAgreeBtn.addEventListener('click', () => {
             if (tosModal) {
-                tosModal.style.display = 'none';
+                tosModal.classList.remove('active');
             }
             const tosCheckbox = document.getElementById('register-tos-checkbox');
             if (tosCheckbox) {
@@ -2891,7 +2982,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         const t = terms.find(term => term.label === rec.term);
                         if (t && aiReport[t.key]) {
                             const aiField = aiReport[t.key];
-                            const status = aiField.status || rec.status;
+                            const status = (aiField.status || rec.status || '').toLowerCase();
                             const reason = aiField.reason || "Verified semantically.";
                             
                             if (status === 'match') verifiedMatchCount++;
@@ -2904,10 +2995,14 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                                 verifiedReason: reason
                             };
                         } else {
-                            if (rec.status === 'match') verifiedMatchCount++;
-                            else if (rec.status === 'mismatch') verifiedRedFlags++;
-                            else if (rec.status === 'warning') verifiedWarningCount++;
-                            return rec;
+                            const status = (rec.status || '').toLowerCase();
+                            if (status === 'match') verifiedMatchCount++;
+                            else if (status === 'mismatch') verifiedRedFlags++;
+                            else if (status === 'warning') verifiedWarningCount++;
+                            return {
+                                ...rec,
+                                status: status
+                            };
                         }
                     });
                     
@@ -2918,6 +3013,36 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     // Re-render UI with premium AI-verified badges
                     renderAuditResults();
                     console.log("[AI Verification] Compliance audit successfully verified & refined semantically.");
+
+                    // Save audit to database if logged in and not in demo mode
+                    if (supabase && isLoggedIn && !isDemoMode) {
+                        try {
+                            const { data: { user } } = await supabase.auth.getUser();
+                            if (user) {
+                                const { data: savedAudit, error: saveErr } = await supabase.from('audits').insert([{
+                                    tenant_name: auditData.metadata.tenantName,
+                                    lease_file: auditData.metadata.leaseFile,
+                                    estoppel_file: auditData.metadata.estoppelFile,
+                                    match_score: auditData.summary.matchScore,
+                                    red_flags: auditData.summary.redFlags,
+                                    monthly_rent: auditData.summary.monthlyRent,
+                                    premises_sf: auditData.summary.premisesSf,
+                                    expiry_date: auditData.summary.expiryDate,
+                                    records: auditData.records,
+                                    user_id: user.id
+                                }]).select();
+                                
+                                if (saveErr) {
+                                    console.error("Error saving audit to database:", saveErr);
+                                } else {
+                                    console.log("Successfully saved audit to database:", savedAudit);
+                                    loadAuditHistory(); // Refresh history panel
+                                }
+                            }
+                        } catch (saveErr) {
+                            console.error("Failed to save audit:", saveErr);
+                        }
+                    }
                 } else {
                     const errData = await response.json().catch(() => ({}));
                     console.error("[AI Verification Failed] Backend returned status error:", errData.error || response.status);
@@ -3021,12 +3146,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         auditResultsTbody.innerHTML = '';
         auditData.records.forEach((rec, idx) => {
             const tr = document.createElement('tr');
-            tr.classList.add(`row-${rec.status}`);
+            const statusLower = (rec.status || '').toLowerCase();
+            tr.classList.add(`row-${statusLower}`);
             
             let statusBadge = '';
-            if (rec.status === 'match') {
+            if (statusLower === 'match') {
                 statusBadge = '<span class="status-pill match-ok"><i data-lucide="check-circle"></i> Match</span>';
-            } else if (rec.status === 'warning') {
+            } else if (statusLower === 'warning') {
                 statusBadge = '<span class="status-pill match-warning"><i data-lucide="alert-triangle"></i> Warning</span>';
             } else {
                 statusBadge = '<span class="status-pill match-mismatch"><i data-lucide="x-circle"></i> Mismatch</span>';
@@ -3218,11 +3344,12 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                                 let badgeBg = '#fee2e2';
                                 let badgeColor = '#991b1b';
                                 let statusText = 'Mismatch';
-                                if (r.status === 'match') {
+                                const rStatus = (r.status || '').toLowerCase();
+                                if (rStatus === 'match') {
                                     badgeBg = '#d1fae5';
                                     badgeColor = '#065f46';
                                     statusText = 'Verified';
-                                } else if (r.status === 'warning') {
+                                } else if (rStatus === 'warning') {
                                     badgeBg = '#ffedd5';
                                     badgeColor = '#9a3412';
                                     statusText = 'Warning';

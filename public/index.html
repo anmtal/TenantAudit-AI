@@ -223,7 +223,7 @@
                         <div class="pricing-price-box">
                             <span class="pricing-price" style="font-size: 2.2rem;">$950</span><span class="pricing-period">/yr</span>
                         </div>
-                        <div style="text-align: center;"><span class="discount-badge">Save 20% (~$79/mo)</span></div>
+                        <div style="text-align: center;"><span class="discount-badge">Save 20% - $79/mo equivalent</span></div>
                         <ul class="pricing-features-list">
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 60 Audits / yr</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 1 Seat</li>
@@ -238,7 +238,7 @@
                         <div class="pricing-price-box">
                             <span class="pricing-price" style="font-size: 2.2rem;">$2,868</span><span class="pricing-period">/yr</span>
                         </div>
-                        <div style="text-align: center;"><span class="discount-badge">Save 20% (~$239/mo)</span></div>
+                        <div style="text-align: center;"><span class="discount-badge">Save 20% - $239/mo equivalent</span></div>
                         <ul class="pricing-features-list">
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 900 Audits / yr</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 3 Seats</li>
@@ -254,7 +254,7 @@
                         <div class="pricing-price-box">
                             <span class="pricing-price" style="font-size: 2.2rem;">$4,788</span><span class="pricing-period">/yr</span>
                         </div>
-                        <div style="text-align: center;"><span class="discount-badge">Save 20% (~$399/mo)</span></div>
+                        <div style="text-align: center;"><span class="discount-badge">Save 20% - $399/mo equivalent</span></div>
                         <ul class="pricing-features-list">
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 1,800 Audits / yr</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 5 Seats</li>
@@ -269,7 +269,7 @@
                         <div class="pricing-price-box">
                             <span class="pricing-price" style="font-size: 2.2rem;">$9,588</span><span class="pricing-period">/yr</span>
                         </div>
-                        <div style="text-align: center;"><span class="discount-badge">Save 20% (~$799/mo)</span></div>
+                        <div style="text-align: center;"><span class="discount-badge">Save 20% - $799/mo equivalent</span></div>
                         <ul class="pricing-features-list">
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 6,000 Audits / yr</li>
                             <li><i data-lucide="check" class="inline-icon" style="color: var(--color-emerald); width: 14px; height: 14px;"></i> 20 Seats</li>
@@ -553,6 +553,18 @@
                     <span style="font-size: 0.9rem; font-weight: 500;">Your latest subscription payment failed. Please update your billing details to maintain full service.</span>
                 </div>
                 <button class="btn btn-secondary btn-sm" id="warning-banner-billing-btn" style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #fff; font-size: 0.8rem; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.3)'" onmouseout="this.style.background='rgba(239,68,68,0.2)'">Update Billing</button>
+            </div>
+
+            <!-- Team Invitation Banner -->
+            <div id="team-invitation-banner" class="payment-warning-alert" style="display: none; background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.3); border-radius: 8px; padding: 12px 20px; margin-bottom: 20px; align-items: center; justify-content: space-between; gap: 15px; color: #d8b4fe;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <i data-lucide="users" style="color: var(--color-purple); flex-shrink: 0; width: 20px; height: 20px;"></i>
+                    <span style="font-size: 0.9rem; font-weight: 500;" id="team-invitation-text">You have been invited to join another team.</span>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-primary btn-sm" id="accept-invitation-btn" style="font-size: 0.8rem; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Accept</button>
+                    <button class="btn btn-secondary btn-sm" id="decline-invitation-btn" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; font-size: 0.8rem; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.25)'" onmouseout="this.style.background='rgba(239,68,68,0.15)'">Decline</button>
+                </div>
             </div>
 
             <!-- Document Upload & Launch Section -->
@@ -959,13 +971,14 @@
     <div id="toast-container"></div>
 
     <!-- Terms of Service & Privacy Policy Modal -->
-    <div id="tos-modal" class="modal-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.75); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(8px);">
-        <div class="glass-card" style="max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 30px; position: relative; border: 1px solid var(--card-border); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);">
-            <button id="close-tos-modal" style="position: absolute; top: 15px; right: 15px; background: transparent; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
-            <h3 style="color: var(--text-primary); margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
-                <i data-lucide="shield-check" style="color: var(--color-purple);"></i> Terms of Service & Privacy Policy
-            </h3>
-            <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; display: flex; flex-direction: column; gap: 15px;">
+    <div class="modal-overlay" id="tos-modal">
+        <div class="modal-card" style="max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;">
+            <button class="modal-close-btn" id="close-tos-modal">&times;</button>
+            <div class="modal-title-wrapper">
+                <h3><i data-lucide="shield-check" class="inline-icon" style="color: var(--color-purple);"></i> Terms of Service & Privacy Policy</h3>
+                <p>Please read our terms of service and privacy policy below.</p>
+            </div>
+            <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; display: flex; flex-direction: column; gap: 15px; max-height: 40vh; overflow-y: auto; padding-right: 8px; margin-top: 15px;">
                 <div>
                     <h4 style="color: #fff; margin-bottom: 6px;">1. Assistant Tool Only (No Legal Advice)</h4>
                     <p>LeaseAlign AI is an automated productivity tool designed to assist professionals with real estate document cross-referencing. It does not provide legal advice, legal opinions, or official contract validations. All results must be reviewed and verified by a qualified attorney or human professional before reliance.</p>
@@ -983,7 +996,7 @@
                     <p>Billing is managed securely via Stripe. You can cancel your subscription plan at any time through your billing dashboard. Unused credits expire at the end of the billing period unless specified otherwise.</p>
                 </div>
             </div>
-            <div style="margin-top: 25px; text-align: right;">
+            <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px;">
                 <button type="button" class="btn btn-primary" id="tos-modal-agree-btn">I Understand & Agree</button>
             </div>
         </div>

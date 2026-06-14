@@ -396,6 +396,7 @@ BEGIN
       
       RETURN TRUE;
     ELSE
+      PERFORM public.recalculate_team_credits(user_team_id);
       RETURN FALSE;
     END IF;
   ELSE

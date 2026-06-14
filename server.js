@@ -944,9 +944,91 @@ function sanitizeUntrustedText(text) {
 
 
 
+const MOCK_SAMPLE_LEASE_DATA = {
+  "tenantName": { "value": "APEX COWORKING SOLUTIONS INTERNATIONAL INC.", "quote": "LEASE AGREEMENT between LANDLORD and APEX COWORKING SOLUTIONS INTERNATIONAL INC.", "page": "Page 1" },
+  "suiteNumber": { "value": "Suite 4200, 42nd Floor", "quote": "leased premises described as Suite 4200 on the 42nd Floor", "page": "Page 1" },
+  "premisesSf": { "value": "14,500 rentable square feet", "quote": "measuring approximately 14,500 rentable square feet", "page": "Page 1" },
+  "monthlyRent": { "value": "$35,000.00 (Months 1–12), escalating at 3.50% per annum to $47,701.41 (Months 109–120)", "quote": "Base Rent shall be $35,000.00 per month for months 1-12, escalating at 3.5% annually...", "page": "Page 2" },
+  "expiryDate": { "value": "August 31, 2031", "quote": "expiration date of August 31, 2031", "page": "Page 1" },
+  "securityDeposit": { "value": "$105,000.00 (three months of initial Base Rent)", "quote": "Security Deposit of $105,000.00, representing three months of initial Base Rent", "page": "Page 3" },
+  "renewalOptions": { "value": "Two (2) renewal options, each for five (5) years, at Fair Market Value; written notice required at least 270 days prior to then-current Expiration Date", "quote": "Tenant shall have two (2) options to renew, each for a period of five (5) years...", "page": "Page 4" },
+  "camShare": { "value": "4.85% pro-rata share of Building's total operating expenses; annual CAM contribution increases capped at 3% on a cumulative and compounding basis", "quote": "Tenant's pro-rata share is 4.85%... CAM increases capped at 3% annually...", "page": "Page 3" },
+  "guarantorName": { "value": "APEX GLOBAL ENTERPRISES HOLDINGS LLC", "quote": "guaranteed by APEX GLOBAL ENTERPRISES HOLDINGS LLC", "page": "Page 5" },
+  "prepaidRent": { "value": "$35,000.00 (applied to first full calendar month's Base Rent)", "quote": "Prepaid rent of $35,000.00 to be applied to the first month's rent", "page": "Page 2" },
+  "landlordDefault": { "value": "Landlord obligated to maintain structural parts, mechanical elevator units, and Building electrical grids at its sole cost; exception for repairs required due to Tenant negligence. No explicit landlord default/cure provision mentioned.", "quote": "Landlord shall maintain the structural parts, elevators, and electrical systems...", "page": "Page 4" },
+  "tiAllowance": { "value": "Not Mentioned", "quote": "No citation found.", "page": "Not Mentioned" },
+  "coTenancy": { "value": "Not Mentioned", "quote": "No citation found.", "page": "Not Mentioned" },
+  "terminationRight": { "value": "Not Mentioned", "quote": "No citation found.", "page": "Not Mentioned" },
+  "sndaStatus": { "value": "Not Mentioned", "quote": "No citation found.", "page": "Not Mentioned" },
+  "permittedUse": { "value": "Not Mentioned", "quote": "No citation found.", "page": "Not Mentioned" }
+};
+
+const MOCK_SAMPLE_ESTOPPEL_DATA = {
+  "tenantName": { "value": "Apex Coworking Solutions Int'l, Inc.", "quote": "Tenant name is Apex Coworking Solutions Int'l, Inc.", "page": "Page 1" },
+  "suiteNumber": { "value": "Suite 4200", "quote": "occupying Suite 4200", "page": "Page 1" },
+  "premisesSf": { "value": "14,500 SF", "quote": "premises measuring 14,500 SF", "page": "Page 1" },
+  "monthlyRent": { "value": "$41,569.02 per month", "quote": "Current monthly rent is $41,569.02", "page": "Page 1" },
+  "expiryDate": { "value": "September 30, 2031", "quote": "Lease expiration date is September 30, 2031", "page": "Page 1" },
+  "securityDeposit": { "value": "$70,000.00, no portion applied", "quote": "Security deposit held by Landlord is $70,000.00", "page": "Page 1" },
+  "renewalOptions": { "value": "One (1) renewal option to extend the Lease term for 5 years", "quote": "Tenant has one renewal option for 5 years", "page": "Page 1" },
+  "camShare": { "value": "4.85% pro-rata share of operating costs and CAM expenses; increases capped at 4% annually", "quote": "CAM share is 4.85%, increases capped at 4% annually", "page": "Page 1" },
+  "guarantorName": { "value": "Apex Global Enterprises Holdings LLC", "quote": "Guarantor: Apex Global Enterprises Holdings LLC", "page": "Page 1" },
+  "prepaidRent": { "value": "No base rent prepaid in advance except for the current month's rent", "quote": "No prepaid rent except for current month", "page": "Page 1" },
+  "landlordDefault": { "value": "Landlord is currently in default under its repair obligations for failing to complete the elevator modernization repairs on the 42nd floor, which impairs tenant access", "quote": "Landlord is in default for failing to complete elevator repairs on the 42nd floor", "page": "Page 1" },
+  "tiAllowance": { "value": "Not Mentioned", "quote": "No citation found.", "page": "Not Mentioned" },
+  "coTenancy": { "value": "Not Mentioned", "quote": "No citation found.", "page": "Not Mentioned" },
+  "terminationRight": { "value": "Not Mentioned", "quote": "No citation found.", "page": "Not Mentioned" },
+  "sndaStatus": { "value": "Not Mentioned", "quote": "No citation found.", "page": "Not Mentioned" },
+  "permittedUse": { "value": "Not Mentioned", "quote": "No citation found.", "page": "Not Mentioned" }
+};
+
+const MOCK_SAMPLE_COMPARE_DATA = {
+  "tenantName": { "status": "match", "reason": "The Estoppel tenant name 'Apex Coworking Solutions Int'l, Inc.' is a semantic match to the Lease tenant name 'APEX COWORKING SOLUTIONS INTERNATIONAL INC.'." },
+  "suiteNumber": { "status": "mismatch", "reason": "The Lease specifies 'Suite 4200, 42nd Floor' whereas the Estoppel only states 'Suite 4200'. Verification of the exact leased premises floor is recommended." },
+  "premisesSf": { "status": "match", "reason": "The premises sizes are identical (14,500 SF)." },
+  "monthlyRent": { "status": "mismatch", "reason": "The Estoppel rent of $41,569.02 per month differs from the starting Base Rent of $35,000.00, but is a scheduled escalation step under the Lease progression. Verification is needed to confirm the current lease year." },
+  "expiryDate": { "status": "mismatch", "reason": "The Lease expiration date is August 31, 2031, whereas the Estoppel states September 30, 2031, representing a one-month discrepancy." },
+  "securityDeposit": { "status": "mismatch", "reason": "The Lease specifies a security deposit of $105,000.00 (three months rent), but the Estoppel states the landlord is only holding $70,000.00." },
+  "renewalOptions": { "status": "mismatch", "reason": "The Lease outlines two (2) five-year options, whereas the Estoppel only acknowledges one (1) extension option." },
+  "camShare": { "status": "mismatch", "reason": "The Lease specifies an annual CAM cap of 3%, whereas the Estoppel states the cap is 4%." },
+  "guarantorName": { "status": "match", "reason": "The guarantor names match semantically." },
+  "prepaidRent": { "status": "mismatch", "reason": "The Lease notes prepaid rent of $35,000.00 applied to the first month, but the Estoppel notes no prepaid rent exists." },
+  "landlordDefault": { "status": "mismatch", "reason": "The Estoppel notes a landlord default regarding structural elevator repairs, which is not mentioned in the Lease document." },
+  "tiAllowance": { "status": "warning", "reason": "Not mentioned in either document." },
+  "coTenancy": { "status": "warning", "reason": "Not mentioned in either document." },
+  "terminationRight": { "status": "warning", "reason": "Not mentioned in either document." },
+  "sndaStatus": { "status": "warning", "reason": "Not mentioned in either document." },
+  "permittedUse": { "status": "warning", "reason": "Not mentioned in either document." }
+};
+
 app.post('/api/audit', requireAuth, expensiveApiLimiter, async (req, res) => {
     try {
         let { text, images, docType, systemPromptOverride, userPromptOverride, isRoutingRequest } = req.body;
+        
+        const isSampleAudit = req.body.isSampleAudit === true && 
+            (isRoutingRequest || 
+             (text && (
+                 text.toUpperCase().includes("APEX COWORKING") || 
+                 text.toUpperCase().includes("APEX GLOBAL") || 
+                 text.toUpperCase().includes("ELEVATOR MODERNIZATION") ||
+                 text.toUpperCase().includes("SUITE 4200")
+             ))
+            );
+
+        if (isSampleAudit && isRoutingRequest) {
+            console.log(`[Sample Audit] Bypassing and returning static page routing numbers for ${docType}`);
+            return res.json({ pageNumbers: [1, 2, 3, 4] });
+        }
+        if (isSampleAudit) {
+            console.log(`[Sample Audit] Bypassing and returning static mock results for ${docType}`);
+            const mockData = docType === 'lease' ? MOCK_SAMPLE_LEASE_DATA : MOCK_SAMPLE_ESTOPPEL_DATA;
+            return res.json({
+                status: 'completed',
+                data: mockData,
+                truncated: false,
+                pagesProcessed: 4
+            });
+        }
         
         if (!isRoutingRequest) {
             const transactionId = req.headers['x-transaction-id'];
@@ -1677,6 +1759,18 @@ app.post('/api/compare', requireAuth, expensiveApiLimiter, async (req, res) => {
         
         if (!leaseJson || !estoppelJson) {
             return res.status(400).json({ error: "Missing required fields: leaseJson and estoppelJson" });
+        }
+
+        const isSampleAudit = req.body.isSampleAudit === true && 
+            ((leaseJson && JSON.stringify(leaseJson).toUpperCase().includes("APEX COWORKING")) ||
+             (estoppelJson && JSON.stringify(estoppelJson).toUpperCase().includes("APEX COWORKING")));
+
+        if (isSampleAudit) {
+            console.log(`[Sample Audit] Bypassing and returning static mock comparison results`);
+            return res.json({
+                status: 'completed',
+                data: MOCK_SAMPLE_COMPARE_DATA
+            });
         }
 
         if (supabaseAdmin) {

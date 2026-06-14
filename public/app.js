@@ -2752,7 +2752,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             // Refresh profile and credits before client-side check to prevent stale balance errors
             await loadUserProfileAndCredits();
             
-            if (hostedCredits < 1) {
+            const isSample = filesState.lease?.name === 'sample_lease.pdf' && filesState.estoppel?.name === 'sample_estoppel.pdf';
+
+            if (!isSample && hostedCredits < 1) {
                 hideLoader();
                 showToast(`🚫 Insufficient audits left! This audit requires 1 audit, but you only have ${hostedCredits} left. Please top up.`, 'error');
                 handleTopupClick();
@@ -2845,7 +2847,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     await loadAuditHistory();
                 } else {
                     // Fallback mock mode
-                    if (hostedCredits < 900000) {
+                    if (!isSample && hostedCredits < 900000) {
                         hostedCredits -= 1;
                         if (hostedCredits < 0) hostedCredits = 0;
                         localStorage.setItem('ta_hosted_credits', hostedCredits);
@@ -2855,7 +2857,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 
                 hideLoader();
                 const isUnlimited = hostedCredits >= 900000;
-                const deductMsg = isUnlimited ? "" : ` Deducted 1 audit.`;
+                const deductMsg = isSample ? "" : (isUnlimited ? "" : ` Deducted 1 audit.`);
                 showToast(`🎉 Audit completed successfully!${deductMsg}`, 'success');
     
                 success = true;
@@ -2865,7 +2867,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 console.error(`[Audit Error] Attempt ${attempt} failed:`, err);
                 
                 // Auto Refund logic for hosted users if it failed (Awaiting refund requests using Promise.all)
-                if (successfulTransactionIds.length > 0) {
+                const isSample = filesState.lease?.name === 'sample_lease.pdf' && filesState.estoppel?.name === 'sample_estoppel.pdf';
+                if (!isSample && successfulTransactionIds.length > 0) {
                     console.log("[Refund] Attempting to auto-refund credit for failed transactions:", successfulTransactionIds);
                     let tokenResponse = '';
                     if (supabase) {
@@ -2953,6 +2956,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
         // Build payload based on mode.
         // In Hosted SaaS mode, we run Claude Sonnet via server key.
+        const isSample = filesState.lease?.name === 'sample_lease.pdf' && filesState.estoppel?.name === 'sample_estoppel.pdf';
         const payload = {
             text: text,
             images: images,
@@ -2962,7 +2966,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             model: 'claude-sonnet-4-6',
             systemPromptOverride: systemPromptOverride,
             userPromptOverride: userPromptOverride,
-            isRoutingRequest: isRoutingRequest
+            isRoutingRequest: isRoutingRequest,
+            isSampleAudit: isSample
         };
 
         const headers = {
@@ -3185,9 +3190,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
             showLoader("AI is verifying compliance audit...");
             
+            const isSample = filesState.lease?.name === 'sample_lease.pdf' && filesState.estoppel?.name === 'sample_estoppel.pdf';
             const payload = {
                 leaseJson,
-                estoppelJson
+                estoppelJson,
+                isSampleAudit: isSample
             };
             
             const headers = {

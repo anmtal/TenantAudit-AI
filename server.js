@@ -946,7 +946,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
 
             const transactionId = req.headers['x-transaction-id'] || null;
-            const creditsToDeduct = 0;
+            const creditsToDeduct = 1;
             
             // Atomic pre-deduction of audit credits via RPC (idempotent per transaction)
             const { data: success, error: deductErr } = await supabaseAdmin
@@ -1567,7 +1567,7 @@ For each field, look at all pages and pick the most detailed, legally relevant, 
         // Refund credit if something fails during inference
         if (supabaseAdmin) {
             try {
-                const creditsToRefund = 0;
+                const creditsToRefund = 1;
                 const transactionId = req.headers['x-transaction-id'] || null;
                 if (creditsToRefund > 0) {
                     if (transactionId) {

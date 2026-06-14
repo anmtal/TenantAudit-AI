@@ -1092,24 +1092,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 console.warn(`[Blocked] User ${req.user.email} attempted audit with 0 credits.`);
                 return res.status(403).json({ error: "Forbidden: Insufficient audit credits. This audit requires at least 1 audit credit from your team balance." });
             }
-
-            const transactionId = req.headers['x-transaction-id'] || null;
-            const creditsToDeduct = 1;
-            
-            // Atomic pre-deduction of audit credits via RPC (idempotent per transaction)
-            const { data: success, error: deductErr } = await supabaseAdmin
-                .rpc('deduct_user_credits', { 
-                    target_user_id: req.user.id, 
-                    pages_to_deduct: creditsToDeduct, 
-                    plan_mode: 'hosted',
-                    p_transaction_id: transactionId
-                });
-
-            if (deductErr || !success) {
-                console.warn(`[Blocked] User ${req.user.email} attempted hosted audit with insufficient team audit credits. ${deductErr?.message || ''}`);
-                return res.status(403).json({ error: `Forbidden: Insufficient audit credits. This audit requires ${creditsToDeduct} audit credits from your team balance.` });
-            }
-            console.log(`[Authorized & Deducted] Hosted audit request by ${req.user.email} (needs ${creditsToDeduct} audit credits)`);
+            console.log(`[Authorized] Hosted audit request by ${req.user.email} (has ${team.audit_credits} audit credits)`);
         }
 
         // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet

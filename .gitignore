@@ -4,6 +4,9 @@ node_modules/
 # Local env files (contain secret API keys)
 .env
 .env*.local
+_env.local
+_env*.local
+.env.local
 
 # OS files
 .DS_Store

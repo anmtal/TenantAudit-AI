@@ -286,8 +286,18 @@ function initializeApp() {
         }
 
         updateUploadButtonsState();
+        if (uploadPanel) {
+            uploadPanel.style.display = 'block';
+        }
         if (resultsPanel) resultsPanel.style.display = 'none';
-        if (uploadPanel) uploadPanel.style.display = 'block';
+
+        // Recalculate layout and scroll to top smoothly
+        setTimeout(() => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (uploadPanel) {
+                uploadPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 50);
         
         const verificationDrawer = document.getElementById('verification-drawer');
         if (verificationDrawer) verificationDrawer.style.display = 'none';
@@ -783,6 +793,26 @@ function initializeApp() {
                 console.warn("Could not fetch profile fields. Error:", error);
             } else {
                 profileData = data;
+                
+                // Recalculate team credits to filter out any expired grants and update cached teams.audit_credits
+                const teamId = profileData.team_id || (profileData.teams && profileData.teams.id);
+                if (teamId) {
+                    try {
+                        await supabase.rpc('recalculate_team_credits', { p_team_id: teamId });
+                        // Re-fetch the team row to get the updated cached balance
+                        const { data: freshTeam, error: freshTeamErr } = await supabase
+                            .from('teams')
+                            .select('audit_credits, plan_tier')
+                            .eq('id', teamId)
+                            .single();
+                        if (!freshTeamErr && freshTeam && profileData.teams) {
+                            profileData.teams.audit_credits = freshTeam.audit_credits;
+                            profileData.teams.plan_tier = freshTeam.plan_tier;
+                        }
+                    } catch (recalcErr) {
+                        console.warn("Failed to recalculate team credits during profile load:", recalcErr);
+                    }
+                }
             }
 
             nextExpiryDate = null;
@@ -2915,6 +2945,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             console.error(err);
             hideLoader();
             showToast(`Error: ${err.message}`, 'error');
+            if (supabase) {
+                try {
+                    await loadUserProfileAndCredits();
+                } catch (syncErr) {
+                    console.error("Failed to sync profile credits on error:", syncErr);
+                }
+            }
         }
     }
 

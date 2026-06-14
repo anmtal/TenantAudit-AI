@@ -91,6 +91,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 45000) {
 }
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 8080;
 
 // Middleware
@@ -113,8 +114,15 @@ const expensiveApiLimiter = rateLimit({
     },
     message: { error: 'Too many expensive API requests, please try again after 10 minutes.' },
     standardHeaders: true,
-    legacyHeaders: false,
-    validate: false
+    legacyHeaders: false
+});
+
+const smsLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, // 10 minutes
+    max: 5, // Limit each IP to 5 requests per 10 minutes
+    message: { error: "Too many SMS requests from this IP. Please try again after 10 minutes." },
+    standardHeaders: true,
+    legacyHeaders: false
 });
 
 
@@ -179,26 +187,32 @@ async function requireAuth(req, res, next) {
                 const payloadJson = JSON.parse(payloadBuffer.toString());
                 const sessionId = payloadJson.session_id;
                 
-                    const { data: profile } = await supabaseAdmin.from('profiles').select('active_session_id, last_active_at').eq('id', user.id).single();
-                    if (profile) {
-                        if (!profile.active_session_id || profile.active_session_id !== sessionId) {
-                            // Auto-Claim/Takeover Active Session: lock the seat immediately/overwrite it
-                            await supabaseAdmin
-                                .from('profiles')
-                                .update({ active_session_id: sessionId, last_active_at: new Date().toISOString() })
-                                .eq('id', user.id);
-                        } else {
-                            // Stateful Seat Enforcement: update last_active_at timestamp for active session with 5-minute throttling
-                            const lastActive = profile.last_active_at ? new Date(profile.last_active_at) : new Date(0);
-                            const now = new Date();
-                            if (now - lastActive > 5 * 60 * 1000) {
-                                await supabaseAdmin
-                                    .from('profiles')
-                                    .update({ last_active_at: now.toISOString() })
-                                    .eq('id', user.id);
-                            }
-                        }
+                const { data: profile } = await supabaseAdmin
+                    .from('profiles')
+                    .select('active_session_id, last_active_at, teams(seat_limit)')
+                    .eq('id', user.id)
+                    .single();
+
+                if (profile) {
+                    const seatLimit = (profile.teams && typeof profile.teams.seat_limit === 'number') ? profile.teams.seat_limit : 1;
+                    const isDifferentSession = profile.active_session_id && profile.active_session_id !== sessionId;
+                    const lastActive = profile.last_active_at ? new Date(profile.last_active_at) : new Date(0);
+                    const now = new Date();
+                    const isActiveRecently = (now - lastActive) < 5 * 60 * 1000;
+
+                    if (seatLimit === 1 && isDifferentSession && isActiveRecently) {
+                        console.error(`[Auth Failure] Concurrent login blocked for user ${user.email}.`);
+                        return res.status(401).json({ error: "Unauthorized: Session expired. You have logged in from another device. Please upgrade your plan for multiple seats." });
                     }
+
+                    // Throttled update to avoid writes on every single API call
+                    if (isDifferentSession || (now - lastActive > 5 * 60 * 1000)) {
+                        await supabaseAdmin
+                            .from('profiles')
+                            .update({ active_session_id: sessionId, last_active_at: now.toISOString() })
+                            .eq('id', user.id);
+                    }
+                }
             }
         } catch (sessionErr) {
             console.warn("[Session Validation Error] Could not decode or verify session_id:", sessionErr);
@@ -629,7 +643,7 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                     if (planType === 'hosted') {
                         const { data: team, error: teamFetchErr } = await supabaseAdmin
                             .from('teams')
-                            .select('id')
+                            .select('id, plan_tier')
                             .eq('owner_id', userId)
                             .single();
                             
@@ -638,16 +652,39 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                         }
                         
                         if (team) {
+                            const newPlanTier = packageName || `hosted_${amt}`;
+                            const isUpgrade = team.plan_tier !== newPlanTier;
+
                             const { error: updateTeamErr } = await supabaseAdmin
                                 .from('teams')
                                 .update({ 
                                     seat_limit: seats,
                                     stripe_subscription_id: subscription.id,
-                                    plan_tier: packageName || `hosted_${amt}`
+                                    plan_tier: newPlanTier
                                 })
                                 .eq('id', team.id);
                             if (updateTeamErr) throw updateTeamErr;
-                            console.log(`[Stripe Webhook] Successfully updated team ${team.id} plan on subscription update.`);
+                            console.log(`[Stripe Webhook] Successfully updated team ${team.id} plan to ${newPlanTier} on subscription update.`);
+
+                            if (isUpgrade) {
+                                const expiryDays = planInterval === 'year' ? 365 : 30;
+                                const expiresAt = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString();
+
+                                // Grant credits immediately for the upgrade
+                                const { error: grantErr } = await supabaseAdmin
+                                    .from('team_credit_grants')
+                                    .insert({
+                                        team_id: team.id,
+                                        amount_granted: amt,
+                                        amount_remaining: amt,
+                                        expires_at: expiresAt
+                                    });
+                                if (grantErr) throw grantErr;
+
+                                // Recalculate team balance
+                                await supabaseAdmin.rpc('recalculate_team_credits', { p_team_id: team.id });
+                                console.log(`[Stripe Webhook] Successfully granted ${amt} upgrade credits to team ${team.id}.`);
+                            }
                         }
                     }
                 }
@@ -762,7 +799,7 @@ app.post('/api/check-user-exists', async (req, res) => {
 });
 
 // Endpoint to send SMS OTP verification code via Twilio
-app.post('/api/send-otp', async (req, res) => {
+app.post('/api/send-otp', smsLimiter, async (req, res) => {
     try {
         const { phoneNumber } = req.body;
         if (!phoneNumber || !/^\+[1-9]\d{1,14}$/.test(phoneNumber)) {
@@ -789,6 +826,10 @@ app.post('/api/send-otp', async (req, res) => {
                 .create({ to: phoneNumber, channel: 'sms' });
             return res.json({ success: true });
         } else {
+            if (process.env.NODE_ENV === 'production') {
+                console.error("[Twilio Verify Error] Twilio client or Verify Service SID not configured in production.");
+                return res.status(503).json({ error: "SMS verification service is temporarily unavailable. Please try again later." });
+            }
             console.log(`[Mock Twilio Verify] OTP code '123456' sent to ${phoneNumber}`);
             return res.json({ success: true, mock: true });
         }
@@ -815,10 +856,35 @@ app.post('/api/verify-otp', async (req, res) => {
             if (verificationCheck.status !== 'approved') {
                 return res.status(400).json({ error: "Invalid verification code. Please check the code and try again." });
             }
+            
+            // Securely record verification in database
+            if (supabaseAdmin) {
+                const { error: dbErr } = await supabaseAdmin
+                    .from('verified_phones')
+                    .upsert({ phone: phoneNumber, verified_at: new Date().toISOString() });
+                if (dbErr) {
+                    console.error("[Twilio Verify DB Error] Failed to write verified phone:", dbErr);
+                    return res.status(500).json({ error: "Verification recorded failed on backend. Please try again." });
+                }
+            }
             return res.json({ success: true });
         } else {
+            if (process.env.NODE_ENV === 'production') {
+                console.error("[Twilio Verify Error] Twilio client or Verify Service SID not configured in production.");
+                return res.status(503).json({ error: "SMS verification service is temporarily unavailable. Please try again later." });
+            }
             console.log(`[Mock Twilio Verify] Checking OTP code '${code}' for ${phoneNumber}`);
             if (code === '123456') {
+                // Securely record verification in database in mock mode as well
+                if (supabaseAdmin) {
+                    const { error: dbErr } = await supabaseAdmin
+                        .from('verified_phones')
+                        .upsert({ phone: phoneNumber, verified_at: new Date().toISOString() });
+                    if (dbErr) {
+                        console.error("[Twilio Verify DB Error] Failed to write verified phone:", dbErr);
+                        return res.status(500).json({ error: "Verification recorded failed on backend. Please try again." });
+                    }
+                }
                 return res.json({ success: true });
             } else {
                 return res.status(400).json({ error: "Invalid verification code. Use mock code 123456 in local development." });
@@ -1653,6 +1719,7 @@ For each of the 16 terms, determine if the values represent a 'match', a 'warnin
 
 CRITICAL GUIDELINES FOR SPECIFIC FIELDS:
 - Rent Escalation Schedules: If the Lease specifies a starting rent with an escalation schedule or a range of monthly rent steps over time (e.g. "$35,000 escalating 3.5% annually" or "$35,000 in Year 1 to $47,701.41 in Year 10"), and the Estoppel specifies a rent that matches one of the subsequent years/steps (e.g. "$41,569.02"), this represents a scheduled rent progression. You MUST classify this as a 'warning' (requiring verification of the current lease year/anniversary) rather than a 'mismatch' (direct contradiction).
+  * Few-Shot Example: If Lease is "$35,000.00 (Months 1–12), escalating at 3.50% per annum to $47,701.41 (Months 109–120)" and Estoppel is "$41,569.02 per month" (which corresponds to Year 6 step), you MUST return: {"status": "warning", "reason": "The Estoppel monthly rent matches a scheduled rent progression step specified in the Lease escalation schedule. Verification of the current lease year is required."}
 
 For each term, you must return a status ('match', 'warning', 'mismatch') and a concise reason.
 Return ONLY a valid JSON object in this exact format:

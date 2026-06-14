@@ -122,6 +122,16 @@ DROP POLICY IF EXISTS "Allow users to view their own payments" ON public.process
 CREATE POLICY "Allow users to view their own payments" ON public.processed_payments FOR SELECT USING (auth.uid() = user_id);
 
 -- --------------------------------------------------------------------
+-- 4.5 Verified Phones Table (Sybil prevention ledger)
+-- --------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.verified_phones (
+  phone TEXT PRIMARY KEY,
+  verified_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.verified_phones ENABLE ROW LEVEL SECURITY;
+
+-- --------------------------------------------------------------------
 -- 5. User Signup Trigger (Auto-Profile & Team Creation) & Twilio Welcome Gift
 -- --------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.grant_welcome_credit(p_user_id UUID)
@@ -206,7 +216,7 @@ BEGIN
   END IF;
 
   -- Grant welcome credit if both email and phone are verified immediately on insertion
-  IF new.email_confirmed_at IS NOT NULL AND (new.raw_user_meta_data->>'phone_verified')::boolean = true THEN
+  IF new.email_confirmed_at IS NOT NULL AND EXISTS (SELECT 1 FROM public.verified_phones WHERE phone = new.raw_user_meta_data->>'phone') THEN
     PERFORM public.grant_welcome_credit(new.id);
   END IF;
   
@@ -223,7 +233,7 @@ CREATE TRIGGER on_auth_user_created
 CREATE OR REPLACE FUNCTION public.handle_user_update()
 RETURNS trigger AS $$
 BEGIN
-  IF NEW.email_confirmed_at IS NOT NULL AND (NEW.raw_user_meta_data->>'phone_verified')::boolean = true THEN
+  IF NEW.email_confirmed_at IS NOT NULL AND EXISTS (SELECT 1 FROM public.verified_phones WHERE phone = NEW.raw_user_meta_data->>'phone') THEN
     PERFORM public.grant_welcome_credit(NEW.id);
   END IF;
   RETURN NEW;
@@ -571,8 +581,29 @@ DROP FUNCTION IF EXISTS public.register_active_session(TEXT);
 
 CREATE OR REPLACE FUNCTION public.register_active_session(p_session_id TEXT)
 RETURNS BOOLEAN AS $$
+DECLARE
+  current_active_session TEXT;
+  current_last_active TIMESTAMP WITH TIME ZONE;
+  v_seat_limit INTEGER;
 BEGIN
-  -- Always set the new active session and update the active timestamp (allow concurrent takeovers/switches)
+  -- Get existing session info and seat_limit
+  SELECT p.active_session_id, p.last_active_at, t.seat_limit 
+  INTO current_active_session, current_last_active, v_seat_limit 
+  FROM public.profiles p
+  LEFT JOIN public.teams t ON p.team_id = t.id
+  WHERE p.id = auth.uid();
+
+  -- If seat_limit = 1, reject the takeover if active within last 5 minutes
+  IF v_seat_limit IS NOT NULL AND v_seat_limit = 1 THEN
+    IF current_active_session IS NOT NULL 
+       AND current_active_session != p_session_id 
+       AND current_last_active IS NOT NULL 
+       AND current_last_active > (NOW() - INTERVAL '5 minutes') THEN
+      RETURN FALSE;
+    END IF;
+  END IF;
+
+  -- Otherwise, set the new active session and update the active timestamp
   UPDATE public.profiles 
   SET active_session_id = p_session_id,
       last_active_at = NOW()

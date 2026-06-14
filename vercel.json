@@ -23,6 +23,10 @@
     {
       "src": "public/assets/**",
       "use": "@vercel/static"
+    },
+    {
+      "src": "public/*.pdf",
+      "use": "@vercel/static"
     }
   ],
   "routes": [

@@ -981,11 +981,16 @@
 
             <!-- Past Audits Transaction History Section -->
             <section class="glass-card" id="history-panel" style="margin-top: 24px;">
-                <div class="card-header">
-                    <div class="card-icon cyan-bg"><i data-lucide="history"></i></div>
-                    <div style="display: flex; flex-direction: column; gap: 2px;">
-                        <h3>Transaction Audit History</h3>
-                        <p style="font-size: 11px; color: var(--text-muted);">Audits are automatically purged from the system after 90 days for data security.</p>
+                <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+                    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                        <div class="card-icon cyan-bg"><i data-lucide="history"></i></div>
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                            <h3>Transaction Audit History</h3>
+                            <p style="font-size: 11px; color: var(--text-muted);">Audits are automatically purged from the system after 90 days for data security.</p>
+                        </div>
+                    </div>
+                    <div style="width: 100%; max-width: 320px;">
+                        <input type="text" id="history-search-input" placeholder="Search by tenant name..." autocomplete="off" style="width: 100%; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: rgba(255,255,255,0.04); color: var(--text-primary); font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.2s, box-shadow 0.2s;" onfocus="this.style.borderColor='var(--color-purple)'; this.style.boxShadow='0 0 0 3px rgba(124,58,237,0.12)'" onblur="this.style.borderColor='var(--border-color)'; this.style.boxShadow='none'" />
                     </div>
                 </div>
                 <div class="history-list-wrapper">

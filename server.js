@@ -2314,6 +2314,70 @@ app.post('/api/cron/purge-old-audits', async (req, res) => {
     }
 });
 
+// Reset Phone Number Endpoint
+app.post('/api/reset-phone', requireAuth, async (req, res) => {
+    try {
+        if (!supabaseAdmin) {
+            return res.status(500).json({ error: "Database admin client not configured." });
+        }
+
+        const userId = req.user.id;
+
+        // 1. Get the user's current phone number from profiles
+        const { data: profile, error: profileError } = await supabaseAdmin
+            .from('profiles')
+            .select('phone')
+            .eq('id', userId)
+            .single();
+
+        if (profileError) {
+            console.error("[Reset Phone] Error fetching profile:", profileError);
+            return res.status(500).json({ error: "Failed to fetch user profile." });
+        }
+
+        const phoneNumber = profile?.phone;
+
+        // 2. Delete from verified_phones if phone exists
+        if (phoneNumber) {
+            const { error: deleteError } = await supabaseAdmin
+                .from('verified_phones')
+                .delete()
+                .eq('phone', phoneNumber);
+
+            if (deleteError) {
+                console.warn("[Reset Phone] Error deleting verified phone:", deleteError);
+            }
+        }
+
+        // 3. Clear phone from profiles table
+        const { error: updateError } = await supabaseAdmin
+            .from('profiles')
+            .update({ phone: null })
+            .eq('id', userId);
+
+        if (updateError) {
+            console.error("[Reset Phone] Error updating profile:", updateError);
+            return res.status(500).json({ error: "Failed to reset phone in profile." });
+        }
+
+        // 4. Update auth user metadata to clear phone
+        const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+            phone: '',
+            user_metadata: { phone: null }
+        });
+
+        if (authUpdateError) {
+            console.warn("[Reset Phone] Error updating auth metadata:", authUpdateError);
+        }
+
+        console.log(`[Reset Phone] Phone number reset successfully for user ${userId}`);
+        return res.json({ success: true, message: "Phone number has been reset successfully." });
+    } catch (err) {
+        console.error("[Reset Phone] Error:", err);
+        return res.status(500).json({ error: "Failed to reset phone number. Please try again." });
+    }
+});
+
 
 
 

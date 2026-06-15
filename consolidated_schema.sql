@@ -416,9 +416,9 @@ BEGIN
   IF plan_mode = 'hosted' THEN
     SELECT team_id INTO user_team_id FROM public.profiles WHERE id = target_user_id;
     IF user_team_id IS NOT NULL THEN
-      -- Refund as a new 30-day micro-grant
+      -- Refund as a non-expiring credit grant
       INSERT INTO public.team_credit_grants (team_id, amount_granted, amount_remaining, expires_at)
-      VALUES (user_team_id, pages_to_refund, pages_to_refund, NOW() + INTERVAL '30 days');
+      VALUES (user_team_id, pages_to_refund, pages_to_refund, NULL);
       
       -- Sync UI
       PERFORM public.recalculate_team_credits(user_team_id);
@@ -641,7 +641,7 @@ BEGIN
     SELECT team_id INTO v_user_team_id FROM public.profiles WHERE id = p_user_id;
     IF v_user_team_id IS NOT NULL THEN
       INSERT INTO public.team_credit_grants (team_id, amount_granted, amount_remaining, expires_at)
-      VALUES (v_user_team_id, v_credits_deducted, v_credits_deducted, NOW() + INTERVAL '30 days');
+      VALUES (v_user_team_id, v_credits_deducted, v_credits_deducted, NULL);
       PERFORM public.recalculate_team_credits(v_user_team_id);
     END IF;
   END IF;

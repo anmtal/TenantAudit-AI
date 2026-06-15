@@ -56,20 +56,21 @@ async function loadPdfJsIfNeeded() {
 }
 
 async function loadPdfExportLibraries() {
-    if (window.jspdf && window.html2canvas) return;
+    if (window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable) return;
     try {
-        console.log("[Dynamic Load] Loading PDF export libraries (jsPDF and html2canvas)...");
+        console.log("[Dynamic Load] Loading PDF export libraries (jsPDF and autoTable)...");
         const loadJsPdf = loadScript(
             'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
             'sha384-JcnsjUPPylna1s1fvi1u12X5qjY5OL56iySh75FdtrwhO/SWXgMjoVqcKyIIWOLk',
             'anonymous'
         );
-        const loadHtml2Canvas = loadScript(
-            'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
-            'sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H',
+        await loadJsPdf;
+        const loadAutoTable = loadScript(
+            'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js',
+            '',
             'anonymous'
         );
-        await Promise.all([loadJsPdf, loadHtml2Canvas]);
+        await loadAutoTable;
         console.log("[Dynamic Load] PDF export libraries loaded successfully.");
     } catch (err) {
         console.error("Failed to dynamically load PDF export libraries:", err);
@@ -373,11 +374,9 @@ function initializeApp() {
     const creditsCountDisplay = document.getElementById('credits-count-display');
     const creditsTopupTrigger = document.getElementById('credits-topup-trigger');
         
-    const creditsModal = null;
-    const closeCreditsBtn = null;
-    const creditsForm = null;
-    const creditsAmount = null;
-    const buyPlanHosted = null;
+    const creditsModal = document.getElementById('credits-modal');
+    const closeCreditsBtn = document.getElementById('close-credits-modal');
+    // creditsForm, creditsAmount, buyPlanHosted removed — checkout is handled by individual button click handlers
 
     // --- Pricing Toggles & Grid Logic ---
     const btnMonthly = document.getElementById('toggle-monthly');
@@ -611,14 +610,9 @@ function initializeApp() {
         creditsCountDisplay.textContent = displayVal;
         if (homeCreditsCount) homeCreditsCount.textContent = displayVal;
         
-        // Hide credits display if they have 0 credits (e.g. they haven't purchased anything)
-        if (hostedCredits === 0) {
-            if (creditsTopupTrigger) creditsTopupTrigger.style.display = 'none';
-            if (homeCreditsDisplay) homeCreditsDisplay.style.display = 'none';
-        } else {
-            if (creditsTopupTrigger) creditsTopupTrigger.style.display = 'inline-flex';
-            if (homeCreditsDisplay) homeCreditsDisplay.style.display = 'inline-flex';
-        }
+        // Always show credits display — even at 0 — so user can click to top up
+        if (creditsTopupTrigger) creditsTopupTrigger.style.display = 'inline-flex';
+        if (homeCreditsDisplay) homeCreditsDisplay.style.display = 'inline-flex';
 
         const giftTextEl = document.getElementById('welcome-credits-gift-text');
         if (giftTextEl) {
@@ -995,6 +989,51 @@ function initializeApp() {
             console.error("History fetch error:", e);
             historyLoadingMsg.style.display = 'none';
             historyEmptyMsg.style.display = 'block';
+        }
+
+        // Bind search filter (idempotent — only attaches listener once)
+        const searchInput = document.getElementById('history-search-input');
+        if (searchInput && !searchInput.dataset.bound) {
+            searchInput.dataset.bound = 'true';
+            searchInput.addEventListener('input', () => {
+                filterHistory(searchInput.value);
+            });
+        }
+        // Apply any pre-existing search filter
+        if (searchInput && searchInput.value) {
+            filterHistory(searchInput.value);
+        }
+    }
+
+    function filterHistory(query) {
+        const historyListContainer = document.getElementById('history-list-container');
+        if (!historyListContainer) return;
+        const cards = historyListContainer.querySelectorAll('.history-card');
+        const lowerQuery = (query || '').toLowerCase().trim();
+        let visibleCount = 0;
+        cards.forEach(card => {
+            const tenantEl = card.querySelector('.history-tenant');
+            const tenantName = tenantEl ? tenantEl.textContent.toLowerCase() : '';
+            if (!lowerQuery || tenantName.includes(lowerQuery)) {
+                card.style.display = '';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        // Show/hide a "no results" message
+        let noResultsMsg = historyListContainer.querySelector('.history-no-results');
+        if (visibleCount === 0 && cards.length > 0 && lowerQuery) {
+            if (!noResultsMsg) {
+                noResultsMsg = document.createElement('div');
+                noResultsMsg.className = 'history-no-results';
+                noResultsMsg.style.cssText = 'grid-column: 1 / -1; text-align: center; padding: 30px; color: var(--text-secondary); font-size: 14px;';
+                historyListContainer.appendChild(noResultsMsg);
+            }
+            noResultsMsg.textContent = `No audits found matching "${query}"`;
+            noResultsMsg.style.display = 'block';
+        } else if (noResultsMsg) {
+            noResultsMsg.style.display = 'none';
         }
     }
 
@@ -1974,77 +2013,6 @@ function initializeApp() {
         });
     }
 
-    if (creditsForm) {
-        creditsForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const amount = parseInt(creditsAmount.value, 10);
-            if (isNaN(amount) || amount <= 0) return;
-
-            try {
-                if (supabase) {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    if (!user) throw new Error("No authenticated user found.");
-
-                    // Determine price and package name based on amount and plan type
-                    let price = 49.00;
-                    let packageName = "Starter Package";
-                    let checkoutAmount = amount;
-                    
-                    if (amount === 100) { price = 49.00; packageName = "Starter Package"; }
-                    else if (amount === 500) { price = 149.00; packageName = "Strip Center Package"; }
-                    else if (amount === 1500) { price = 399.00; packageName = "Neighborhood Center Package"; }
-                    else if (amount === 8000) { price = 999.00; packageName = "Annual Package"; }
-                    else if (amount === 20000) { price = 2499.00; packageName = "Enterprise Package"; }
-
-                    creditsModal.classList.remove('active');
-                    showLoader("Connecting to payment checkout...");
-                    const { data: { session } } = await supabase.auth.getSession();
-
-                    const response = await fetch('/api/create-checkout-session', {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${session.access_token}`
-                        },
-                        body: JSON.stringify({
-                            amount: checkoutAmount,
-                            planType: 'hosted',
-                            userId: user.id,
-                            price,
-                            packageName,
-                            seatCount: 1,
-                            isSubscription: false
-                        })
-                    });
-
-                    const sessionData = await response.json();
-                    hideLoader();
-
-                    if (sessionData.error) throw new Error(sessionData.error);
-
-                    if (sessionData.url) {
-                        // Redirect to Stripe checkout page
-                        window.location.href = sessionData.url;
-                    } else {
-                        throw new Error("Stripe checkout session creation failed. No URL returned.");
-                    }
-                } else {
-                    const isAnnual = (amount === 8000 || amount === 20000);
-                    hostedCredits = (isAnnual ? 0 : hostedCredits) + amount;
-                    localStorage.setItem('ta_hosted_credits', hostedCredits);
-                    localStorage.setItem('ta_user_plan_type', 'hosted');
-                    
-                    activePlanType = 'hosted';
-                    updateCreditsDisplay();
-                    
-                    creditsModal.classList.remove('active');
-                    showToast(`🎉 Offline Demo Mode: Successfully activated your HOSTED plan with +${amount} audits!`, 'success');
-                }
-            } catch (err) {
-                showToast(`🚫 Audit update failed: ${err.message}`, 'error');
-            }
-        });
-    }
 
     // --- Load Saved Settings ---
     function loadSettings() {
@@ -3388,6 +3356,14 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
         }
 
+        // Toggle Sample / Demo Mode Warning Banner
+        const sampleBanner = document.getElementById('sample-demo-warning-banner');
+        if (sampleBanner) {
+            const isSampleAudit = (auditData.metadata?.leaseFile === 'sample_lease.pdf' && auditData.metadata?.estoppelFile === 'sample_estoppel.pdf')
+                || auditData.isSample || auditData.metadata?.isSample;
+            sampleBanner.style.display = isSampleAudit ? 'flex' : 'none';
+        }
+
         // Toggle Routing Fallback Warning Banner
         const routingBanner = document.getElementById('routing-warning-banner');
         if (routingBanner) {
@@ -3578,7 +3554,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         });
     }
 
-    // --- Export Audit to PDF report ---
+    // --- Export Audit to PDF report (Native jsPDF text + autoTable) ---
     if (exportPdfBtn) {
         exportPdfBtn.addEventListener('click', async () => {
             if (!auditData) return;
@@ -3589,154 +3565,255 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 await loadPdfExportLibraries();
                 const { jsPDF } = window.jspdf;
                 
-                // Create a temporary container for rendering
-                const tempDiv = document.createElement('div');
-                tempDiv.style.position = 'fixed';
-                tempDiv.style.left = '200vw'; // Hide far off-screen safely for html2canvas
-                tempDiv.style.top = '0';
-                tempDiv.style.width = '700px'; // fixed width for consistent scaling
-                tempDiv.style.backgroundColor = '#ffffff';
-                tempDiv.style.color = '#1f2937';
-                tempDiv.style.padding = '30px';
-                tempDiv.style.fontFamily = "'Outfit', 'Helvetica Neue', Helvetica, Arial, sans-serif";
-                tempDiv.style.boxSizing = 'border-box';
-                
-                // Inject the HTML report content
-                tempDiv.innerHTML = `
-                    <div style="border-bottom: 2px solid #e5e7eb; padding-bottom: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;">
-                        <div style="flex: 1;">
-                            <h1 style="font-size: 22px; font-weight: 800; color: #7c3aed; margin: 0; font-family: 'Outfit', sans-serif;">LeaseAlign AI</h1>
-                            <p style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #6b7280; margin: 2px 0 0 0;">Commercial Lease & Estoppel Due Diligence</p>
-                        </div>
-                        <div style="text-align: right; flex: 1;">
-                            <h2 style="font-size: 16px; font-weight: 700; margin: 0; color: #111827; font-family: 'Outfit', sans-serif;">Transaction Due Diligence Report</h2>
-                            <p style="font-size: 11px; color: #6b7280; margin: 4px 0 0 0;">Generated: ${new Date().toLocaleString()}</p>
-                        </div>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 25px; background: #f9fafb; padding: 14px; border-radius: 8px; border: 1px solid #f3f4f6; font-size: 12px;">
-                        <div><strong style="color: #374151;">Tenant Name:</strong> ${escapeHtml(auditData.metadata.tenantName)}</div>
-                        <div style="margin-top: 4px;"><strong style="color: #374151;">Source Lease File:</strong> ${escapeHtml(auditData.metadata.leaseFile)}</div>
-                        <div style="margin-top: 4px;"><strong style="color: #374151;">Source Estoppel File:</strong> ${escapeHtml(auditData.metadata.estoppelFile)}</div>
-                    </div>
-
-                    <h3 style="font-size: 14px; font-weight: 700; color: #111827; margin: 0 0 12px 0; border-left: 4px solid #7c3aed; padding-left: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Outfit', sans-serif;">Executive Audit Summary</h3>
-                    <div style="display: flex; gap: 10px; margin-bottom: 25px; width: 100%;">
-                        <div style="border: 1px solid #d8b4fe; border-radius: 8px; padding: 12px 8px; text-align: center; background: #faf5ff; flex: 1; min-width: 0;">
-                            <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; margin-bottom: 4px;">Match Score</div>
-                            <div style="font-size: 16px; font-weight: 800; color: #7c3aed;">${auditData.summary.matchScore}%</div>
-                        </div>
-                        <div style="border: 1px solid #fca5a5; border-radius: 8px; padding: 12px 8px; text-align: center; background: #fef2f2; flex: 1; min-width: 0;">
-                            <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; margin-bottom: 4px;">Red Flags</div>
-                            <div style="font-size: 16px; font-weight: 800; color: #dc2626;">${auditData.summary.redFlags}</div>
-                        </div>
-                        <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 8px; text-align: center; background: #ffffff; flex: 1; min-width: 0;">
-                            <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; margin-bottom: 4px;">Monthly Rent</div>
-                            <div style="font-size: 16px; font-weight: 800; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(auditData.summary.monthlyRent)}</div>
-                        </div>
-                        <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 8px; text-align: center; background: #ffffff; flex: 1; min-width: 0;">
-                            <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; margin-bottom: 4px;">Premises SF</div>
-                            <div style="font-size: 16px; font-weight: 800; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(auditData.summary.premisesSf)}</div>
-                        </div>
-                        <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 8px; text-align: center; background: #ffffff; flex: 1; min-width: 0;">
-                            <div style="font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280; font-weight: 600; margin-bottom: 4px;">Expiry Date</div>
-                            <div style="font-size: 16px; font-weight: 800; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(auditData.summary.expiryDate)}</div>
-                        </div>
-                    </div>
-
-                    <h3 style="font-size: 14px; font-weight: 700; color: #111827; margin: 25px 0 12px 0; border-left: 4px solid #7c3aed; padding-left: 8px; text-transform: uppercase; letter-spacing: 0.05em; font-family: 'Outfit', sans-serif;">Lease vs. Estoppel Comparison Matrix</h3>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 25px;">
-                        <thead>
-                            <tr style="background: #f3f4f6;">
-                                <th style="width: 20%; text-align: left; padding: 8px 10px; border: 1px solid #e5e7eb; font-weight: 600; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; color: #374151;">Term Audited</th>
-                                <th style="width: 33%; text-align: left; padding: 8px 10px; border: 1px solid #e5e7eb; font-weight: 600; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; color: #374151;">Lease Agreement Value & Citation</th>
-                                <th style="width: 33%; text-align: left; padding: 8px 10px; border: 1px solid #e5e7eb; font-weight: 600; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; color: #374151;">Estoppel Certificate Value & Citation</th>
-                                <th style="width: 14%; text-align: center; padding: 8px 10px; border: 1px solid #e5e7eb; font-weight: 600; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; color: #374151;">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${auditData.records.map(r => {
-                                let badgeBg = '#fee2e2';
-                                let badgeColor = '#991b1b';
-                                let statusText = 'Mismatch';
-                                const rStatus = (r.status || '').toLowerCase();
-                                if (rStatus === 'match') {
-                                    badgeBg = '#d1fae5';
-                                    badgeColor = '#065f46';
-                                    statusText = 'Verified';
-                                } else if (rStatus === 'warning') {
-                                    badgeBg = '#ffedd5';
-                                    badgeColor = '#9a3412';
-                                    statusText = 'Warning';
-                                }
-                                return `
-                                <tr>
-                                    <td style="font-weight: 600; padding: 10px; border: 1px solid #e5e7eb; vertical-align: top; color: #111827;">${escapeHtml(r.term)}</td>
-                                    <td style="padding: 10px; border: 1px solid #e5e7eb; vertical-align: top;">
-                                        <div style="font-weight: 600; color: #1f2937;">${escapeHtml(r.leaseVal)}</div>
-                                        ${(r.leaseQuote || r.leaseCite) ? `<div style="font-size: 9px; color: #4b5563; margin-top: 5px; padding-top: 5px; border-top: 1px dashed #e5e7eb; font-style: italic; line-height: 1.3;">Quote: "${escapeHtml(r.leaseQuote || r.leaseCite)}"</div>` : ''}
-                                    </td>
-                                    <td style="padding: 10px; border: 1px solid #e5e7eb; vertical-align: top;">
-                                        <div style="font-weight: 600; color: #1f2937;">${escapeHtml(r.estoppelVal)}</div>
-                                        ${(r.estoppelQuote || r.estoppelCite) ? `<div style="font-size: 9px; color: #4b5563; margin-top: 5px; padding-top: 5px; border-top: 1px dashed #e5e7eb; font-style: italic; line-height: 1.3;">Quote: "${escapeHtml(r.estoppelQuote || r.estoppelCite)}"</div>` : ''}
-                                    </td>
-                                    <td style="text-align: center; vertical-align: middle; padding: 10px; border: 1px solid #e5e7eb;">
-                                        <span style="font-size: 8px; font-weight: 700; text-transform: uppercase; padding: 3px 6px; border-radius: 4px; display: inline-block; background: ${badgeBg}; color: ${badgeColor}; font-family: sans-serif;">${statusText}</span>
-                                    </td>
-                                </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                    </table>
-
-                    <div style="margin-top: 30px; border-top: 1px dashed #d1d5db; padding-top: 12px; font-size: 9px; color: #6b7280; text-align: center; line-height: 1.4; font-style: italic;">
-                        ⚠️ <strong>Legal Disclaimer:</strong> LeaseAlign AI is an LLM-assisted audit utility. All comparison results are for informational purposes only and must be verified by qualified legal counsel prior to closing.
-                    </div>
-                    <div style="text-align: center; font-size: 10px; color: #9ca3af; margin-top: 12px; border-top: 1px solid #e5e7eb; padding-top: 12px;">
-                        <p>CONFIDENTIAL — Prepared for B2B Transaction Due Diligence — Powered by LeaseAlign AI (leasealign.io)</p>
-                    </div>
-                `;
-                
-                document.body.appendChild(tempDiv);
-                
-                // Let jsPDF render the HTML element
                 const doc = new jsPDF('p', 'pt', 'a4');
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
+                const margin = 40;
+                const contentWidth = pageWidth - margin * 2;
+                let y = margin;
                 const pdfName = `LeaseAlign_AI_Report_${auditData.metadata.tenantName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-                
-                // Rasterize to image using html2canvas to guarantee compatibility with Acrobat
-                const canvas = await html2canvas(tempDiv, { scale: 2, useCORS: true, logging: false });
-                const imgData = canvas.toDataURL('image/jpeg', 0.95);
-                
-                const pdfWidth = doc.internal.pageSize.getWidth();
-                const pdfHeight = doc.internal.pageSize.getHeight();
-                const margin = 30;
-                const availableWidth = pdfWidth - (margin * 2);
-                
-                const imgProps = doc.getImageProperties(imgData);
-                const calculatedHeight = (imgProps.height * availableWidth) / imgProps.width;
-                
-                let heightLeft = calculatedHeight;
-                let position = margin;
-                
-                doc.addImage(imgData, 'JPEG', margin, position, availableWidth, calculatedHeight);
-                heightLeft -= (pdfHeight - margin * 2);
-                
-                while (heightLeft > 0) {
-                    position = heightLeft - calculatedHeight;
-                    doc.addPage();
-                    doc.addImage(imgData, 'JPEG', margin, position, availableWidth, calculatedHeight);
-                    heightLeft -= pdfHeight;
+
+                // --- Helper: add page footer on every page ---
+                const addPageFooter = (pageDoc) => {
+                    const totalPages = pageDoc.internal.getNumberOfPages();
+                    for (let i = 1; i <= totalPages; i++) {
+                        pageDoc.setPage(i);
+                        pageDoc.setFontSize(7);
+                        pageDoc.setTextColor(156, 163, 175);
+                        pageDoc.text(`CONFIDENTIAL — Prepared for B2B Transaction Due Diligence — Powered by LeaseAlign AI (leasealign.io)`, pageWidth / 2, pageHeight - 20, { align: 'center' });
+                        pageDoc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 20, { align: 'right' });
+                    }
+                };
+
+                // --- Helper: check if we need a new page ---
+                const ensureSpace = (needed) => {
+                    if (y + needed > pageHeight - 50) {
+                        doc.addPage();
+                        y = margin;
+                    }
+                };
+
+                // ============ HEADER ============
+                doc.setFontSize(20);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(124, 58, 237); // Purple
+                doc.text('LeaseAlign AI', margin, y + 18);
+
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(107, 114, 128);
+                doc.text('COMMERCIAL LEASE & ESTOPPEL DUE DILIGENCE', margin, y + 30);
+
+                doc.setFontSize(14);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(17, 24, 39);
+                doc.text('Transaction Due Diligence Report', pageWidth - margin, y + 18, { align: 'right' });
+
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(107, 114, 128);
+                doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth - margin, y + 30, { align: 'right' });
+
+                y += 40;
+                doc.setDrawColor(229, 231, 235);
+                doc.setLineWidth(1.5);
+                doc.line(margin, y, pageWidth - margin, y);
+                y += 20;
+
+                // ============ METADATA BOX ============
+                doc.setFillColor(249, 250, 251);
+                doc.setDrawColor(243, 244, 246);
+                doc.roundedRect(margin, y, contentWidth, 56, 4, 4, 'FD');
+
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(55, 65, 81);
+                doc.text('Tenant Name:', margin + 10, y + 16);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(31, 41, 55);
+                doc.text(auditData.metadata.tenantName || 'Unknown', margin + 85, y + 16);
+
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(55, 65, 81);
+                doc.text('Source Lease File:', margin + 10, y + 32);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(31, 41, 55);
+                doc.text(auditData.metadata.leaseFile || 'N/A', margin + 105, y + 32);
+
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(55, 65, 81);
+                doc.text('Source Estoppel File:', margin + 10, y + 48);
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(31, 41, 55);
+                doc.text(auditData.metadata.estoppelFile || 'N/A', margin + 118, y + 48);
+
+                y += 72;
+
+                // ============ KPI SECTION HEADING ============
+                doc.setFillColor(124, 58, 237);
+                doc.rect(margin, y, 4, 14, 'F');
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(17, 24, 39);
+                doc.text('EXECUTIVE AUDIT SUMMARY', margin + 10, y + 11);
+                y += 26;
+
+                // ============ KPI CARDS (5 boxes in a row) ============
+                const kpis = [
+                    { label: 'Match Score', value: `${auditData.summary.matchScore}%`, borderColor: [216, 180, 254], bgColor: [250, 245, 255], valueColor: [124, 58, 237] },
+                    { label: 'Red Flags', value: `${auditData.summary.redFlags}`, borderColor: [252, 165, 165], bgColor: [254, 242, 242], valueColor: [220, 38, 38] },
+                    { label: 'Monthly Rent', value: auditData.summary.monthlyRent || 'N/A', borderColor: [229, 231, 235], bgColor: [255, 255, 255], valueColor: [17, 24, 39] },
+                    { label: 'Premises SF', value: auditData.summary.premisesSf || 'N/A', borderColor: [229, 231, 235], bgColor: [255, 255, 255], valueColor: [17, 24, 39] },
+                    { label: 'Expiry Date', value: auditData.summary.expiryDate || 'N/A', borderColor: [229, 231, 235], bgColor: [255, 255, 255], valueColor: [17, 24, 39] }
+                ];
+                const cardW = (contentWidth - 4 * 8) / 5;
+                const cardH = 46;
+                kpis.forEach((kpi, i) => {
+                    const cx = margin + i * (cardW + 8);
+                    doc.setDrawColor(...kpi.borderColor);
+                    doc.setFillColor(...kpi.bgColor);
+                    doc.roundedRect(cx, y, cardW, cardH, 4, 4, 'FD');
+
+                    doc.setFontSize(6.5);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(107, 114, 128);
+                    doc.text(kpi.label.toUpperCase(), cx + cardW / 2, y + 14, { align: 'center' });
+
+                    doc.setFontSize(12);
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(...kpi.valueColor);
+                    // Truncate long values
+                    let val = String(kpi.value);
+                    if (val.length > 14) val = val.substring(0, 13) + '…';
+                    doc.text(val, cx + cardW / 2, y + 34, { align: 'center' });
+                });
+                y += cardH + 20;
+
+                // ============ MATRIX TABLE HEADING ============
+                ensureSpace(40);
+                doc.setFillColor(124, 58, 237);
+                doc.rect(margin, y, 4, 14, 'F');
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(17, 24, 39);
+                doc.text('LEASE VS. ESTOPPEL COMPARISON MATRIX', margin + 10, y + 11);
+                y += 22;
+
+                // ============ MATRIX TABLE via autoTable ============
+                const tableBody = auditData.records.map(r => {
+                    const leaseText = r.leaseVal + ((r.leaseQuote || r.leaseCite) ? `\nQuote: "${r.leaseQuote || r.leaseCite}"` : '');
+                    const estoppelText = r.estoppelVal + ((r.estoppelQuote || r.estoppelCite) ? `\nQuote: "${r.estoppelQuote || r.estoppelCite}"` : '');
+                    const statusLower = (r.status || '').toLowerCase();
+                    let statusText = 'Mismatch';
+                    if (statusLower === 'match') statusText = 'Verified';
+                    else if (statusLower === 'warning') statusText = 'Warning';
+                    return [r.term, leaseText, estoppelText, statusText];
+                });
+
+                doc.autoTable({
+                    startY: y,
+                    margin: { left: margin, right: margin },
+                    head: [['Term Audited', 'Lease Agreement Value & Citation', 'Estoppel Certificate Value & Citation', 'Status']],
+                    body: tableBody,
+                    styles: {
+                        fontSize: 8,
+                        cellPadding: 6,
+                        lineColor: [229, 231, 235],
+                        lineWidth: 0.5,
+                        textColor: [31, 41, 55],
+                        valign: 'top',
+                        overflow: 'linebreak'
+                    },
+                    headStyles: {
+                        fillColor: [243, 244, 246],
+                        textColor: [55, 65, 81],
+                        fontStyle: 'bold',
+                        fontSize: 7,
+                        cellPadding: 6
+                    },
+                    columnStyles: {
+                        0: { cellWidth: contentWidth * 0.17, fontStyle: 'bold' },
+                        1: { cellWidth: contentWidth * 0.32 },
+                        2: { cellWidth: contentWidth * 0.32 },
+                        3: { cellWidth: contentWidth * 0.19, halign: 'center', valign: 'middle' }
+                    },
+                    didDrawCell: (data) => {
+                        // Draw colored pill badges in the Status column
+                        if (data.section === 'body' && data.column.index === 3) {
+                            const cellText = (data.cell.raw || '').toString();
+                            let pillBg, pillColor;
+                            if (cellText === 'Verified') {
+                                pillBg = [209, 250, 229]; pillColor = [6, 95, 70];
+                            } else if (cellText === 'Warning') {
+                                pillBg = [255, 237, 213]; pillColor = [154, 52, 18];
+                            } else {
+                                pillBg = [254, 226, 226]; pillColor = [153, 27, 27];
+                            }
+                            // Clear the default text
+                            const cellX = data.cell.x;
+                            const cellY = data.cell.y;
+                            const cellW = data.cell.width;
+                            const cellH = data.cell.height;
+                            doc.setFillColor(255, 255, 255);
+                            doc.rect(cellX + 0.5, cellY + 0.5, cellW - 1, cellH - 1, 'F');
+
+                            // Draw pill
+                            const pillW = 48;
+                            const pillH = 14;
+                            const pillX = cellX + (cellW - pillW) / 2;
+                            const pillY = cellY + (cellH - pillH) / 2;
+                            doc.setFillColor(...pillBg);
+                            doc.roundedRect(pillX, pillY, pillW, pillH, 3, 3, 'F');
+                            doc.setFontSize(6.5);
+                            doc.setFont('helvetica', 'bold');
+                            doc.setTextColor(...pillColor);
+                            doc.text(cellText.toUpperCase(), pillX + pillW / 2, pillY + pillH / 2 + 2.5, { align: 'center' });
+                        }
+                    },
+                    didDrawPage: () => {
+                        // Page header line on continuation pages
+                        if (doc.internal.getCurrentPageInfo().pageNumber > 1) {
+                            doc.setFontSize(7);
+                            doc.setTextColor(156, 163, 175);
+                            doc.text('LeaseAlign AI — Transaction Due Diligence Report (continued)', margin, 25);
+                            doc.setDrawColor(229, 231, 235);
+                            doc.setLineWidth(0.5);
+                            doc.line(margin, 30, pageWidth - margin, 30);
+                        }
+                    }
+                });
+
+                y = doc.lastAutoTable.finalY + 25;
+
+                // ============ LEGAL DISCLAIMER ============
+                ensureSpace(50);
+                doc.setDrawColor(209, 213, 219);
+                doc.setLineWidth(0.5);
+                const dashLen = 4;
+                for (let dx = margin; dx < pageWidth - margin; dx += dashLen * 2) {
+                    doc.line(dx, y, Math.min(dx + dashLen, pageWidth - margin), y);
                 }
+                y += 10;
+                doc.setFontSize(7);
+                doc.setFont('helvetica', 'italic');
+                doc.setTextColor(107, 114, 128);
+                const disclaimerText = 'Legal Disclaimer: LeaseAlign AI is an LLM-assisted audit utility. All comparison results are for informational purposes only and must be verified by qualified legal counsel prior to closing.';
+                const disclaimerLines = doc.splitTextToSize(disclaimerText, contentWidth - 20);
+                doc.text(disclaimerLines, pageWidth / 2, y, { align: 'center' });
+
+                // ============ PAGE FOOTERS ============
+                addPageFooter(doc);
                 
                 doc.save(pdfName);
-                document.body.removeChild(tempDiv);
                 hideLoader();
             } catch (err) {
                 console.error("[PDF Export Error] Failed to generate PDF via jsPDF:", err);
+                hideLoader();
                 showToast("❌ Failed to generate PDF report. Please try again.", 'error');
             }
         });
     }
+
 
     // --- Loader Controls ---
     let loaderInterval = null;

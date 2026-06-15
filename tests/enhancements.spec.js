@@ -270,8 +270,9 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     await expect(page.locator('#dashboard-view')).toBeVisible();
     await expect(page.locator('#meta-tenant-name')).toHaveText('Starbucks Corporation');
 
-    // Verify no credits show in the dashboard (credits pill is hidden) because they haven't purchased anything
-    await expect(page.locator('#credits-topup-trigger')).toBeHidden();
+    // Verify credits pill is visible (even at 0 balance) and shows the empty/red state class
+    await expect(page.locator('#credits-topup-trigger')).toBeVisible();
+    await expect(page.locator('#credits-topup-trigger')).toHaveClass(/credits-empty/);
   });
 
   test('should require a valid x-transaction-id header on /api/audit and /api/compare', async ({ request }) => {

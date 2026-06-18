@@ -175,10 +175,14 @@ const smsLimiter = rateLimit({
 
 const verifyOtpLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // Limit each IP to 5 verification attempts per 15 minutes
+    max: 5, // Limit to 5 attempts per 15 minutes
+    keyGenerator: (req) => {
+        return req.body.phoneNumber || req.ip;
+    },
     message: { error: "Too many OTP verification attempts. Please try again after 15 minutes." },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    validate: { keyGeneratorIpFallback: false }
 });
 
 
@@ -870,7 +874,8 @@ app.post('/api/send-otp', smsLimiter, async (req, res) => {
                 .maybeSingle();
 
             if (existingProfile) {
-                return res.status(400).json({ error: "This phone number is already associated with another account. Please use a different phone number." });
+                console.log(`[Send OTP] Phone number ${phoneNumber} already registered. Returning mock success to prevent enumeration.`);
+                return res.json({ success: true, message: "If this number is available, a code has been sent." });
             }
         }
 
@@ -948,6 +953,61 @@ app.post('/api/verify-otp', verifyOtpLimiter, async (req, res) => {
     } catch (err) {
         console.error("[Twilio Verify Check Error]", err);
         return res.status(500).json({ error: "Failed to verify SMS code: " + err.message });
+    }
+});
+
+
+// Endpoint to manually trigger welcome credit grant check (fallback path)
+app.post('/api/grant-welcome-credit', requireAuth, async (req, res) => {
+    try {
+        if (!supabaseAdmin) {
+            return res.status(500).json({ error: "Database admin client not configured." });
+        }
+
+        const userId = req.user.id;
+
+        // 1. Fetch user profile
+        const { data: profile, error: selectErr } = await supabaseAdmin
+            .from('profiles')
+            .select('free_credit_granted, phone')
+            .eq('id', userId)
+            .single();
+
+        if (selectErr || !profile) {
+            return res.status(404).json({ error: "Profile not found." });
+        }
+
+        if (profile.free_credit_granted) {
+            return res.json({ success: true, granted: false, message: "Welcome credit already granted." });
+        }
+
+        if (!profile.phone) {
+            return res.status(400).json({ error: "Phone number is not set on profile." });
+        }
+
+        // 2. Verify phone exists in verified_phones
+        const { data: verifiedPhone, error: verifiedPhoneErr } = await supabaseAdmin
+            .from('verified_phones')
+            .select('phone')
+            .eq('phone', profile.phone)
+            .maybeSingle();
+
+        if (verifiedPhoneErr || !verifiedPhone) {
+            return res.status(400).json({ error: "Phone number is not verified." });
+        }
+
+        // 3. Grant welcome credit
+        const { error: grantErr } = await supabaseAdmin.rpc('grant_welcome_credit', { p_user_id: userId });
+        if (grantErr) {
+            console.error("[Grant Welcome Credit Fallback] RPC error:", grantErr);
+            return res.status(500).json({ error: "Failed to grant welcome credit." });
+        }
+
+        console.log(`[Grant Welcome Credit Fallback] Successfully granted welcome credit to user ${userId}`);
+        return res.json({ success: true, granted: true, message: "Welcome credit granted successfully." });
+    } catch (err) {
+        console.error("[Grant Welcome Credit Fallback] Error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
     }
 });
 

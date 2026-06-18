@@ -134,6 +134,8 @@ CREATE TABLE IF NOT EXISTS public.verified_phones (
 );
 
 ALTER TABLE public.verified_phones ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "No direct access" ON public.verified_phones;
+CREATE POLICY "No direct access" ON public.verified_phones FOR ALL USING (false);
 
 -- --------------------------------------------------------------------
 -- 5. User Signup Trigger (Auto-Profile & Team Creation) & Twilio Welcome Gift
@@ -181,14 +183,13 @@ BEGIN
     -- Assign to the invited team, delete the invitation
     DELETE FROM public.team_invitations WHERE LOWER(email) = LOWER(new.email);
     
-    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id, phone, free_credit_granted)
+    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id, phone)
     VALUES (
       new.id, new.email, 0,
       COALESCE(new.raw_user_meta_data->>'first_name', ''),
       COALESCE(new.raw_user_meta_data->>'last_name', ''),
       pending_team_id,
-      new.raw_user_meta_data->>'phone',
-      FALSE
+      new.raw_user_meta_data->>'phone'
     )
     ON CONFLICT (id) DO UPDATE 
     SET email = EXCLUDED.email,
@@ -202,14 +203,13 @@ BEGIN
     VALUES (COALESCE(new.raw_user_meta_data->>'first_name', 'Personal') || '''s Team', new.id, 0, 1)
     RETURNING id INTO new_team_id;
 
-    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id, phone, free_credit_granted)
+    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id, phone)
     VALUES (
       new.id, new.email, 0,
       COALESCE(new.raw_user_meta_data->>'first_name', ''),
       COALESCE(new.raw_user_meta_data->>'last_name', ''),
       new_team_id,
-      new.raw_user_meta_data->>'phone',
-      FALSE
+      new.raw_user_meta_data->>'phone'
     )
     ON CONFLICT (id) DO UPDATE 
     SET email = EXCLUDED.email,
@@ -680,4 +680,27 @@ BEGIN
   END IF;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- --------------------------------------------------------------------
+-- 10. SQL Backfill Trigger: Retroactively Grant Welcome Credits
+-- --------------------------------------------------------------------
+DO $$
+DECLARE
+  prof RECORD;
+BEGIN
+  FOR prof IN 
+    SELECT id FROM public.profiles 
+    WHERE free_credit_granted = FALSE 
+      AND phone IS NOT NULL 
+      AND phone IN (SELECT phone FROM public.verified_phones)
+  LOOP
+    BEGIN
+      PERFORM public.grant_welcome_credit(prof.id);
+      RAISE NOTICE 'Granted welcome credit to user %', prof.id;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'Failed to grant welcome credit to user %: %', prof.id, SQLERRM;
+    END;
+  END LOOP;
+END $$;
+
 

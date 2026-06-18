@@ -79,6 +79,7 @@ async function loadPdfExportLibraries() {
 }
 
 function initializeApp() {
+    let pendingSignup = null;
 
     // --- Toast Notifications ---
     window.createIconsWithA11y = function() {
@@ -652,7 +653,8 @@ function initializeApp() {
                 }
             } else {
                 giftTextEl.style.color = 'var(--color-emerald)';
-                giftTextEl.innerHTML = `🎁 You have ${hostedCredits} audits remaining.`;
+                const suffix = hostedCredits === 1 ? 'audit' : 'audits';
+                giftTextEl.innerHTML = `🎁 You have ${hostedCredits} ${suffix} remaining.`;
             }
         }
 
@@ -803,7 +805,7 @@ function initializeApp() {
             let profileData = null;
             const { data, error } = await supabase
                 .from('profiles')
-                .select('credits, plan_tier, team_id, teams(id, audit_credits, plan_tier)')
+                .select('credits, plan_tier, team_id, free_credit_granted, teams(id, audit_credits, plan_tier)')
                 .eq('id', user.id)
                 .single();
                 
@@ -881,6 +883,42 @@ function initializeApp() {
             
             // Check for pending team invitations (non-blocking)
             checkPendingInvitations(session.user.email);
+            
+            // Fallback welcome credit grant trigger (Bug 1 helper)
+            if (profileData && !profileData.free_credit_granted && session.user.email_confirmed_at) {
+                const isOffline = !supabase || 
+                                  (supabase.supabaseUrl && supabase.supabaseUrl.includes('mock.supabase.co')) || 
+                                  localStorage.getItem('ta_logged_in') === 'true';
+                if (!isOffline) {
+                    try {
+                        const fallbackRes = await fetch('/api/grant-welcome-credit', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${session.access_token}`
+                            }
+                        });
+                        if (fallbackRes.ok) {
+                            const resData = await fallbackRes.json();
+                            if (resData.granted) {
+                                console.log("[Welcome Credit] Welcome credit granted via fallback API endpoint.");
+                                // Reload balance
+                                const { data: freshTeam } = await supabase
+                                    .from('teams')
+                                    .select('audit_credits')
+                                    .eq('id', profileData.team_id || (profileData.teams && profileData.teams.id))
+                                    .single();
+                                if (freshTeam) {
+                                    hostedCredits = freshTeam.audit_credits;
+                                    if (profileData.teams) profileData.teams.audit_credits = freshTeam.audit_credits;
+                                }
+                            }
+                        }
+                    } catch (fallbackErr) {
+                        console.warn("Welcome credit fallback request failed:", fallbackErr);
+                    }
+                }
+            }
             
             updateCreditsDisplay();
         } catch (e) {
@@ -1822,8 +1860,8 @@ function initializeApp() {
                         phoneOtpModal.classList.add('active');
                         startOtpResendTimer();
 
-                        // Save current registration details temporarily on window object
-                        window.pendingSignup = {
+                        // Save current registration details temporarily in closure
+                        pendingSignup = {
                             email,
                             password,
                             firstName: registerFirstName ? registerFirstName.value.trim() : '',
@@ -1901,7 +1939,7 @@ function initializeApp() {
     if (btnOtpCancel) {
         btnOtpCancel.addEventListener('click', () => {
             phoneOtpModal.classList.remove('active');
-            window.pendingSignup = null;
+            pendingSignup = null;
             if (otpTimerInterval) {
                 clearInterval(otpTimerInterval);
                 otpTimerInterval = null;
@@ -1911,7 +1949,7 @@ function initializeApp() {
 
     if (btnOtpResend) {
         btnOtpResend.addEventListener('click', async () => {
-            const pending = window.pendingSignup;
+            const pending = pendingSignup;
             if (!pending || !pending.phone) {
                 showToast("Session expired. Please try registering again.", "error");
                 return;
@@ -1949,7 +1987,7 @@ function initializeApp() {
                 return;
             }
 
-            const pending = window.pendingSignup;
+            const pending = pendingSignup;
             if (!pending) {
                 otpErrorMsg.textContent = 'Session expired. Please close this modal and try again.';
                 otpErrorMsg.style.display = 'block';

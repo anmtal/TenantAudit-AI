@@ -155,7 +155,8 @@ const expensiveApiLimiter = rateLimit({
     },
     message: { error: 'Too many expensive API requests, please try again after 10 minutes.' },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    validate: { keyGeneratorIpFallback: false }
 });
 
 function setExpensiveRateLimitKey(req, res, next) {

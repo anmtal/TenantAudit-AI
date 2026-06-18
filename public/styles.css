@@ -2464,4 +2464,78 @@ select option {
     }
 }
 
+/* OTP Resend Cooldown Styling */
+.otp-resend-container {
+    margin-top: 16px;
+    text-align: center;
+}
+.btn-otp-resend {
+    background: none;
+    border: none;
+    color: var(--color-purple);
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+.btn-otp-resend:hover:not(:disabled) {
+    color: #a855f7;
+}
+.btn-otp-resend:disabled {
+    color: var(--text-secondary);
+    cursor: not-allowed;
+    text-decoration: none;
+}
+
+/* Phone validation hint styling */
+.phone-validation-hint {
+    color: var(--color-orange, #f97316);
+    font-size: 12px;
+    margin-top: 6px;
+    display: none;
+}
+
+/* Disclaimer Don't Show Margin */
+.disclaimer-dont-show-wrapper {
+    margin-top: 12px;
+}
+
+/* Tablet & Mobile Dashboard Responsiveness Upgrades */
+@media (max-width: 1024px) {
+    .app-container {
+        padding: 24px 16px !important;
+        gap: 24px !important;
+    }
+    .stats-summary-grid {
+        grid-template-columns: 1fr !important;
+        gap: 16px !important;
+    }
+}
+@media (max-width: 768px) {
+    .brand {
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 8px !important;
+    }
+    .brand-text {
+        text-align: center !important;
+    }
+    .app-header {
+        flex-direction: column !important;
+        gap: 16px !important;
+        text-align: center !important;
+    }
+    .header-actions {
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        width: 100% !important;
+        gap: 8px !important;
+    }
+    .credits-pill-btn, .user-email-pill, .logout-btn, .settings-btn {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+}
+
 

@@ -44,8 +44,12 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   credits INTEGER NOT NULL DEFAULT 0 CONSTRAINT credits_non_negative CHECK (credits >= 0),
   first_name TEXT,
   last_name TEXT,
+  phone TEXT UNIQUE,
   team_id UUID REFERENCES public.teams(id) ON DELETE SET NULL,
   plan_tier TEXT,
+  free_credit_granted BOOLEAN DEFAULT FALSE,
+  active_session_id TEXT,
+  last_active_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

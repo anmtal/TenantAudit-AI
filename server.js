@@ -28,6 +28,7 @@ let stripeObj = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.ST
 
 if (process.env.NODE_ENV === 'test' || !stripeObj) {
     global.__mockStripeSessions = global.__mockStripeSessions || {};
+    global.__mockStripeSubscriptions = global.__mockStripeSubscriptions || {};
     stripeObj = {
         checkout: {
             sessions: {
@@ -58,7 +59,7 @@ if (process.env.NODE_ENV === 'test' || !stripeObj) {
         },
         subscriptions: {
             retrieve: async (subId) => {
-                return { id: subId, status: 'active' };
+                return global.__mockStripeSubscriptions[subId] || { id: subId, status: 'active' };
             }
         }
     };
@@ -180,11 +181,13 @@ const verifyOtpLimiter = rateLimit({
 });
 
 
-// Disable caching and add Security Headers to prevent XSS and clickjacking
+// Disable caching on API endpoints and add Security Headers to prevent XSS and clickjacking
 app.use((req, res, next) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+    if (req.path.startsWith('/api/')) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+    }
     // Strict Transport Security (HSTS)
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
     // X-Content-Type-Options
@@ -752,19 +755,34 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
         
         if (userId && planType) {
             try {
-                console.log(`Processing subscription termination for user ${userId}: plan ${planType}`);
+                console.log(`[Stripe Webhook] Processing subscription termination for user ${userId}: plan ${planType}`);
                 
                 if (supabaseAdmin) {
                     if (planType === 'hosted') {
-                        // Look up the user's team
+                        // Look up the user's team and current subscription
                         const { data: profile } = await supabaseAdmin
                             .from('profiles')
-                            .select('team_id')
+                            .select('team_id, teams(stripe_subscription_id)')
                             .eq('id', userId)
                             .single();
                             
                         if (profile && profile.team_id) {
-                            // Clear subscription details but let unexpired grants remain active (Grace Period)
+                            const team = profile.teams;
+                            
+                            // Verify if the event subscription ID matches the team's active subscription ID
+                            if (team && team.stripe_subscription_id !== subscription.id) {
+                                console.log(`[Stripe Webhook] subscription.deleted ignored: Event subscription ID ${subscription.id} does not match team active subscription ${team.stripe_subscription_id}.`);
+                                return res.json({ received: true });
+                            }
+                            
+                            // Fetch the latest subscription status directly from Stripe
+                            const liveSub = await stripe.subscriptions.retrieve(subscription.id);
+                            if (liveSub.status !== 'canceled') {
+                                console.log(`[Stripe Webhook] Webhook reported canceled but live Stripe status is ${liveSub.status}. Ignoring.`);
+                                return res.json({ received: true });
+                            }
+                            
+                            // Clear subscription details
                             const { error: updateErr } = await supabaseAdmin
                                 .from('teams')
                                 .update({ 
@@ -773,9 +791,21 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                                 })
                                 .eq('id', profile.team_id);
                             if (updateErr) throw updateErr;
+                            
+                            // Force immediate expiration of all remaining active subscription credit grants for this team
+                            const { error: updateGrantsErr } = await supabaseAdmin
+                                .from('team_credit_grants')
+                                .update({ expires_at: new Date().toISOString() })
+                                .eq('team_id', profile.team_id)
+                                .gt('amount_remaining', 0)
+                                .not('expires_at', 'is', null);
+                            if (updateGrantsErr) throw updateGrantsErr;
+                            
+                            // Recalculate team active credits cache
+                            await supabaseAdmin.rpc('recalculate_team_credits', { p_team_id: profile.team_id });
+                            console.log(`[Stripe Webhook] Successfully processed subscription termination for user ${userId} and expired active grants.`);
                         }
                     }
-                    console.log(`Successfully processed subscription cancellation for user ${userId} via webhook.`);
                 } else {
                     console.warn("Supabase Admin not configured. Webhook reset skipped.");
                 }
@@ -1992,7 +2022,7 @@ Please compare all fields and return the structured JSON report.`;
 app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
     const { planType, userId, packageName, isSubscription } = req.body;
     
-    if (!planType || !userId || !packageName) {
+    if (!planType || !userId) {
         return res.status(400).json({ error: "Missing required fields for checkout session" });
     }
 
@@ -2004,22 +2034,40 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
         return res.status(400).json({ error: "Only hosted plan types are supported." });
     }
 
-    const planConfig = PLANS_CATALOG[packageName];
-    if (!planConfig) {
-        return res.status(400).json({ error: "Invalid package name." });
+    let amount, price, seatCount, interval;
+    
+    const planConfig = packageName ? PLANS_CATALOG[packageName] : null;
+    if (planConfig) {
+        amount = planConfig.amount;
+        price = planConfig.price;
+        seatCount = planConfig.seats;
+        interval = planConfig.interval;
+    } else {
+        // Fall back to legacy fields directly passed in request body
+        amount = req.body.auditAmount || req.body.amount;
+        price = req.body.priceAmount || req.body.price;
+        seatCount = req.body.seatCount || req.body.seats || 1;
+        interval = req.body.interval;
+        
+        if (!interval) {
+            const isSub = isSubscription === undefined ? true : isSubscription;
+            interval = isSub ? 'month' : 'one-time';
+        }
     }
 
-    const amount = planConfig.amount;
-    const price = planConfig.price;
-    const seatCount = planConfig.seats;
-    const interval = planConfig.interval;
+    const parsedAmount = parseInt(amount, 10);
+    const parsedPrice = parseFloat(price);
+
+    if (isNaN(parsedAmount) || parsedAmount <= 0 || isNaN(parsedPrice) || parsedPrice <= 0) {
+        return res.status(400).json({ error: "Missing required fields for checkout session" });
+    }
 
     // Secure verification: client userId must match authentic authenticated userId
     if (supabaseAdmin && userId !== req.user.id) {
         return res.status(403).json({ error: "Forbidden: Authenticated user ID mismatch." });
     }
     
-    const priceInCents = Math.round(price * 100);
+    const priceInCents = Math.round(parsedPrice * 100);
     
     try {
         if (!stripe) {
@@ -2061,7 +2109,7 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
                 amount: amount.toString(),
                 seatCount: (seatCount || 1).toString(),
                 planInterval: subscriptionInterval,
-                packageName: packageName
+                packageName: packageName || "Legacy Package"
             },
             success_url: `${origin}/?checkout_success=true&session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${origin}/?checkout_cancel=true`,
@@ -2075,7 +2123,7 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
                     amount: amount.toString(),
                     seatCount: (seatCount || 1).toString(),
                     planInterval: subscriptionInterval,
-                    packageName: packageName
+                    packageName: packageName || "Legacy Package"
                 }
             };
         }
@@ -2116,7 +2164,7 @@ app.get('/api/verify-checkout-session', requireAuth, async (req, res) => {
             if (userId && planType && amount) {
                 // SECURITY: Verify Stripe Metadata against our server catalog configuration
                 const { packageName } = session.metadata || {};
-                if (packageName) {
+                if (packageName && packageName !== "Legacy Package") {
                     const planConfig = PLANS_CATALOG[packageName];
                     if (!planConfig || planConfig.amount !== parseInt(amount, 10)) {
                         console.error(`[Stripe Verification Security Mismatch] Package config amount mismatch for session ${session_id}. Expected amount ${planConfig?.amount}, got metadata amount ${amount}`);

@@ -377,6 +377,26 @@ function initializeApp() {
     const creditsModal = document.getElementById('credits-modal');
     const closeCreditsBtn = document.getElementById('close-credits-modal');
     // creditsForm, creditsAmount, buyPlanHosted removed — checkout is handled by individual button click handlers
+    const btnOtpResend = document.getElementById('btn-otp-resend');
+    const disclaimerDontShowCheckbox = document.getElementById('disclaimer-dont-show-checkbox');
+
+    // Inline validation for phone input
+    if (registerPhone) {
+        registerPhone.addEventListener('input', () => {
+            const phone = registerPhone.value.trim();
+            const hint = document.getElementById('phone-validation-msg');
+            if (!hint) return;
+            
+            if (!phone) {
+                hint.style.display = 'none';
+            } else if (!/^\+[1-9]\d{1,14}$/.test(phone)) {
+                hint.textContent = "⚠️ Number must start with '+' followed by country code (e.g. +14155552671). No spaces/dashes.";
+                hint.style.display = 'block';
+            } else {
+                hint.style.display = 'none';
+            }
+        });
+    }
 
     // --- Pricing Toggles & Grid Logic ---
     const btnMonthly = document.getElementById('toggle-monthly');
@@ -610,9 +630,13 @@ function initializeApp() {
         creditsCountDisplay.textContent = displayVal;
         if (homeCreditsCount) homeCreditsCount.textContent = displayVal;
         
-        // Always show credits display — even at 0 — so user can click to top up
-        if (creditsTopupTrigger) creditsTopupTrigger.style.display = 'inline-flex';
-        if (homeCreditsDisplay) homeCreditsDisplay.style.display = 'inline-flex';
+        // Show credits display only if user is logged in
+        if (creditsTopupTrigger) {
+            creditsTopupTrigger.style.display = isLoggedIn ? 'inline-flex' : 'none';
+        }
+        if (homeCreditsDisplay) {
+            homeCreditsDisplay.style.display = isLoggedIn ? 'inline-flex' : 'none';
+        }
 
         const giftTextEl = document.getElementById('welcome-credits-gift-text');
         if (giftTextEl) {
@@ -1325,7 +1349,15 @@ function initializeApp() {
                                         body: JSON.stringify({
                                             planType: plan,
                                             userId: user.id,
-                                            packageName: packageName
+                                            packageName: packageName,
+                                            amount: amount,
+                                            auditAmount: amount,
+                                            price: price,
+                                            priceAmount: price,
+                                            seats: seats,
+                                            seatCount: seats,
+                                            interval: interval,
+                                            isSubscription: interval !== 'one-time'
                                         })
                                     });
                                     const sessionData = await response.json();
@@ -1788,6 +1820,7 @@ function initializeApp() {
                         otpErrorMsg.style.display = 'none';
                         phoneOtpInput.value = '';
                         phoneOtpModal.classList.add('active');
+                        startOtpResendTimer();
 
                         // Save current registration details temporarily on window object
                         window.pendingSignup = {
@@ -1844,10 +1877,66 @@ function initializeApp() {
     }
 
     // --- Phone Verification OTP Modal Click Listeners ---
+    let otpTimerInterval = null;
+    function startOtpResendTimer() {
+        if (otpTimerInterval) clearInterval(otpTimerInterval);
+        if (!btnOtpResend) return;
+        
+        let seconds = 60;
+        btnOtpResend.disabled = true;
+        btnOtpResend.textContent = `Resend Code (${seconds}s)`;
+        
+        otpTimerInterval = setInterval(() => {
+            seconds--;
+            if (seconds <= 0) {
+                clearInterval(otpTimerInterval);
+                btnOtpResend.disabled = false;
+                btnOtpResend.textContent = "Resend Code";
+            } else {
+                btnOtpResend.textContent = `Resend Code (${seconds}s)`;
+            }
+        }, 1000);
+    }
+
     if (btnOtpCancel) {
         btnOtpCancel.addEventListener('click', () => {
             phoneOtpModal.classList.remove('active');
             window.pendingSignup = null;
+            if (otpTimerInterval) {
+                clearInterval(otpTimerInterval);
+                otpTimerInterval = null;
+            }
+        });
+    }
+
+    if (btnOtpResend) {
+        btnOtpResend.addEventListener('click', async () => {
+            const pending = window.pendingSignup;
+            if (!pending || !pending.phone) {
+                showToast("Session expired. Please try registering again.", "error");
+                return;
+            }
+            
+            btnOtpResend.disabled = true;
+            btnOtpResend.textContent = "Sending...";
+            
+            try {
+                const sendOtpRes = await fetch('/api/send-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber: pending.phone })
+                });
+                const sendOtpData = await sendOtpRes.json();
+                if (!sendOtpRes.ok) {
+                    throw new Error(sendOtpData.error || 'Failed to resend OTP.');
+                }
+                showToast("Verification code resent successfully.", "success");
+                startOtpResendTimer();
+            } catch (err) {
+                showToast(`Failed to resend code: ${err.message}`, "error");
+                btnOtpResend.disabled = false;
+                btnOtpResend.textContent = "Resend Code";
+            }
         });
     }
 
@@ -1885,6 +1974,10 @@ function initializeApp() {
                 // Verification successful
                 phoneOtpModal.classList.remove('active');
                 showToast('Phone number verified successfully!', 'success');
+                if (otpTimerInterval) {
+                    clearInterval(otpTimerInterval);
+                    otpTimerInterval = null;
+                }
 
                 // Proceed with registration
                 if (supabase) {
@@ -2709,6 +2802,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         window.leaseRoutingFallback = false;
         window.estoppelRoutingFallback = false;
 
+        // Generate transaction IDs ONCE outside the retry loop to ensure server-side idempotency across retries
+        const leaseTxId = generateUUID();
+        const estoppelTxId = generateUUID();
+        const compareTxId = generateUUID();
+
         let maxRetries = 3;
         let lastError = null;
         let success = false;
@@ -2788,8 +2886,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             window.estoppelRoutingFallback = estoppelResult.routingFallback || false;
 
             // Step 3: Run final analyses
-            const leaseTxId = generateUUID();
-            successfulTransactionIds.push(leaseTxId);
+            if (!successfulTransactionIds.includes(leaseTxId)) {
+                successfulTransactionIds.push(leaseTxId);
+            }
             showLoader("Analyzing Lease terms with AI...");
             const leaseExtraction = await callOpenAIToExtract(
                 leaseResult.text || "",
@@ -2801,8 +2900,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 leaseTxId
             );
             
-            const estoppelTxId = generateUUID();
-            successfulTransactionIds.push(estoppelTxId);
+            if (!successfulTransactionIds.includes(estoppelTxId)) {
+                successfulTransactionIds.push(estoppelTxId);
+            }
             showLoader("Analyzing Estoppel statements with AI...");
             const estoppelExtraction = await callOpenAIToExtract(
                 estoppelResult.text || "",
@@ -2814,8 +2914,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 estoppelTxId
             );
 
-            const compareTxId = generateUUID();
-            successfulTransactionIds.push(compareTxId);
+            if (!successfulTransactionIds.includes(compareTxId)) {
+                successfulTransactionIds.push(compareTxId);
+            }
             showLoader("Auditing discrepancies...");
             await performAILinkedAudit(leaseExtraction, estoppelExtraction, compareTxId);
             
@@ -2916,6 +3017,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             } else {
                 // Open disclaimer modal
                 if (disclaimerAgreeCheckbox) disclaimerAgreeCheckbox.checked = false;
+                if (disclaimerDontShowCheckbox) disclaimerDontShowCheckbox.checked = false;
                 if (disclaimerProceedBtn) disclaimerProceedBtn.disabled = true;
                 if (disclaimerModal) disclaimerModal.classList.add('active');
             }
@@ -2925,7 +3027,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     if (disclaimerProceedBtn) {
         disclaimerProceedBtn.addEventListener('click', () => {
             if (disclaimerModal) disclaimerModal.classList.remove('active');
-            localStorage.setItem('ta_disclaimer_agreed', 'true');
+            if (disclaimerDontShowCheckbox && disclaimerDontShowCheckbox.checked) {
+                localStorage.setItem('ta_disclaimer_agreed', 'true');
+            } else {
+                localStorage.setItem('ta_disclaimer_agreed', 'false');
+            }
             runLiveAudit();
         });
     }
@@ -3043,13 +3149,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 norm = norm.replace(/\.00\b/g, '');
                 
                 // Normalize square footage variations
-                norm = norm.replace(/rentable\s*square\s*feet|square\s*feet|square\s*foot|sq\s*ft|sqft|\bsf\b/g, '');
+                norm = norm.replace(/\brentable\s*square\s*feet\b|\bsquare\s*feet\b|\bsquare\s*foot\b|\bsq\s*ft\b|\bsqft\b|\bsf\b/g, '');
 
                 // Strip common filler words/phrases to prevent false mismatches
                 const fillers = [
-                    /per\s*month/g, /monthly\s*base\s*rent/g, /monthly\s*rent/g, /base\s*rent/g,
-                    /rent/g, /monthly/g, /yearly/g, /annually/g, /annual/g, /per\s*annum/g,
-                    /unit/g, /room/g, /rentable/g, /approximately/g, /exactly/g
+                    /\bper\s*month\b/g, /\bmonthly\s*base\s*rent\b/g, /\bmonthly\s*rent\b/g, /\bbase\s*rent\b/g,
+                    /\brent\b/g, /\bmonthly\b/g, /\byearly\b/g, /\bannually\b/g, /\bannual\b/g, /\bper\s*annum\b/g,
+                    /\bunit\b/g, /\broom\b/g, /\brentable\b/g, /\bapproximately\b/g, /\bexactly\b/g
                 ];
                 fillers.forEach(pattern => {
                     norm = norm.replace(pattern, '');
@@ -3994,7 +4100,15 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     body: JSON.stringify({
                         planType: plan,
                         userId: user.id,
-                        packageName: pack
+                        packageName: pack,
+                        amount: amount,
+                        auditAmount: amount,
+                        price: price,
+                        priceAmount: price,
+                        seats: seats,
+                        seatCount: seats,
+                        interval: interval,
+                        isSubscription: interval !== 'one-time'
                     })
                 });
                 

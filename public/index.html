@@ -742,6 +742,7 @@
                     <div class="form-group register-only style-extracted-1" >
                         <label for="register-phone">Mobile Phone Number (with Country Code, e.g. +14155552671)</label>
                         <input type="tel" id="register-phone" class="text-input" placeholder="+14155552671">
+                        <div id="phone-validation-msg" class="phone-validation-hint"></div>
                     </div>
                     <div class="form-group">
                         <label for="login-email">Email Address</label>
@@ -1249,6 +1250,10 @@
                 <input type="checkbox" id="disclaimer-agree-checkbox">
                 <label for="disclaimer-agree-checkbox">I understand and confirm I will verify all AI comparison results against original document pages.</label>
             </div>
+            <div class="form-group checkbox-group disclaimer-dont-show-wrapper">
+                <input type="checkbox" id="disclaimer-dont-show-checkbox">
+                <label for="disclaimer-dont-show-checkbox">Don't show this disclaimer again.</label>
+            </div>
             <div class="style-extracted-134" >
                 <button type="button" class="btn btn-secondary" id="disclaimer-cancel-btn">Cancel</button>
                 <button type="button" class="btn btn-primary" id="disclaimer-proceed-btn" disabled>Accept & Start Audit</button>
@@ -1334,6 +1339,9 @@
                 <input type="text" id="phone-otp-input" class="text-input style-extracted-158" placeholder="000000"  maxlength="6">
             </div>
             <div id="otp-error-msg" class="style-extracted-159" ></div>
+            <div class="otp-resend-container">
+                <button type="button" class="btn-otp-resend" id="btn-otp-resend" disabled>Resend Code (60s)</button>
+            </div>
             <div class="style-extracted-160" >
                 <button type="button" class="btn btn-secondary style-extracted-161" id="btn-otp-cancel" >Cancel</button>
                 <button type="button" class="primary-btn style-extracted-161" id="btn-otp-verify" >Verify & Register</button>

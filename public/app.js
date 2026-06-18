@@ -1323,14 +1323,9 @@ function initializeApp() {
                                             'Authorization': `Bearer ${session.access_token}`
                                         },
                                         body: JSON.stringify({
-                                            amount: parseInt(amount, 10),
                                             planType: plan,
                                             userId: user.id,
-                                            price: parseInt(price, 10),
-                                            seatCount: parseInt(seats, 10),
-                                            packageName: packageName,
-                                            isSubscription: interval !== 'one-time',
-                                            interval: interval
+                                            packageName: packageName
                                         })
                                     });
                                     const sessionData = await response.json();
@@ -1682,32 +1677,17 @@ function initializeApp() {
 
             try {
                 if (supabase) {
-                    const checkRes = await fetch('/api/check-user-exists', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ email })
-                    });
-                    if (!checkRes.ok) {
-                        const errData = await checkRes.json();
-                        throw new Error(errData.error || 'Failed to verify account status.');
-                    }
-                    const { exists } = await checkRes.json();
-                    if (!exists) {
-                        throw new Error('No account exists with this email address.');
-                    }
-
                     const { error } = await supabase.auth.resetPasswordForEmail(email, {
                         redirectTo: window.location.origin
                     });
                     if (error) throw error;
                     
+                    const genericMsg = "If an account exists with this email, a password reset link has been sent. Please check your inbox.";
                     if (forgotSuccessMsg) {
-                        forgotSuccessMsg.textContent = "Password reset email sent! Please check your inbox.";
+                        forgotSuccessMsg.textContent = genericMsg;
                         forgotSuccessMsg.style.display = 'block';
                     }
-                    showToast("Password reset email sent! Please check your inbox.", 'success');
+                    showToast(genericMsg, 'success');
                 } else {
                     if (forgotSuccessMsg) {
                         forgotSuccessMsg.textContent = "Password reset email sent (Mock Mode)! Check your mock inbox.";
@@ -4012,15 +3992,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         'Authorization': `Bearer ${session.access_token}`
                     },
                     body: JSON.stringify({
-                        userId: user.id,
-                        userEmail: user.email,
                         planType: plan,
-                        amount: parseInt(amount, 10),
-                        price: parseInt(price, 10),
-                        seatCount: parseInt(seats, 10),
-                        packageName: pack,
-                        isSubscription: interval !== 'one-time',
-                        interval: interval
+                        userId: user.id,
+                        packageName: pack
                     })
                 });
                 

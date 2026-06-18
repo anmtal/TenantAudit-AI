@@ -24,7 +24,47 @@ if (process.env.NODE_ENV === 'production' && !supabaseAdmin) {
     process.exit(1);
 }
 
-const stripe = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
+let stripeObj = process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
+
+if (process.env.NODE_ENV === 'test' || !stripeObj) {
+    global.__mockStripeSessions = global.__mockStripeSessions || {};
+    stripeObj = {
+        checkout: {
+            sessions: {
+                create: async (params) => {
+                    const id = 'cs_test_' + Math.random().toString(36).substring(2);
+                    global.__mockStripeSessions[id] = { 
+                        id, 
+                        metadata: params.metadata, 
+                        payment_status: 'paid',
+                        // Mock subscription field if it's a subscription mode checkout
+                        subscription: params.mode === 'subscription' ? 'sub_mock_' + Math.random().toString(36).substring(2) : null
+                    };
+                    return {
+                        id,
+                        url: `http://localhost:${process.env.PORT || 8080}/?checkout_success=true&session_id=${id}`,
+                        payment_status: 'unpaid',
+                        metadata: params.metadata
+                    };
+                },
+                retrieve: async (sessionId) => {
+                    return global.__mockStripeSessions[sessionId] || {
+                        id: sessionId,
+                        payment_status: 'paid',
+                        metadata: {}
+                    };
+                }
+            }
+        },
+        subscriptions: {
+            retrieve: async (subId) => {
+                return { id: subId, status: 'active' };
+            }
+        }
+    };
+}
+
+const stripe = stripeObj;
 
 const twilio = (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN)
     ? require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
@@ -110,17 +150,31 @@ const expensiveApiLimiter = rateLimit({
     windowMs: 10 * 60 * 1000, // 10 minutes
     max: 15, // Limit to 15 requests per 10 minutes
     keyGenerator: (req) => {
-        return req.user?.id || req.ip;
+        return req.rateLimitUserKey || req.ip;
     },
     message: { error: 'Too many expensive API requests, please try again after 10 minutes.' },
     standardHeaders: true,
     legacyHeaders: false
 });
 
+function setExpensiveRateLimitKey(req, res, next) {
+    req.rateLimitUserKey = req.user?.id;
+    next();
+}
+
 const smsLimiter = rateLimit({
     windowMs: 10 * 60 * 1000, // 10 minutes
     max: 5, // Limit each IP to 5 requests per 10 minutes
     message: { error: "Too many SMS requests from this IP. Please try again after 10 minutes." },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+
+const verifyOtpLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // Limit each IP to 5 verification attempts per 15 minutes
+    message: { error: "Too many OTP verification attempts. Please try again after 15 minutes." },
     standardHeaders: true,
     legacyHeaders: false
 });
@@ -147,13 +201,13 @@ app.use((req, res, next) => {
 
 // Auth Middleware to authenticate user and check seat limits
 async function requireAuth(req, res, next) {
-    if (!supabaseAdmin) {
+    if (process.env.NODE_ENV === 'test' || !supabaseAdmin) {
         if (process.env.NODE_ENV === 'production') {
             console.error("FATAL: Auth bypass attempted in production mode while supabaseAdmin is not configured.");
             return res.status(500).json({ error: "Internal Server Error: Database client configuration missing." });
         }
-        console.warn("[Security Bypass] Supabase Admin client not configured. Proceeding without auth validation.");
-        req.user = { id: 'mock-user-id', email: 'mock@example.com', user_metadata: {} };
+        console.warn("[Security Bypass] Test or unconfigured environment: Proceeding without auth validation.");
+        req.user = { id: '88888888-4444-4444-4444-121212121212', email: 'mock@example.com', user_metadata: {} };
         return next();
     }
 
@@ -766,37 +820,7 @@ app.get('/api/config', (req, res) => {
     });
 });
 
-// Endpoint to verify if user account exists (used by forgot password)
-app.post('/api/check-user-exists', async (req, res) => {
-    const { email } = req.body;
-    if (!email) {
-        return res.status(400).json({ error: 'Email is required.' });
-    }
 
-    if (!supabaseAdmin) {
-        // Fallback for local offline development when Supabase isn't configured
-        return res.json({ exists: true });
-    }
-
-    try {
-        const { data, error } = await supabaseAdmin
-            .from('profiles')
-            .select('id')
-            .ilike('email', email.trim())
-            .limit(1);
-
-        if (error) {
-            console.error("Database error checking user existence:", error);
-            return res.status(500).json({ error: 'Failed to verify account status.' });
-        }
-
-        const exists = data && data.length > 0;
-        return res.json({ exists });
-    } catch (err) {
-        console.error("System error checking user existence:", err);
-        return res.status(500).json({ error: 'Internal server error.' });
-    }
-});
 
 // Endpoint to send SMS OTP verification code via Twilio
 app.post('/api/send-otp', smsLimiter, async (req, res) => {
@@ -840,7 +864,7 @@ app.post('/api/send-otp', smsLimiter, async (req, res) => {
 });
 
 // Endpoint to verify SMS OTP code
-app.post('/api/verify-otp', async (req, res) => {
+app.post('/api/verify-otp', verifyOtpLimiter, async (req, res) => {
     try {
         const { phoneNumber, code } = req.body;
         if (!phoneNumber || !code) {
@@ -1001,7 +1025,7 @@ const MOCK_SAMPLE_COMPARE_DATA = {
   "permittedUse": { "status": "warning", "reason": "Not mentioned in either document." }
 };
 
-app.post('/api/audit', requireAuth, expensiveApiLimiter, async (req, res) => {
+app.post('/api/audit', requireAuth, setExpensiveRateLimitKey, expensiveApiLimiter, async (req, res) => {
     try {
         let { text, images, docType, systemPromptOverride, userPromptOverride, isRoutingRequest } = req.body;
         
@@ -1731,7 +1755,7 @@ For each field, look at all pages and pick the most detailed, legally relevant, 
 });
 
 // Route to handle AI-assisted compliance comparison of lease vs estoppel
-app.post('/api/compare', requireAuth, expensiveApiLimiter, async (req, res) => {
+app.post('/api/compare', requireAuth, setExpensiveRateLimitKey, expensiveApiLimiter, async (req, res) => {
     try {
         const transactionId = req.headers['x-transaction-id'];
         if (!transactionId || !/^[0-9a-f-]{36}$/i.test(transactionId)) {

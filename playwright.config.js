@@ -1,4 +1,6 @@
 const { defineConfig, devices } = require('@playwright/test');
+process.env.NODE_ENV = 'test';
+
 
 module.exports = defineConfig({
   testDir: './tests',

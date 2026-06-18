@@ -313,4 +313,62 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     expect(compareNoTxJson.error).toContain('Missing or invalid transaction ID');
   });
 
+  test('should complete E2E checkouts for subscription, annual, and one-time plans', async ({ request }) => {
+    const userId = '88888888-4444-4444-4444-121212121212';
+    
+    // 1. E2E Checkout for Starter Monthly (Subscription)
+    const createSubRes = await request.post('/api/create-checkout-session', {
+      data: {
+        planType: 'hosted',
+        packageName: 'Starter Monthly',
+        userId: userId
+      }
+    });
+    expect(createSubRes.status()).toBe(200);
+    const subJson = await createSubRes.json();
+    expect(subJson.id).toBeDefined();
+    expect(subJson.url).toContain('checkout_success=true');
+
+    const verifySubRes = await request.get(`/api/verify-checkout-session?session_id=${subJson.id}`);
+    expect(verifySubRes.status()).toBe(200);
+    const verifySubJson = await verifySubRes.json();
+    expect(verifySubJson.success).toBe(true);
+
+    // 2. E2E Checkout for Starter Annual (Annual subscription)
+    const createAnnualRes = await request.post('/api/create-checkout-session', {
+      data: {
+        planType: 'hosted',
+        packageName: 'Starter Annual',
+        userId: userId
+      }
+    });
+    expect(createAnnualRes.status()).toBe(200);
+    const annualJson = await createAnnualRes.json();
+    expect(annualJson.id).toBeDefined();
+    expect(annualJson.url).toContain('checkout_success=true');
+
+    const verifyAnnualRes = await request.get(`/api/verify-checkout-session?session_id=${annualJson.id}`);
+    expect(verifyAnnualRes.status()).toBe(200);
+    const verifyAnnualJson = await verifyAnnualRes.json();
+    expect(verifyAnnualJson.success).toBe(true);
+
+    // 3. E2E Checkout for 10 Audits Pack (One-time pack)
+    const createOneTimeRes = await request.post('/api/create-checkout-session', {
+      data: {
+        planType: 'hosted',
+        packageName: '10 Audits Pack',
+        userId: userId
+      }
+    });
+    expect(createOneTimeRes.status()).toBe(200);
+    const oneTimeJson = await createOneTimeRes.json();
+    expect(oneTimeJson.id).toBeDefined();
+    expect(oneTimeJson.url).toContain('checkout_success=true');
+
+    const verifyOneTimeRes = await request.get(`/api/verify-checkout-session?session_id=${oneTimeJson.id}`);
+    expect(verifyOneTimeRes.status()).toBe(200);
+    const verifyOneTimeJson = await verifyOneTimeRes.json();
+    expect(verifyOneTimeJson.success).toBe(true);
+  });
+
 });

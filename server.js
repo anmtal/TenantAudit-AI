@@ -2616,6 +2616,44 @@ app.get('/api/debug-user-profile', requireAuth, async (req, res) => {
 });
 
 
+// Check Email Endpoint
+app.post('/api/check-email', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: "Missing email parameter." });
+        }
+
+        if (!supabaseAdmin) {
+            const defaultExisting = ['test@example.com', 'pastdue@example.com', 'guest@leasealign.io'];
+            if (defaultExisting.includes(email.trim().toLowerCase())) {
+                return res.json({ exists: true });
+            }
+            if (global.__mockRegisteredEmails && global.__mockRegisteredEmails[email.trim().toLowerCase()]) {
+                return res.json({ exists: true });
+            }
+            return res.json({ exists: false });
+        }
+
+        const { data: existingProfile, error: selectErr } = await supabaseAdmin
+            .from('profiles')
+            .select('id')
+            .ilike('email', email.trim())
+            .maybeSingle();
+
+        if (selectErr) {
+            console.error("[Check Email] DB error:", selectErr);
+            return res.status(500).json({ error: "Database lookup failed." });
+        }
+
+        return res.json({ exists: !!existingProfile });
+    } catch (err) {
+        console.error("[Check Email] Error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+
 // Start Server
 app.listen(PORT, () => {
     console.log(`================================================================`);

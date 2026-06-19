@@ -354,4 +354,53 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     expect(sendOtpRetryRes.status()).toBe(200);
   });
 
+  test('should verify no account found error and password clearing on toggle', async ({ page }) => {
+    // Mock config to force offline mode (empty Supabase keys)
+    await page.route('**/api/config**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ supabaseUrl: 'https://mock.supabase.co', supabaseAnonKey: 'mock-key' }),
+      });
+    });
+
+    // Mock POST **/auth/v1/token to return Invalid login credentials for a fake email
+    await page.route('**/auth/v1/token**', async route => {
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: "invalid_grant", error_description: "Invalid login credentials" })
+      });
+    });
+
+    await page.goto('/');
+    await page.waitForSelector('body[data-initialized="true"]', { timeout: 15000 });
+
+    // Go to login view
+    await page.click('#home-login-btn');
+    await expect(page.locator('#login-view')).toBeVisible();
+
+    // Fill in a non-existent email and password
+    const emailInput = page.locator('#login-email');
+    const passwordInput = page.locator('#login-password');
+    const errorBox = page.locator('#login-error-msg');
+
+    await emailInput.fill('nonexistent@example.com');
+    await passwordInput.fill('SomePassword123!');
+
+    // Click submit
+    await page.click('#login-submit-btn');
+
+    // Verify it displays the custom "no account found" error message
+    await expect(errorBox).toBeVisible({ timeout: 5000 });
+    await expect(errorBox).toContainText('No account found with this email address. Please sign up first.');
+
+    // Switch to Sign Up mode
+    await page.click('#auth-toggle-link');
+
+    // Verify email is preserved but password is cleared
+    await expect(emailInput).toHaveValue('nonexistent@example.com');
+    await expect(passwordInput).toHaveValue('');
+  });
+
 });

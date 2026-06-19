@@ -577,6 +577,10 @@ function initializeApp() {
             if (registerLastName) registerLastName.required = true;
             if (registerPhone) registerPhone.required = true;
             
+            if (loginPassword) {
+                loginPassword.setAttribute('autocomplete', 'new-password');
+            }
+            
             const strengthContainer = document.getElementById('password-strength-container');
             if (strengthContainer) {
                 const hasPasswordText = loginPassword && loginPassword.value.length > 0;
@@ -599,6 +603,10 @@ function initializeApp() {
             if (registerFirstName) registerFirstName.required = false;
             if (registerLastName) registerLastName.required = false;
             if (registerPhone) registerPhone.required = false;
+            
+            if (loginPassword) {
+                loginPassword.setAttribute('autocomplete', 'current-password');
+            }
             
             const strengthContainer = document.getElementById('password-strength-container');
             if (strengthContainer) strengthContainer.style.display = 'none';
@@ -1709,6 +1717,23 @@ function initializeApp() {
                 loginErrorMsg.style.display = 'none';
             }
             
+            // Clear password and reset strength bar when toggling modes
+            const loginPassword = document.getElementById('login-password');
+            if (loginPassword) {
+                loginPassword.value = '';
+                if (isSignUpMode) {
+                    loginPassword.setAttribute('autocomplete', 'new-password');
+                } else {
+                    loginPassword.setAttribute('autocomplete', 'current-password');
+                }
+            }
+            const strengthBar = document.getElementById('password-strength-bar');
+            const strengthLabel = document.getElementById('password-strength-label');
+            const strengthContainer = document.getElementById('password-strength-container');
+            if (strengthBar) strengthBar.style.width = '0%';
+            if (strengthLabel) strengthLabel.textContent = '';
+            if (strengthContainer) strengthContainer.style.display = 'none';
+            
             if (isSignUpMode) {
                 loginTitle.textContent = "Create an Account";
                 loginSubtitle.textContent = "Sign up for LeaseAlign AI to start auditing commercial leases.";
@@ -2057,6 +2082,21 @@ function initializeApp() {
                         });
                         if (error) {
                             localStorage.removeItem('ta_fresh_login');
+                            if (error.message === 'Invalid login credentials') {
+                                try {
+                                    const checkRes = await fetch('/api/check-email', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ email })
+                                    });
+                                    const checkData = await checkRes.json();
+                                    if (checkRes.ok && !checkData.exists) {
+                                        throw new Error('No account found with this email address. Please sign up first.');
+                                    }
+                                } catch (checkErr) {
+                                    throw checkErr;
+                                }
+                            }
                             throw error;
                         }
                     } else {

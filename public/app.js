@@ -80,6 +80,7 @@ async function loadPdfExportLibraries() {
 
 function initializeApp() {
     let pendingSignup = null;
+    let emailVerificationPollInterval = null;
 
     // Helper to clear all authentication inputs
     window.clearAuthInputs = function() {
@@ -615,9 +616,68 @@ function initializeApp() {
         }
     }
 
+    function startEmailVerificationPolling() {
+        if (emailVerificationPollInterval) {
+            clearInterval(emailVerificationPollInterval);
+            emailVerificationPollInterval = null;
+        }
+        
+        const email = sessionStorage.getItem('ta_verification_email');
+        if (!email) {
+            console.log("[Verification Poll] No verification email found in session storage.");
+            return;
+        }
+        
+        console.log("[Verification Poll] Starting polling for:", email);
+        emailVerificationPollInterval = setInterval(async () => {
+            try {
+                const res = await fetch('/api/check-email-verified', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.verified) {
+                        console.log("[Verification Poll] Email verified! Redirecting to login...");
+                        clearInterval(emailVerificationPollInterval);
+                        emailVerificationPollInterval = null;
+                        sessionStorage.removeItem('ta_verification_email');
+                        
+                        // Force sign out to clear any auto-logged in session before they sign in
+                        if (supabase) {
+                            try {
+                                await supabase.auth.signOut();
+                            } catch (signOutErr) {
+                                console.warn("Sign out during verification redirect failed:", signOutErr);
+                            }
+                        }
+                        
+                        isLoggedIn = false;
+                        isSignUpMode = false;
+                        if (window.clearAuthInputs) window.clearAuthInputs();
+                        syncSignUpUI();
+                        
+                        window.location.hash = '#login';
+                        showToast("🎉 Email verified successfully! Please sign in with your email and password.", "success");
+                    }
+                }
+            } catch (err) {
+                console.warn("[Verification Poll] Error checking verification status:", err);
+            }
+        }, 3000);
+    }
+
     window.handleHashRoute = function() {
         let hash = window.location.hash || '#home';
         console.log("[Router] Routing to:", hash);
+
+        // Clear verification polling if we navigate away from signup-confirm
+        if (emailVerificationPollInterval && hash !== '#signup-confirm') {
+            clearInterval(emailVerificationPollInterval);
+            emailVerificationPollInterval = null;
+        }
 
         // Handle Supabase auth error redirect hash fragments (e.g. #error=server_error&...)
         if (hash.startsWith('#error=')) {
@@ -675,6 +735,7 @@ function initializeApp() {
             if (forgotPasswordCard) forgotPasswordCard.style.display = 'none';
             if (signupConfirmCard) signupConfirmCard.style.display = 'block';
             showView('login');
+            startEmailVerificationPolling();
         } else if (hash === '#dashboard') {
             showView('dashboard');
             

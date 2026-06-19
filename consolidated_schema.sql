@@ -717,6 +717,21 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- RPC: Check Email Confirmed Status (Supports cross-device polling)
+CREATE OR REPLACE FUNCTION public.check_email_confirmed(p_email TEXT)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_confirmed TIMESTAMP;
+BEGIN
+  SELECT email_confirmed_at INTO v_confirmed
+  FROM auth.users
+  WHERE LOWER(email) = LOWER(p_email)
+  LIMIT 1;
+  
+  RETURN v_confirmed IS NOT NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- --------------------------------------------------------------------
 -- 10. SQL Backfill Trigger: Retroactively Grant Welcome Credits
 -- --------------------------------------------------------------------

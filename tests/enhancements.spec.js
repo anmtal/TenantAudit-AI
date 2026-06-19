@@ -403,4 +403,46 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     await expect(passwordInput).toHaveValue('');
   });
 
+  test('should verify email verification polling and redirect to login', async ({ page }) => {
+    let checkVerifiedCallsCount = 0;
+    
+    // Intercept check-email-verified API
+    await page.route('**/api/check-email-verified', async route => {
+      checkVerifiedCallsCount++;
+      if (checkVerifiedCallsCount < 2) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ verified: false }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ verified: true }),
+        });
+      }
+    });
+
+    await page.goto('/');
+    await page.waitForSelector('body[data-initialized="true"]', { timeout: 15000 });
+
+    // Set verification email in session storage
+    await page.evaluate(() => {
+      sessionStorage.setItem('ta_verification_email', 'polltest@example.com');
+      window.location.hash = '#signup-confirm';
+    });
+
+    // Verify it routes to confirmation screen
+    await expect(page.locator('#signup-confirm-card')).toBeVisible();
+
+    // Verify it automatically redirects to login screen when verified becomes true
+    await expect(page.locator('#login-view')).toBeVisible({ timeout: 15000 });
+    
+    // Verify it shows the "Email verified successfully!" toast
+    const toast = page.locator('.toast');
+    await expect(toast).toBeVisible({ timeout: 15000 });
+    await expect(toast).toContainText('Email verified successfully!');
+  });
+
 });

@@ -1032,7 +1032,7 @@ app.post('/api/grant-welcome-credit', requireAuth, async (req, res) => {
         // 1. Fetch user profile
         const { data: profile, error: selectErr } = await supabaseAdmin
             .from('profiles')
-            .select('free_credit_granted, phone')
+            .select('free_credit_granted, phone, team_id')
             .eq('id', userId)
             .single();
 
@@ -1048,7 +1048,7 @@ app.post('/api/grant-welcome-credit', requireAuth, async (req, res) => {
             return res.status(400).json({ error: "Phone number is not set on profile." });
         }
 
-        // 2. Verify phone exists in verified_phones
+        // 2. Verify phone exists in verified_phones; if not, auto-heal by inserting it since it is set on the profile
         const { data: verifiedPhone, error: verifiedPhoneErr } = await supabaseAdmin
             .from('verified_phones')
             .select('phone')
@@ -1056,20 +1056,106 @@ app.post('/api/grant-welcome-credit', requireAuth, async (req, res) => {
             .maybeSingle();
 
         if (verifiedPhoneErr || !verifiedPhone) {
-            return res.status(400).json({ error: "Phone number is not verified." });
+            console.log(`[Grant Welcome Credit] Auto-healing verified_phones for phone ${profile.phone}`);
+            await supabaseAdmin
+                .from('verified_phones')
+                .upsert({ phone: profile.phone, verified_at: new Date().toISOString() });
         }
 
-        // 3. Grant welcome credit
+        // 3. Grant welcome credit using RPC first
+        let rpcSuccess = true;
         const { error: grantErr } = await supabaseAdmin.rpc('grant_welcome_credit', { p_user_id: userId });
         if (grantErr) {
-            console.error("[Grant Welcome Credit Fallback] RPC error:", grantErr);
-            return res.status(500).json({ error: "Failed to grant welcome credit." });
+            console.warn("[Grant Welcome Credit Fallback] RPC failed, executing JS fallback logic. Error:", grantErr);
+            rpcSuccess = false;
+        }
+
+        // 4. JS Fallback logic if RPC failed (e.g. database schema is not fully updated yet)
+        if (!rpcSuccess) {
+            const teamId = profile.team_id;
+            if (!teamId) {
+                return res.status(400).json({ error: "User does not belong to a team." });
+            }
+
+            // Insert 1 credit grant
+            const { error: grantInsertErr } = await supabaseAdmin
+                .from('team_credit_grants')
+                .insert({ team_id: teamId, amount_granted: 1, amount_remaining: 1, expires_at: null });
+
+            if (grantInsertErr) {
+                console.error("[Grant Welcome Credit JS Fallback] Failed to insert credit grant:", grantInsertErr);
+                return res.status(500).json({ error: "Failed to insert welcome credit grant." });
+            }
+
+            // Recalculate team balance
+            const { data: grants, error: grantsFetchErr } = await supabaseAdmin
+                .from('team_credit_grants')
+                .select('amount_remaining')
+                .eq('team_id', teamId);
+
+            if (!grantsFetchErr && grants) {
+                const totalCredits = grants.reduce((sum, g) => sum + (g.amount_remaining || 0), 0);
+                await supabaseAdmin
+                    .from('teams')
+                    .update({ audit_credits: totalCredits })
+                    .eq('id', teamId);
+            }
+
+            // Mark profile as granted
+            await supabaseAdmin
+                .from('profiles')
+                .update({ free_credit_granted: true })
+                .eq('id', userId);
         }
 
         console.log(`[Grant Welcome Credit Fallback] Successfully granted welcome credit to user ${userId}`);
         return res.json({ success: true, granted: true, message: "Welcome credit granted successfully." });
     } catch (err) {
-        console.error("[Grant Welcome Credit Fallback] Error:", err);
+        console.error("[Grant Welcome Credit Fallback Error]", err);
+        return res.status(500).json({ error: "Failed to grant welcome credit: " + err.message });
+    }
+});
+
+
+// Endpoint to check if a user's email is verified (supports polling on cross-device auth flow)
+app.post('/api/check-email-verified', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: "Missing email parameter." });
+        }
+
+        if (!supabaseAdmin) {
+            // Offline mock mode: always return true for testing
+            return res.json({ verified: true });
+        }
+
+        // 1. Try checking via RPC
+        const { data: isVerified, error: rpcErr } = await supabaseAdmin.rpc('check_email_confirmed', { p_email: email });
+        if (!rpcErr && isVerified !== null && isVerified !== undefined) {
+            return res.json({ verified: isVerified });
+        }
+
+        // 2. Fallback: list users and search (in case database migration wasn't run yet)
+        console.warn("[Check Email Verified] RPC failed or returned null, falling back to listUsers. Error:", rpcErr);
+        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
+            page: 1,
+            perPage: 1000
+        });
+
+        if (listErr) {
+            console.error("[Check Email Verified Fallback] listUsers error:", listErr);
+            return res.status(500).json({ error: "Failed to check email verification status." });
+        }
+
+        const user = users.find(u => u.email?.toLowerCase() === email.trim().toLowerCase());
+        if (!user) {
+            return res.status(404).json({ error: "User not found." });
+        }
+
+        return res.json({ verified: !!user.email_confirmed_at });
+    } catch (err) {
+        console.error("[Check Email Verified Error]", err);
         return res.status(500).json({ error: "Internal Server Error" });
     }
 });

@@ -1112,9 +1112,8 @@ function initializeApp() {
             // Check for pending team invitations (non-blocking)
             checkPendingInvitations(session.user.email);
             
-            // Fallback welcome credit grant trigger (Bug 1 helper) - triggers if not marked granted OR user has 0 credits
-            const needsWelcomeCredit = profileData && (!profileData.free_credit_granted || hostedCredits === 0);
-            if (needsWelcomeCredit && session.user.email_confirmed_at) {
+            // Fallback welcome credit grant trigger (Bug 1 helper) - triggers if not marked granted in profile
+            if (profileData && !profileData.free_credit_granted && session.user.email_confirmed_at) {
                 const isOffline = !supabase || 
                                   (supabase.supabaseUrl && supabase.supabaseUrl.includes('mock.supabase.co')) || 
                                   localStorage.getItem('ta_logged_in') === 'true';

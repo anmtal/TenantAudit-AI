@@ -36,6 +36,29 @@
     --border-radius-xl: 24px;
 }
 
+/* --- Display Utility Classes --- */
+.hidden {
+    display: none !important;
+}
+.visible {
+    display: block !important;
+}
+.inline-visible {
+    display: inline !important;
+}
+.inline-block-visible {
+    display: inline-block !important;
+}
+.flex-visible {
+    display: flex !important;
+}
+.inline-flex-visible {
+    display: inline-flex !important;
+}
+.grid-visible {
+    display: grid !important;
+}
+
 /* --- Base Resets & Layout --- */
 * {
     box-sizing: border-box;
@@ -2868,6 +2891,324 @@ select option {
     font-weight: bold;
     margin-left: 5px;
 }
+
+/* --- Product Proof Section Stylings --- */
+.product-proof-card {
+    padding: 32px;
+    margin-top: 16px;
+    gap: 24px;
+}
+.proof-header {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+.proof-badge {
+    background: rgba(168, 85, 247, 0.1);
+    color: var(--color-purple);
+    border: 1px solid rgba(168, 85, 247, 0.2);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 4px 10px;
+    border-radius: 99px;
+    font-weight: 600;
+}
+.proof-title {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+.proof-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    max-width: 600px;
+    margin: 0 auto;
+}
+.proof-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    padding-bottom: 12px;
+}
+.proof-tab-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-family: var(--font-heading);
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 8px 16px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: var(--transition-smooth);
+}
+.proof-tab-btn:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.03);
+}
+.proof-tab-btn.active {
+    color: var(--color-purple);
+    background: rgba(168, 85, 247, 0.08);
+    border: 1px solid rgba(168, 85, 247, 0.15);
+}
+.proof-tab-btn i, .proof-tab-btn svg {
+    width: 16px;
+    height: 16px;
+}
+.proof-content {
+    position: relative;
+    width: 100%;
+}
+.proof-tab-panel {
+    display: none;
+    width: 100%;
+    animation: fadeIn 0.3s ease;
+}
+.proof-tab-panel.active {
+    display: block;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.video-player-container, .screenshot-container {
+    position: relative;
+    width: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #000;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    aspect-ratio: 16 / 9;
+}
+.proof-media-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.88;
+    transition: var(--transition-smooth);
+}
+.video-player-container:hover .proof-media-img {
+    transform: scale(1.02);
+    opacity: 0.75;
+}
+.video-play-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.35);
+}
+.play-btn-circle {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: var(--color-purple);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 30px rgba(168, 85, 247, 0.5);
+    transition: var(--transition-smooth);
+}
+.video-player-container:hover .play-btn-circle {
+    transform: scale(1.1);
+    box-shadow: 0 0 40px rgba(168, 85, 247, 0.7);
+}
+.play-btn-circle i, .play-btn-circle svg {
+    width: 28px;
+    height: 28px;
+    fill: currentColor;
+    margin-left: 4px;
+}
+.video-play-overlay span {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 15px;
+    color: white;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+.sample-output-wrapper {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.sample-output-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13.5px;
+    color: var(--text-secondary);
+}
+.sample-output-meta strong {
+    color: var(--text-primary);
+}
+.badge-warning {
+    background: rgba(249, 115, 22, 0.1);
+    color: var(--color-orange);
+    border: 1px solid rgba(249, 115, 22, 0.2);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+.proof-table-wrapper {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+.proof-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    text-align: left;
+}
+.proof-table th {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 12px 16px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.proof-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    color: var(--text-secondary);
+}
+.proof-table tr:last-child td {
+    border-bottom: none;
+}
+.proof-table td strong {
+    color: var(--text-primary);
+}
+
+/* --- Simulated Walkthrough Player --- */
+.walkthrough-video-card {
+    max-width: 640px;
+    width: 90%;
+    gap: 16px;
+}
+.walkthrough-desc {
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    margin-top: -8px;
+}
+.simulated-player {
+    background: #030303;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+}
+.simulated-screen {
+    background: #000;
+    border-radius: 8px;
+    height: 240px;
+    padding: 16px;
+    font-family: monospace;
+    font-size: 12.5px;
+    color: #34d399;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: relative;
+    border: 1px solid rgba(255,255,255,0.03);
+}
+.simulated-logs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.simulated-log-line {
+    animation: typeIn 0.2s ease-out forwards;
+    white-space: pre-wrap;
+    line-height: 1.4;
+}
+@keyframes typeIn {
+    from { opacity: 0; transform: translateX(-4px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+.simulated-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: rgba(168, 85, 247, 0.2);
+    color: var(--color-purple);
+    border: 1px solid rgba(168, 85, 247, 0.4);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+.simulated-badge.complete {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--color-emerald);
+    border-color: rgba(16, 185, 129, 0.4);
+}
+.simulated-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.simulated-progress-bar {
+    background: rgba(255,255,255,0.05);
+    height: 4px;
+    border-radius: 2px;
+    overflow: hidden;
+}
+.simulated-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--color-purple);
+    box-shadow: 0 0 8px var(--color-purple);
+    transition: width 0.1s linear;
+}
+.simulated-time-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: monospace;
+}
+.walkthrough-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+/* Loader Sub-text for compliance with CSP */
+.loader-sub-text {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    margin-top: 8px;
+}
+
 
 
 

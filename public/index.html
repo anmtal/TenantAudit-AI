@@ -144,53 +144,92 @@
                 </div>
             </section>
 
-            <!-- Case Study Section -->
-            <section id="case-study-section" class="landing-features style-extracted-13" >
-                <h3 class="section-title">Case Study: Enterprise ROI in Action</h3>
-                <p class="style-extracted-15" >
-                    See how real estate acquisition teams protect asset valuation and accelerate legal due diligence.
+            <!-- Product Proof Section -->
+            <section id="case-study-section" class="landing-features style-extracted-13">
+                <h3 class="section-title">Product Proof: See LeaseAlign AI in Action</h3>
+                <p class="style-extracted-15">
+                    Real screenshots, actual audit outputs, and a 60-second video walkthrough showing how we reconcile leases and estoppels.
                 </p>
                 
-                <div class="glass-card case-study-card">
-                    <div class="case-study-grid">
-                        <div class="case-study-content">
-                            <div class="style-extracted-16" >
-                                <span class="badge case-study-badge style-extracted-17" >Real Estate Acquisitions</span>
-                                <span class="badge style-extracted-18" >Illustrative Scenario</span>
-                            </div>
-                            <h4 class="style-extracted-19" >Vanguard Partners Audited 42 Leases in 2 Hours</h4>
-                            <p class="style-extracted-20" >
-                                During the acquisition of a $140M grocery-anchored retail portfolio, Vanguard Partners needed to audit 42 commercial leases against tenant estoppel certificates in less than 48 hours to meet a strict financing deadline. 
-                            </p>
-                            <p class="style-extracted-21" >
-                                By using LeaseAlign AI, their team uploaded the document pairs and ran the entire audit in under 2 hours. The AI flagged a <strong>3.5% vs. 4.0% cumulative CAM cap discrepancy</strong> on a major anchor tenant. This mismatch would have cost them over <strong>$480,000 in protected asset valuation</strong> at a 6% capitalization rate.
-                            </p>
-                            
-                            <div class="case-study-quote">
-                                <p class="style-extracted-22" >"LeaseAlign AI changed our entire due diligence process. We found a critical CAM cap mismatch in minutes that had slipped past three manual legal reviews."</p>
-                                <div class="quote-author">
-                                    <strong>A VP of Asset Management</strong>
-                                    <span>at a regional acquisition firm</span>
+                <div class="glass-card product-proof-card">
+                    <div class="proof-tabs">
+                        <button class="proof-tab-btn active" data-target="proof-video">
+                            <i data-lucide="play-circle"></i> Video Walkthrough
+                        </button>
+                        <button class="proof-tab-btn" data-target="proof-screenshot">
+                            <i data-lucide="image"></i> Dashboard Preview
+                        </button>
+                        <button class="proof-tab-btn" data-target="proof-outputs">
+                            <i data-lucide="file-spreadsheet"></i> Sample Audit Outputs
+                        </button>
+                    </div>
+
+                    <div class="proof-content">
+                        <!-- Tab 1: Video Walkthrough -->
+                        <div class="proof-tab-panel active" id="proof-video">
+                            <div class="video-player-container">
+                                <img src="assets/video_thumbnail.png" alt="Walkthrough Video Preview" class="proof-media-img">
+                                <div class="video-play-overlay">
+                                    <div class="play-btn-circle">
+                                        <i data-lucide="play"></i>
+                                    </div>
+                                    <span>Watch Simulated Walkthrough (60s)</span>
                                 </div>
                             </div>
                         </div>
-                        
-                        <div class="case-study-stats">
-                            <div class="stat-card">
-                                <div class="stat-num color-purple">42</div>
-                                <div class="stat-label">Leases Audited in 2 Hrs</div>
+
+                        <!-- Tab 2: Dashboard Screenshot -->
+                        <div class="proof-tab-panel" id="proof-screenshot">
+                            <div class="screenshot-container">
+                                <img src="assets/dashboard_mockup.png" alt="LeaseAlign AI Dashboard Mockup" class="proof-media-img">
                             </div>
-                            <div class="stat-card">
-                                <div class="stat-num color-emerald">$480K+</div>
-                                <div class="stat-label">Valuation Loss Prevented</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-num color-cyan">15x</div>
-                                <div class="stat-label">Immediate Software ROI</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-num color-orange">100%</div>
-                                <div class="stat-label">Verification Citation Coverage</div>
+                        </div>
+
+                        <!-- Tab 3: Sample Audit Outputs -->
+                        <div class="proof-tab-panel" id="proof-outputs">
+                            <div class="sample-output-wrapper">
+                                <div class="sample-output-meta">
+                                    <span>Document Pair: <strong>APEX Coworking Lease vs Estoppel</strong></span>
+                                    <span class="badge badge-warning">6 Discrepancies Found</span>
+                                </div>
+                                <div class="proof-table-wrapper">
+                                    <table class="proof-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Term / Clause</th>
+                                                <th>Lease Agreement</th>
+                                                <th>Tenant Estoppel</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td><strong>Current Monthly Rent</strong></td>
+                                                <td>$35,000.00 escalating to $47,701.41</td>
+                                                <td>$41,569.02 per month</td>
+                                                <td><span class="status-pill match-warning">Warning</span></td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Lease Expiration Date</strong></td>
+                                                <td>August 31, 2031</td>
+                                                <td>September 30, 2031</td>
+                                                <td><span class="status-pill match-mismatch">Mismatch</span></td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>CAM & Operating Caps</strong></td>
+                                                <td>Pro-rata share, annual increases capped at 3% cumulative</td>
+                                                <td>Pro-rata share, increases capped at 4% annually</td>
+                                                <td><span class="status-pill match-mismatch">Mismatch</span></td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Security Deposit</strong></td>
+                                                <td>$105,000.00 (three months rent)</td>
+                                                <td>$70,000.00</td>
+                                                <td><span class="status-pill match-mismatch">Mismatch</span></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -542,10 +581,10 @@
 
         <!-- RIGHT: Contact Links -->
         <div class="footer-right style-extracted-49" >
-            <a href="mailto:contact@leasealign.io" class="footer-contact-item style-extracted-50"  onmouseover="this.style.color='var(--color-purple)'" onmouseout="this.style.color='var(--text-secondary)'">
+            <a href="mailto:contact@leasealign.io" class="footer-contact-item style-extracted-50">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg> contact@leasealign.io
             </a>
-            <a href="https://calendly.com/contact-leasealign/30min" target="_blank" rel="noopener noreferrer" class="footer-contact-item style-extracted-50"  onmouseover="this.style.color='var(--color-purple)'" onmouseout="this.style.color='var(--text-secondary)'">
+            <a href="https://calendly.com/contact-leasealign/30min" target="_blank" rel="noopener noreferrer" class="footer-contact-item style-extracted-50">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> Book a Demo
             </a>
         </div>
@@ -1038,10 +1077,10 @@
 
                     <!-- RIGHT: Contact Links -->
                     <div class="footer-right style-extracted-49" >
-                        <a href="mailto:contact@leasealign.io" class="footer-contact-item style-extracted-50"  onmouseover="this.style.color='var(--color-purple)'" onmouseout="this.style.color='var(--text-secondary)'">
+                        <a href="mailto:contact@leasealign.io" class="footer-contact-item style-extracted-50">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg> contact@leasealign.io
                         </a>
-                        <a href="https://calendly.com/contact-leasealign/30min" target="_blank" rel="noopener noreferrer" class="footer-contact-item style-extracted-50"  onmouseover="this.style.color='var(--color-purple)'" onmouseout="this.style.color='var(--text-secondary)'">
+                        <a href="https://calendly.com/contact-leasealign/30min" target="_blank" rel="noopener noreferrer" class="footer-contact-item style-extracted-50">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg> Book a Demo
                         </a>
                     </div>
@@ -1065,7 +1104,7 @@
                   <h3>Set New Password</h3>
                   <p>Please enter your new password below.</p>
               </div>
-              <form id="password-recovery-form" onsubmit="return false;">
+              <form id="password-recovery-form">
                   <div class="form-group">
                       <label for="recovery-password">New Password</label>
                       <input type="password" id="recovery-password" placeholder="At least 6 characters" required>
@@ -1197,6 +1236,40 @@
             <div class="style-extracted-160" >
                 <button type="button" class="btn btn-secondary style-extracted-161" id="btn-otp-cancel" >Cancel</button>
                 <button type="button" class="primary-btn style-extracted-161" id="btn-otp-verify" >Verify & Register</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- WALKTHROUGH VIDEO MODAL -->
+    <div class="modal-overlay" id="walkthrough-video-modal">
+        <div class="modal-card walkthrough-video-card">
+            <button class="modal-close-btn" id="walkthrough-video-close" aria-label="Close Walkthrough">&times;</button>
+            <div class="modal-title-wrapper">
+                <h3><i data-lucide="play" class="inline-icon color-purple"></i> LeaseAlign AI Walkthrough</h3>
+                <p>Simulated real-time audit run of the APEX Coworking Lease & Estoppel pair.</p>
+            </div>
+            
+            <div class="simulated-player">
+                <div class="simulated-screen">
+                    <div class="simulated-logs" id="walkthrough-logs-container">
+                        <!-- Step logs will append here -->
+                    </div>
+                    <div class="simulated-badge" id="walkthrough-status-badge">Processing...</div>
+                </div>
+                <div class="simulated-controls">
+                    <div class="simulated-progress-bar">
+                        <div class="simulated-progress-fill" id="walkthrough-progress-fill"></div>
+                    </div>
+                    <div class="simulated-time-row">
+                        <span id="walkthrough-current-time">0:00</span>
+                        <span>1:00</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="style-extracted-134">
+                <button type="button" class="btn btn-secondary" id="walkthrough-restart-btn">Restart</button>
+                <button type="button" class="btn btn-primary" id="walkthrough-close-btn">Close Walkthrough</button>
             </div>
         </div>
     </div>

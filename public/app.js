@@ -79,6 +79,27 @@ async function loadPdfExportLibraries() {
 }
 
 function initializeApp() {
+    // CSP-compliant element display helper functions
+    function showEl(el, displayClass = 'visible') {
+        if (!el) return;
+        el.classList.remove('hidden');
+        el.classList.add(displayClass);
+    }
+
+    function hideEl(el) {
+        if (!el) return;
+        el.classList.remove('visible', 'inline-visible', 'inline-block-visible', 'flex-visible', 'inline-flex-visible', 'grid-visible');
+        el.classList.add('hidden');
+    }
+
+    function toggleEl(el, condition, displayClass = 'visible') {
+        if (condition) {
+            showEl(el, displayClass);
+        } else {
+            hideEl(el);
+        }
+    }
+
     let pendingSignup = null;
     let emailVerificationPollInterval = null;
 
@@ -100,7 +121,7 @@ function initializeApp() {
         const loginErrorMsg = document.getElementById('login-error-msg');
         if (loginErrorMsg) {
             loginErrorMsg.textContent = '';
-            loginErrorMsg.style.display = 'none';
+            hideEl(loginErrorMsg);
         }
         
         // Clear any password strength bars
@@ -109,7 +130,7 @@ function initializeApp() {
         const strengthContainer = document.getElementById('password-strength-container');
         if (strengthBar) strengthBar.style.width = '0%';
         if (strengthLabel) strengthLabel.textContent = '';
-        if (strengthContainer) strengthContainer.style.display = 'none';
+        if (strengthContainer) hideEl(strengthContainer);
     };
 
     // --- Toast Notifications ---
@@ -233,7 +254,7 @@ function initializeApp() {
         }
         
         if (clearUploadBtn) {
-            clearUploadBtn.style.display = (hasLease || hasEstoppel) ? 'inline-flex' : 'none';
+            toggleEl(clearUploadBtn, hasLease || hasEstoppel, 'inline-flex-visible');
         }
     }
 
@@ -248,7 +269,7 @@ function initializeApp() {
         if (registerLastName) registerLastName.value = '';
         if (loginErrorMsg) {
             loginErrorMsg.textContent = '';
-            loginErrorMsg.style.display = 'none';
+            hideEl(loginErrorMsg);
         }
 
         // 2. Wipes internal file states
@@ -267,28 +288,28 @@ function initializeApp() {
             leaseDropZone.classList.remove('file-selected');
             if (leaseFileInfo) {
                 leaseFileInfo.textContent = 'No file selected';
-                leaseFileInfo.style.display = 'none';
+                hideEl(leaseFileInfo);
             }
             const removeLeaseBtn = document.getElementById('remove-lease-file-btn');
-            if (removeLeaseBtn) removeLeaseBtn.style.display = 'none';
+            if (removeLeaseBtn) hideEl(removeLeaseBtn);
         }
 
         if (estoppelDropZone) {
             estoppelDropZone.classList.remove('file-selected');
             if (estoppelFileInfo) {
                 estoppelFileInfo.textContent = 'No file selected';
-                estoppelFileInfo.style.display = 'none';
+                hideEl(estoppelFileInfo);
             }
             const removeEstoppelBtn = document.getElementById('remove-estoppel-file-btn');
-            if (removeEstoppelBtn) removeEstoppelBtn.style.display = 'none';
+            if (removeEstoppelBtn) hideEl(removeEstoppelBtn);
         }
 
         // 5. Disable auditing actions
         updateUploadButtonsState();
 
         // 6. Reset panels views visibility
-        if (resultsPanel) resultsPanel.style.display = 'none';
-        if (uploadPanel) uploadPanel.style.display = 'block';
+        if (resultsPanel) hideEl(resultsPanel);
+        if (uploadPanel) showEl(uploadPanel, 'visible');
 
         // 7. Clear user-specific session trackers
         sessionStorage.removeItem('ta_session_id');
@@ -301,7 +322,7 @@ function initializeApp() {
         hideLoader();
         
         const scannedBanner = document.getElementById('scanned-warning-banner');
-        if (scannedBanner) scannedBanner.style.display = 'none';
+        if (scannedBanner) hideEl(scannedBanner);
         window.isAuditTruncated = false;
         window.auditPagesProcessed = 0;
     }
@@ -321,27 +342,29 @@ function initializeApp() {
             leaseDropZone.classList.remove('file-selected');
             if (leaseFileInfo) {
                 leaseFileInfo.textContent = 'No file selected';
-                leaseFileInfo.style.display = 'none';
+                hideEl(leaseFileInfo);
             }
             const removeLeaseBtn = document.getElementById('remove-lease-file-btn');
-            if (removeLeaseBtn) removeLeaseBtn.style.display = 'none';
+            if (removeLeaseBtn) hideEl(removeLeaseBtn);
         }
 
         if (estoppelDropZone) {
             estoppelDropZone.classList.remove('file-selected');
             if (estoppelFileInfo) {
                 estoppelFileInfo.textContent = 'No file selected';
-                estoppelFileInfo.style.display = 'none';
+                hideEl(estoppelFileInfo);
             }
             const removeEstoppelBtn = document.getElementById('remove-estoppel-file-btn');
-            if (removeEstoppelBtn) removeEstoppelBtn.style.display = 'none';
+            if (removeEstoppelBtn) hideEl(removeEstoppelBtn);
         }
 
         updateUploadButtonsState();
         if (uploadPanel) {
-            uploadPanel.style.display = 'block';
+            showEl(uploadPanel, 'visible');
         }
-        if (resultsPanel) resultsPanel.style.display = 'none';
+        if (resultsPanel) {
+            hideEl(resultsPanel);
+        }
 
         // Recalculate layout and scroll to top smoothly
         setTimeout(() => {
@@ -352,12 +375,12 @@ function initializeApp() {
         }, 50);
         
         const verificationDrawer = document.getElementById('verification-drawer');
-        if (verificationDrawer) verificationDrawer.style.display = 'none';
+        if (verificationDrawer) hideEl(verificationDrawer);
         
         hideLoader();
         
         const scannedBanner = document.getElementById('scanned-warning-banner');
-        if (scannedBanner) scannedBanner.style.display = 'none';
+        if (scannedBanner) hideEl(scannedBanner);
         window.isAuditTruncated = false;
         window.auditPagesProcessed = 0;
     }
@@ -462,17 +485,17 @@ function initializeApp() {
 
     function updateGrids() {
         if (!hostedMonthly || !hostedAnnual || !hostedOneTime) return;
-        hostedMonthly.style.display = 'none';
-        hostedAnnual.style.display = 'none';
-        hostedOneTime.style.display = 'none';
+        hideEl(hostedMonthly);
+        hideEl(hostedAnnual);
+        hideEl(hostedOneTime);
 
-        if (currentPeriod === 'monthly') hostedMonthly.style.display = 'grid';
-        else if (currentPeriod === 'annual') hostedAnnual.style.display = 'grid';
-        else hostedOneTime.style.display = 'grid';
+        if (currentPeriod === 'monthly') showEl(hostedMonthly, 'grid-visible');
+        else if (currentPeriod === 'annual') showEl(hostedAnnual, 'grid-visible');
+        else showEl(hostedOneTime, 'grid-visible');
 
         const cancelText = document.getElementById('cancel-anytime-text');
         if (cancelText) {
-            cancelText.style.display = (currentPeriod === 'one-time') ? 'none' : 'block';
+            toggleEl(cancelText, currentPeriod !== 'one-time', 'visible');
         }
     }
 
@@ -541,22 +564,22 @@ function initializeApp() {
 
     // --- Session Router & Multi-View Display Control ---
     function showView(viewId) {
-        homeView.style.display = 'none';
-        loginView.style.display = 'none';
-        dashboardView.style.display = 'none';
+        hideEl(homeView);
+        hideEl(loginView);
+        hideEl(dashboardView);
 
         if (viewId !== 'login') {
             window.pendingPurchase = null; // Clear purchase queue on navigation away from login
             const contextCard = document.getElementById('pricing-context-card');
-            if (contextCard) contextCard.style.display = 'none';
+            if (contextCard) hideEl(contextCard);
         }
 
         if (viewId === 'home') {
-            homeView.style.display = 'block';
+            showEl(homeView, 'visible');
         } else if (viewId === 'login') {
-            loginView.style.display = 'block';
+            showEl(loginView, 'visible');
         } else if (viewId === 'dashboard') {
-            dashboardView.style.display = 'block';
+            showEl(dashboardView, 'visible');
             loadPdfJsIfNeeded(); // Dynamically load pdf.js when dashboard view is active
         }
     }
@@ -573,7 +596,7 @@ function initializeApp() {
                 if (loginSubmitBtn) loginSubmitBtn.textContent = "Register Account";
             }
             
-            document.querySelectorAll('.register-only').forEach(el => el.style.display = 'block');
+            document.querySelectorAll('.register-only').forEach(el => showEl(el, 'visible'));
             if (registerFirstName) registerFirstName.required = true;
             if (registerLastName) registerLastName.required = true;
             if (registerPhone) registerPhone.required = true;
@@ -585,7 +608,7 @@ function initializeApp() {
             const strengthContainer = document.getElementById('password-strength-container');
             if (strengthContainer) {
                 const hasPasswordText = loginPassword && loginPassword.value.length > 0;
-                strengthContainer.style.display = hasPasswordText ? 'block' : 'none';
+                toggleEl(strengthContainer, hasPasswordText, 'visible');
             }
             
             if (authToggleContainer) authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
@@ -600,7 +623,7 @@ function initializeApp() {
                 if (loginSubmitBtn) loginSubmitBtn.textContent = "Sign In";
             }
             
-            document.querySelectorAll('.register-only').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.register-only').forEach(el => hideEl(el));
             if (registerFirstName) registerFirstName.required = false;
             if (registerLastName) registerLastName.required = false;
             if (registerPhone) registerPhone.required = false;
@@ -610,7 +633,7 @@ function initializeApp() {
             }
             
             const strengthContainer = document.getElementById('password-strength-container');
-            if (strengthContainer) strengthContainer.style.display = 'none';
+            if (strengthContainer) hideEl(strengthContainer);
             
             if (authToggleContainer) authToggleContainer.innerHTML = 'Don\'t have an account? <a href="#" id="auth-toggle-link">Sign Up</a>';
         }
@@ -1807,7 +1830,7 @@ function initializeApp() {
             const loginErrorMsg = document.getElementById('login-error-msg');
             if (loginErrorMsg) {
                 loginErrorMsg.textContent = '';
-                loginErrorMsg.style.display = 'none';
+                hideEl(loginErrorMsg);
             }
             
             // Clear password and reset strength bar when toggling modes
@@ -1825,14 +1848,14 @@ function initializeApp() {
             const strengthContainer = document.getElementById('password-strength-container');
             if (strengthBar) strengthBar.style.width = '0%';
             if (strengthLabel) strengthLabel.textContent = '';
-            if (strengthContainer) strengthContainer.style.display = 'none';
+            if (strengthContainer) hideEl(strengthContainer);
             
             if (isSignUpMode) {
                 loginTitle.textContent = "Create an Account";
                 loginSubtitle.textContent = "Sign up for LeaseAlign AI to start auditing commercial leases.";
                 loginSubmitBtn.textContent = "Register Account";
                 
-                document.querySelectorAll('.register-only').forEach(el => el.style.display = 'block');
+                document.querySelectorAll('.register-only').forEach(el => showEl(el, 'visible'));
                 if (registerFirstName) registerFirstName.required = true;
                 if (registerLastName) registerLastName.required = true;
                 
@@ -1840,7 +1863,7 @@ function initializeApp() {
                 const strengthContainer = document.getElementById('password-strength-container');
                 if (strengthContainer) {
                     const hasPasswordText = loginPassword && loginPassword.value.length > 0;
-                    strengthContainer.style.display = hasPasswordText ? 'block' : 'none';
+                    toggleEl(strengthContainer, hasPasswordText, 'visible');
                 }
                 
                 authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
@@ -1849,13 +1872,13 @@ function initializeApp() {
                 loginSubtitle.textContent = "Enter your credentials to access your transaction dashboard";
                 loginSubmitBtn.textContent = "Sign In";
                 
-                document.querySelectorAll('.register-only').forEach(el => el.style.display = 'none');
+                document.querySelectorAll('.register-only').forEach(el => hideEl(el));
                 if (registerFirstName) registerFirstName.required = false;
                 if (registerLastName) registerLastName.required = false;
                 
                 // Hide password strength container
                 const strengthContainer = document.getElementById('password-strength-container');
-                if (strengthContainer) strengthContainer.style.display = 'none';
+                if (strengthContainer) hideEl(strengthContainer);
                 
                 authToggleContainer.innerHTML = 'Don\'t have an account? <a href="#" id="auth-toggle-link">Sign Up</a>';
             }
@@ -1868,17 +1891,17 @@ function initializeApp() {
             if (!container) return;
             
             if (!isSignUpMode) {
-                container.style.display = 'none';
+                hideEl(container);
                 return;
             }
             
             const val = loginPassword.value;
             if (val.length === 0) {
-                container.style.display = 'none';
+                hideEl(container);
                 return;
             }
             
-            container.style.display = 'block';
+            showEl(container, 'visible');
             let criteriaMet = 0;
             if (val.length >= 8) criteriaMet++;
             if (/[a-z]/.test(val)) criteriaMet++;
@@ -2080,7 +2103,7 @@ function initializeApp() {
             if (!emailRegex.test(email)) {
                 showToast('Please enter a valid email address.', 'error');
                 loginErrorMsg.textContent = 'Please enter a valid email address.';
-                loginErrorMsg.style.display = 'block';
+                showEl(loginErrorMsg, 'visible');
                 return;
             }
 
@@ -2092,7 +2115,7 @@ function initializeApp() {
             localStorage.removeItem('ta_user_plan_type');
             localStorage.removeItem('ta_logged_in');
 
-            loginErrorMsg.style.display = 'none';
+            hideEl(loginErrorMsg);
             loginSubmitBtn.disabled = true;
             const originalText = loginSubmitBtn.textContent;
             loginSubmitBtn.textContent = isSignUpMode ? "Registering..." : "Signing In...";
@@ -2183,7 +2206,7 @@ function initializeApp() {
                         isLoggedIn = true;
                         userEmail = email;
                         userEmailDisplay.textContent = userEmail;
-                        loginErrorMsg.style.display = 'none';
+                        hideEl(loginErrorMsg);
                         window.location.hash = '#dashboard';
                         updateNavUI();
                         updateCreditsDisplay();
@@ -2193,7 +2216,7 @@ function initializeApp() {
             } catch (err) {
                 console.error("Auth error:", err);
                 loginErrorMsg.textContent = `🚫 ${err.message || 'Authentication failed. Please check your credentials.'}`;
-                loginErrorMsg.style.display = 'block';
+                showEl(loginErrorMsg, 'visible');
             } finally {
                 loginSubmitBtn.disabled = false;
                 loginSubmitBtn.textContent = originalText;
@@ -2712,12 +2735,12 @@ function initializeApp() {
         const fileInfoEl = document.getElementById(`${fileKey}-file-info`);
         if (fileInfoEl) {
             fileInfoEl.textContent = 'No file selected';
-            fileInfoEl.style.display = 'none';
+            hideEl(fileInfoEl);
         }
         
         const removeBtn = document.getElementById(`remove-${fileKey}-file-btn`);
         if (removeBtn) {
-            removeBtn.style.display = 'none';
+            hideEl(removeBtn);
         }
 
         updateUploadButtonsState();
@@ -2729,7 +2752,7 @@ function initializeApp() {
         
         const banner = document.getElementById('scanned-warning-banner');
         if (banner) {
-            banner.style.display = showWarning ? 'flex' : 'none';
+            toggleEl(banner, showWarning, 'flex-visible');
         }
     }
 
@@ -2772,12 +2795,12 @@ function initializeApp() {
         const fileInfoEl = document.getElementById(`${fileKey}-file-info`);
         if (fileInfoEl) {
             fileInfoEl.textContent = `${sanitizeFilenameForPdfAndUi(file.name)} (${formatBytes(file.size)})`;
-            fileInfoEl.style.display = 'block';
+            showEl(fileInfoEl, 'visible');
         }
 
         const removeBtn = document.getElementById(`remove-${fileKey}-file-btn`);
         if (removeBtn) {
-            removeBtn.style.display = 'inline-flex';
+            showEl(removeBtn, 'inline-flex-visible');
         }
 
         updateUploadButtonsState();
@@ -2793,7 +2816,7 @@ function initializeApp() {
             
             const banner = document.getElementById('scanned-warning-banner');
             if (banner) {
-                banner.style.display = showWarning ? 'flex' : 'none';
+                toggleEl(banner, showWarning, 'flex-visible');
             }
         }).catch(e => {
             console.warn("Could not extract text to check scanned status:", e);
@@ -2805,7 +2828,7 @@ function initializeApp() {
             
             const banner = document.getElementById('scanned-warning-banner');
             if (banner) {
-                banner.style.display = showWarning ? 'flex' : 'none';
+                toggleEl(banner, showWarning, 'flex-visible');
             }
         });
     }
@@ -4106,13 +4129,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 leaseQuoteBox.textContent = rec.leaseQuote || rec.leaseCite || "No specific paragraph cited.";
                 estoppelQuoteBox.textContent = rec.estoppelQuote || rec.estoppelCite || "No specific paragraph cited.";
                 
-                verificationDrawer.style.display = 'grid';
+                showEl(verificationDrawer, 'grid-visible');
                 verificationDrawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             });
         });
 
         // Hide upload panel, show results panel
-        resultsPanel.style.display = 'block';
+        showEl(resultsPanel, 'visible');
         
         // Auto scroll to results panel smoothly
         resultsPanel.scrollIntoView({ behavior: 'smooth' });
@@ -4132,7 +4155,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         // SVG circumference = 2 * PI * r = 2 * 3.14159 * 58 = 364.42
         const c = 364.4;
         const offset = c - (score / 100) * c;
-        scoreGaugeFill.style.strokeDashoffset = offset;
+        scoreGaugeFill.setAttribute('stroke-dashoffset', offset);
         
         // Color coding dial based on score
         scoreGaugeFill.className.baseVal = "gauge-fill";
@@ -4464,7 +4487,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     ];
 
     function showLoader(statusText) {
-        auditLoader.style.display = 'flex';
+        showEl(auditLoader, 'flex-visible');
         loaderStatusText.textContent = statusText;
         
         // Remove/recreate rotating sub-text if any
@@ -4472,9 +4495,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         if (!subTextEl) {
             subTextEl = document.createElement('div');
             subTextEl.id = 'loader-sub-status-text';
-            subTextEl.style.fontSize = '12px';
-            subTextEl.style.color = 'rgba(255,255,255,0.6)';
-            subTextEl.style.marginTop = '8px';
+            subTextEl.className = 'loader-sub-text';
             loaderStatusText.parentNode.appendChild(subTextEl);
         }
         
@@ -4489,7 +4510,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     }
 
     function hideLoader() {
-        auditLoader.style.display = 'none';
+        hideEl(auditLoader);
         if (loaderInterval) {
             clearInterval(loaderInterval);
             loaderInterval = null;
@@ -5045,6 +5066,144 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         });
     }
 
+    // --- Product Proof Tabs Switcher ---
+    const proofTabBtns = document.querySelectorAll('.proof-tab-btn');
+    proofTabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const targetId = btn.getAttribute('data-target');
+            
+            // Remove active class from all buttons and panels
+            proofTabBtns.forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.proof-tab-panel').forEach(p => p.classList.remove('active'));
+            
+            // Add active class to clicked button and target panel
+            btn.classList.add('active');
+            const panel = document.getElementById(targetId);
+            if (panel) {
+                panel.classList.add('active');
+            }
+        });
+    });
+
+    // --- Simulated Walkthrough Player Logic ---
+    const walkthroughVideoModal = document.getElementById('walkthrough-video-modal');
+    const playBtnContainer = document.querySelector('.video-player-container');
+    const walkthroughVideoClose = document.getElementById('walkthrough-video-close');
+    const walkthroughCloseBtn = document.getElementById('walkthrough-close-btn');
+    const walkthroughRestartBtn = document.getElementById('walkthrough-restart-btn');
+    
+    const logsContainer = document.getElementById('walkthrough-logs-container');
+    const progressFill = document.getElementById('walkthrough-progress-fill');
+    const currentTimeDisplay = document.getElementById('walkthrough-current-time');
+    const statusBadge = document.getElementById('walkthrough-status-badge');
+    
+    let walkthroughInterval = null;
+    let walkthroughTime = 0;
+    
+    const steps = [
+        { time: 0, text: "> Initializing LeaseAlign AI guest session...", type: "system" },
+        { time: 3, text: "> Loading sample documents: APEX Lease & Estoppel...", type: "system" },
+        { time: 7, text: "> Uploading complex_lease_agreement.pdf (7.5 KB)...", type: "upload" },
+        { time: 12, text: "> Uploading complex_estoppel_certificate.pdf (3.2 KB)...", type: "upload" },
+        { time: 18, text: "> Processing Lease: Extracting Base Rent schedule & Expiry date...", type: "process" },
+        { time: 26, text: "> Processing Estoppel: Extracting Current Rent & Tenant verification...", type: "process" },
+        { time: 34, text: "> Comparing 15 lease clauses against tenant estoppel certification...", type: "compare" },
+        { time: 41, text: "⚠️ Mismatch: Estoppel rent ($41,569.02) does not align with lease schedule ($35k)!", type: "alert" },
+        { time: 47, text: "⚠️ Mismatch: Estoppel expiration (Sept 30) does not match lease (Aug 31)!", type: "alert" },
+        { time: 53, text: "> Generating side-by-side reconciliation matrix...", type: "report" },
+        { time: 58, text: "🎉 Audit complete! 6 discrepancies found. Compliance score: 34%.", type: "complete" }
+    ];
+    
+    function startWalkthrough() {
+        walkthroughTime = 0;
+        if (logsContainer) logsContainer.innerHTML = '';
+        if (progressFill) progressFill.style.width = '0%';
+        if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
+        if (statusBadge) {
+            statusBadge.textContent = 'Processing...';
+            statusBadge.className = 'simulated-badge';
+        }
+        
+        if (walkthroughInterval) clearInterval(walkthroughInterval);
+        
+        walkthroughInterval = setInterval(() => {
+            walkthroughTime++;
+            if (walkthroughTime > 60) {
+                clearInterval(walkthroughInterval);
+                if (statusBadge) {
+                    statusBadge.textContent = 'Complete';
+                    statusBadge.className = 'simulated-badge complete';
+                }
+                return;
+            }
+            
+            // Update progress bar
+            const percent = (walkthroughTime / 60) * 100;
+            if (progressFill) progressFill.style.width = `${percent}%`;
+            
+            // Update timer display
+            const secStr = walkthroughTime < 10 ? `0${walkthroughTime}` : `${walkthroughTime}`;
+            if (currentTimeDisplay) currentTimeDisplay.textContent = `0:${secStr}`;
+            
+            // Check if there is a step to display
+            const currentStep = steps.find(s => s.time === walkthroughTime);
+            if (currentStep && logsContainer) {
+                const line = document.createElement('div');
+                line.className = `simulated-log-line ${currentStep.type}`;
+                
+                let color = '#34d399'; // Default terminal green
+                if (currentStep.type === 'system') color = '#a1a1ab'; // Muted
+                else if (currentStep.type === 'alert') color = '#f87171'; // Red
+                else if (currentStep.type === 'complete') color = '#10b981'; // Emerald
+                
+                line.style.color = color;
+                line.textContent = currentStep.text;
+                logsContainer.appendChild(line);
+                
+                // Auto-scroll screen
+                const screen = logsContainer.parentElement;
+                if (screen) {
+                    screen.scrollTop = screen.scrollHeight;
+                }
+            }
+        }, 150);
+    }
+    
+    function stopWalkthrough() {
+        if (walkthroughInterval) {
+            clearInterval(walkthroughInterval);
+            walkthroughInterval = null;
+        }
+    }
+    
+    if (playBtnContainer && walkthroughVideoModal) {
+        playBtnContainer.addEventListener('click', () => {
+            walkthroughVideoModal.classList.add('active');
+            startWalkthrough();
+        });
+    }
+    
+    if (walkthroughVideoClose && walkthroughVideoModal) {
+        walkthroughVideoClose.addEventListener('click', () => {
+            walkthroughVideoModal.classList.remove('active');
+            stopWalkthrough();
+        });
+    }
+    
+    if (walkthroughCloseBtn && walkthroughVideoModal) {
+        walkthroughCloseBtn.addEventListener('click', () => {
+            walkthroughVideoModal.classList.remove('active');
+            stopWalkthrough();
+        });
+    }
+    
+    if (walkthroughRestartBtn) {
+        walkthroughRestartBtn.addEventListener('click', () => {
+            startWalkthrough();
+        });
+    }
+
+    setupModalFocusTrap('walkthrough-video-modal');
     setupModalFocusTrap('password-recovery-modal');
     setupModalFocusTrap('disclaimer-modal');
     setupModalFocusTrap('raw-extraction-modal');

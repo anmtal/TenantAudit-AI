@@ -182,7 +182,7 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     await expect(page.locator('#pricing-section')).toBeInViewport();
   });
 
-  test('should verify live demo redirect directly to dashboard in sandbox mode, auto-loading demo audit, and credit display as Guest Sandbox', async ({ page }) => {
+  test('should verify live demo redirect directly to dashboard in sandbox mode, loading sample audit manually, and credit display as Guest Sandbox', async ({ page }) => {
     // 1. Mock config
     await page.route('**/api/config**', async route => {
       await route.fulfill({
@@ -192,19 +192,137 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
       });
     });
 
+    // Mock /api/audit calls — returns the mock lease and estoppel data for samples
+    await page.route('**/api/audit', async route => {
+      const request = route.request();
+      let postData;
+      try {
+        postData = JSON.parse(request.postData());
+      } catch {
+        postData = {};
+      }
+
+      if (postData.docType === 'lease') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'completed',
+            data: {
+              tenantName: { value: "APEX COWORKING SOLUTIONS INTERNATIONAL INC.", quote: "LEASE AGREEMENT..." },
+              suiteNumber: { value: "Suite 4200, 42nd Floor", quote: "Suite 4200..." },
+              premisesSf: { value: "14,500 rentable square feet", quote: "14,500 SF..." },
+              monthlyRent: { value: "$35,000.00 (Months 1–12), escalating at 3.50% per annum to $47,701.41 (Months 109–120)", quote: "Base Rent shall be..." },
+              expiryDate: { value: "August 31, 2031", quote: "expiration date..." },
+              securityDeposit: { value: "$105,000.00 (three months of initial Base Rent)", quote: "Security Deposit..." },
+              renewalOptions: { value: "Two (2) renewal options...", quote: "Renewal options..." },
+              camShare: { value: "4.85% pro-rata share...", quote: "CAM share..." },
+              guarantorName: { value: "APEX GLOBAL ENTERPRISES HOLDINGS LLC", quote: "Guarantor..." },
+              prepaidRent: { value: "$35,000.00...", quote: "Prepaid rent..." },
+              landlordDefault: { value: "Landlord obligated...", quote: "Landlord shall maintain..." },
+              tiAllowance: { value: "Not Mentioned", quote: "No citation found." },
+              coTenancy: { value: "Not Mentioned", quote: "No citation found." },
+              terminationRight: { value: "Not Mentioned", quote: "No citation found." },
+              sndaStatus: { value: "Not Mentioned", quote: "No citation found." },
+              permittedUse: { value: "Not Mentioned", quote: "No citation found." }
+            }
+          })
+        });
+      } else if (postData.docType === 'estoppel') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'completed',
+            data: {
+              tenantName: { value: "Apex Coworking Solutions Int'l, Inc.", quote: "Tenant name is..." },
+              suiteNumber: { value: "Suite 4200", quote: "occupying Suite..." },
+              premisesSf: { value: "14,500 SF", quote: "premises measuring..." },
+              monthlyRent: { value: "$41,569.02 per month", quote: "Current monthly rent..." },
+              expiryDate: { value: "September 30, 2031", quote: "Lease expiration..." },
+              securityDeposit: { value: "$70,000.00, no portion applied", quote: "Security deposit..." },
+              renewalOptions: { value: "One (1) renewal option...", quote: "Tenant has..." },
+              camShare: { value: "4.85% pro-rata share...", quote: "CAM share..." },
+              guarantorName: { value: "Apex Global Enterprises Holdings LLC", quote: "Guarantor..." },
+              prepaidRent: { value: "No base rent prepaid...", quote: "No prepaid rent..." },
+              landlordDefault: { value: "Landlord is currently in default...", quote: "Landlord is in default..." },
+              tiAllowance: { value: "Not Mentioned", quote: "No citation found." },
+              coTenancy: { value: "Not Mentioned", quote: "No citation found." },
+              terminationRight: { value: "Not Mentioned", quote: "No citation found." },
+              sndaStatus: { value: "Not Mentioned", quote: "No citation found." },
+              permittedUse: { value: "Not Mentioned", quote: "No citation found." }
+            }
+          })
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ pageNumbers: [1, 2, 3] })
+        });
+      }
+    });
+
+    // Mock /api/compare
+    await page.route('**/api/compare', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'completed',
+          data: {
+            tenantName: { status: "match", reason: "Tenant names match." },
+            suiteNumber: { status: "match", reason: "Suite numbers align." },
+            premisesSf: { status: "match", reason: "Premises sizes are identical." },
+            monthlyRent: { status: "warning", reason: "The Estoppel monthly rent matches a scheduled rent progression step." },
+            expiryDate: { status: "mismatch", reason: "Discrepancy: Expiration dates." },
+            securityDeposit: { status: "mismatch", reason: "Discrepancy: Security deposit." },
+            renewalOptions: { status: "mismatch", reason: "Discrepancy: Renewal options." },
+            camShare: { status: "mismatch", reason: "Discrepancy: CAM cap." },
+            guarantorName: { status: "match", reason: "Guarantor names match." },
+            prepaidRent: { status: "mismatch", reason: "Discrepancy: Prepaid rent." },
+            landlordDefault: { status: "mismatch", reason: "Discrepancy: Landlord default." },
+            tiAllowance: { status: "warning", reason: "Not mentioned." },
+            coTenancy: { status: "warning", reason: "Not mentioned." },
+            terminationRight: { status: "warning", reason: "Not mentioned." },
+            sndaStatus: { status: "warning", reason: "Not mentioned." },
+            permittedUse: { status: "warning", reason: "Not mentioned." }
+          }
+        })
+      });
+    });
+
     await page.goto('/');
     await page.waitForSelector('body[data-initialized="true"]', { timeout: 15000 });
 
     // Click Try Live Demo when not logged in
     await page.click('#hero-view-demo-btn');
     
-    // Verify it takes us to dashboard directly (guest sandbox mode) and shows the demo audit results
+    // Verify it takes us to dashboard directly (guest sandbox mode)
     await expect(page.locator('#dashboard-view')).toBeVisible();
-    await expect(page.locator('#meta-tenant-name')).toHaveText('APEX COWORKING SOLUTIONS INTERNATIONAL INC.');
 
     // Verify credits pill is visible and shows Guest Sandbox text
     await expect(page.locator('#credits-topup-trigger')).toBeVisible();
     await expect(page.locator('#credits-count-display')).toHaveText('Guest');
+
+    // Click load samples button
+    await page.click('#load-samples-btn');
+    
+    // Wait for the files state to reflect selection
+    await page.waitForSelector('#lease-file-info:has-text("sample_lease.pdf")');
+    await page.waitForSelector('#estoppel-file-info:has-text("sample_estoppel.pdf")');
+
+    // Click start audit button
+    await page.click('#start-audit-btn');
+
+    // Accept disclaimer
+    await expect(page.locator('#disclaimer-modal')).toHaveClass(/active/, { timeout: 3000 });
+    await page.click('#disclaimer-agree-checkbox');
+    await page.click('#disclaimer-proceed-btn');
+
+    // Wait for results panel and check text
+    await expect(page.locator('#results-panel')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#meta-tenant-name')).toHaveText('APEX COWORKING SOLUTIONS INTERNATIONAL INC.');
   });
 
   test('should require a valid x-transaction-id header on /api/audit and /api/compare', async ({ request }) => {

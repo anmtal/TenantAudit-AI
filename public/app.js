@@ -793,11 +793,6 @@ function initializeApp() {
             if (sandboxBanner) sandboxBanner.style.display = 'none';
 
             updateCreditsDisplay();
-
-            if (sessionStorage.getItem('ta_load_demo_audit') === 'true') {
-                sessionStorage.removeItem('ta_load_demo_audit');
-                loadDemoAuditData();
-            }
         }
     };
 
@@ -1776,8 +1771,8 @@ function initializeApp() {
     if (heroViewDemoBtn) {
         heroViewDemoBtn.addEventListener('click', () => {
             console.log("Try Live Demo clicked...");
-            sessionStorage.setItem('ta_load_demo_audit', 'true');
             isDemoMode = true;
+            resetAuditState();
             updateNavUI();
             window.location.hash = '#dashboard';
         });

@@ -1041,7 +1041,21 @@ app.post('/api/grant-welcome-credit', requireAuth, async (req, res) => {
         }
 
         if (profile.free_credit_granted) {
-            return res.json({ success: true, granted: false, message: "Welcome credit already granted." });
+            // Check if they actually have a credit grant row in team_credit_grants
+            const teamId = profile.team_id;
+            let hasGrants = false;
+            if (teamId) {
+                const { data: grants, error: grantsErr } = await supabaseAdmin
+                    .from('team_credit_grants')
+                    .select('id')
+                    .eq('team_id', teamId);
+                
+                hasGrants = !grantsErr && grants && grants.length > 0;
+            }
+            if (hasGrants) {
+                return res.json({ success: true, granted: false, message: "Welcome credit already granted." });
+            }
+            console.log(`[Grant Welcome Credit] User ${userId} was marked as granted but has no credit grants in table. Self-healing...`);
         }
 
         // Auto-heal profile phone number if missing using auth metadata

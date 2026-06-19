@@ -679,6 +679,28 @@ function initializeApp() {
             emailVerificationPollInterval = null;
         }
 
+        // Check for Supabase email confirmation hash redirect (type=signup)
+        if (hash.includes('type=signup') || hash.includes('type=invite') || hash.includes('type=email_change')) {
+            console.log("[Router] Detected signup confirmation hash, forcing sign out and redirection to login...");
+            
+            // Immediately clear the hash to prevent loop and remove token from URL
+            window.location.hash = '#login';
+            
+            // Sign out the user to clear the session Supabase auto-created
+            if (supabase) {
+                supabase.auth.signOut().then(() => {
+                    isLoggedIn = false;
+                    isSignUpMode = false;
+                    if (window.clearAuthInputs) window.clearAuthInputs();
+                    syncSignUpUI();
+                    showToast("🎉 Email verified successfully! Please sign in with your email and password.", "success");
+                }).catch(err => {
+                    console.warn("Sign out during verification redirect failed:", err);
+                });
+            }
+            return;
+        }
+
         // Handle Supabase auth error redirect hash fragments (e.g. #error=server_error&...)
         if (hash.startsWith('#error=')) {
             const params = new URLSearchParams(hash.substring(1));
@@ -1090,8 +1112,9 @@ function initializeApp() {
             // Check for pending team invitations (non-blocking)
             checkPendingInvitations(session.user.email);
             
-            // Fallback welcome credit grant trigger (Bug 1 helper)
-            if (profileData && !profileData.free_credit_granted && session.user.email_confirmed_at) {
+            // Fallback welcome credit grant trigger (Bug 1 helper) - triggers if not marked granted OR user has 0 credits
+            const needsWelcomeCredit = profileData && (!profileData.free_credit_granted || hostedCredits === 0);
+            if (needsWelcomeCredit && session.user.email_confirmed_at) {
                 const isOffline = !supabase || 
                                   (supabase.supabaseUrl && supabase.supabaseUrl.includes('mock.supabase.co')) || 
                                   localStorage.getItem('ta_logged_in') === 'true';

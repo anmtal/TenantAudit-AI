@@ -509,9 +509,9 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     // Click submit
     await page.click('#login-submit-btn');
 
-    // Verify it displays the custom "no account found" error message
+    // Verify it displays the generic invalid credentials error message
     await expect(errorBox).toBeVisible({ timeout: 5000 });
-    await expect(errorBox).toContainText('No account found with this email address. Please sign up first.');
+    await expect(errorBox).toContainText('Invalid login credentials');
 
     // Switch to Sign Up mode
     await page.click('#auth-toggle-link');

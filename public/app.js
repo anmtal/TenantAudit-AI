@@ -150,7 +150,7 @@ function initializeApp() {
                 <div class="toast-title"></div>
                 <div class="toast-message"></div>
             </div>
-            <button class="toast-close" aria-label="Close Notification"><i data-lucide="x" style="width: 14px; height: 14px;" aria-hidden="true"></i></button>
+            <button class="toast-close" aria-label="Close Notification"><i data-lucide="x" class="toast-close-icon" aria-hidden="true"></i></button>
         `;
         toast.querySelector('.toast-title').textContent = title;
         toast.querySelector('.toast-message').textContent = message;
@@ -881,7 +881,7 @@ function initializeApp() {
         if (giftTextEl) {
             if (hostedCredits === 0) {
                 giftTextEl.style.color = '#f97316'; // Warning orange
-                giftTextEl.innerHTML = `⚠️ You have 0 audits remaining. <a href="#" id="onboarding-pay-link" style="color: var(--color-purple); text-decoration: underline; font-weight: 600;">Pay to get Audits</a> to start processing documents.`;
+                giftTextEl.innerHTML = `⚠️ You have 0 audits remaining. <a href="#" id="onboarding-pay-link" class="onboarding-link">Pay to get Audits</a> to start processing documents.`;
                 const payLink = document.getElementById('onboarding-pay-link');
                 if (payLink) {
                     payLink.addEventListener('click', (e) => {
@@ -1205,17 +1205,17 @@ function initializeApp() {
                 let warningBannerHtml = '';
                 if (hostedCredits === 0) {
                     warningBannerHtml = `
-                        <div style="background: rgba(249, 115, 22, 0.08); border: 1px dashed rgba(249, 115, 22, 0.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; color: var(--text-primary); font-size: 13px; line-height: 1.5; text-align: center;">
-                            ⚠️ You have 0 audits remaining. <a href="#" id="history-pay-link" style="color: var(--color-purple); text-decoration: underline; font-weight: 600;">Pay to get Audits</a> to start processing documents.
+                        <div class="no-credits-warning">
+                            ⚠️ You have 0 audits remaining. <a href="#" id="history-pay-link">Pay to get Audits</a> to start processing documents.
                         </div>
                     `;
                 }
                 historyEmptyMsg.innerHTML = `
-                    <div style="text-align: center; padding: 30px;">
+                    <div class="welcome-audits-card">
                         ${warningBannerHtml}
-                        <h3 style="margin-bottom: 10px; color: var(--text-primary);">Welcome to LeaseAlign AI</h3>
-                        <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 14px; line-height: 1.5;">You haven't run any audits yet. Get started by uploading a lease and estoppel, or view a sample audit to see how it works.</p>
-                        <button id="btn-view-sample" class="primary-btn" style="width: auto; padding: 10px 20px; margin: 0 auto; display: block;">View Sample Audit</button>
+                        <h3>Welcome to LeaseAlign AI</h3>
+                        <p>You haven't run any audits yet. Get started by uploading a lease and estoppel, or view a sample audit to see how it works.</p>
+                        <button id="btn-view-sample" class="primary-btn">View Sample Audit</button>
                     </div>
                 `;
                 historyEmptyMsg.style.display = 'block';
@@ -1252,9 +1252,9 @@ function initializeApp() {
                         return s === 'mismatch' || s === 'warning';
                     });
                     if (mismatches.length > 0) {
-                        discrepanciesHtml = `<div class="history-detail-item" style="color: #ef4444; font-weight: 500;"><span>Discrepancies:</span> ${mismatches.map(m => escapeHtml(m.term)).join(', ')}</div>`;
+                        discrepanciesHtml = `<div class="history-detail-item discrepancies-exist"><span>Discrepancies:</span> ${mismatches.map(m => escapeHtml(m.term)).join(', ')}</div>`;
                     } else {
-                        discrepanciesHtml = `<div class="history-detail-item" style="color: #10b981; font-weight: 500;"><span>Discrepancies:</span> None</div>`;
+                        discrepanciesHtml = `<div class="history-detail-item discrepancies-none"><span>Discrepancies:</span> None</div>`;
                     }
                 }
                 
@@ -1638,15 +1638,7 @@ function initializeApp() {
                                                 body: JSON.stringify({
                                                     planType: plan,
                                                     userId: user.id,
-                                                    packageName: packageName,
-                                                    amount: amount,
-                                                    auditAmount: amount,
-                                                    price: price,
-                                                    priceAmount: price,
-                                                    seats: seats,
-                                                    seatCount: seats,
-                                                    interval: interval,
-                                                    isSubscription: interval !== 'one-time'
+                                                    packageName: packageName
                                                 })
                                             });
                                             const sessionData = await response.json();
@@ -2183,21 +2175,6 @@ function initializeApp() {
                         });
                         if (error) {
                             localStorage.removeItem('ta_fresh_login');
-                            if (error.message === 'Invalid login credentials') {
-                                try {
-                                    const checkRes = await fetch('/api/check-email', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ email })
-                                    });
-                                    const checkData = await checkRes.json();
-                                    if (checkRes.ok && !checkData.exists) {
-                                        throw new Error('No account found with this email address. Please sign up first.');
-                                    }
-                                } catch (checkErr) {
-                                    throw checkErr;
-                                }
-                            }
                             throw error;
                         }
                     } else {
@@ -2578,7 +2555,7 @@ function initializeApp() {
         loadSamplesBtn.addEventListener('click', async () => {
             loadSamplesBtn.disabled = true;
             const originalText = loadSamplesBtn.innerHTML;
-            loadSamplesBtn.innerHTML = '<span class="spinner inline" style="width:12px; height:12px; border-width:2px; margin-right:4px;"></span> Loading...';
+            loadSamplesBtn.innerHTML = '<span class="spinner inline spinner-inline-custom"></span> Loading...';
             try {
                 const leaseRes = await fetch('/sample_lease.pdf');
                 if (!leaseRes.ok) throw new Error("Failed to load sample lease");
@@ -4112,7 +4089,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     </div>
                 </td>
                 <td>${statusBadge}</td>
-                <td style="text-align: right;">
+                <td class="text-right-align">
                     <button class="audit-action-btn" data-index="${idx}">Verify Quotes</button>
                 </td>
             `;
@@ -4685,15 +4662,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     body: JSON.stringify({
                         planType: plan,
                         userId: user.id,
-                        packageName: pack,
-                        amount: amount,
-                        auditAmount: amount,
-                        price: price,
-                        priceAmount: price,
-                        seats: seats,
-                        seatCount: seats,
-                        interval: interval,
-                        isSubscription: interval !== 'one-time'
+                        packageName: pack
                     })
                 });
                 
@@ -4742,7 +4711,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
     async function loadTeamMembers() {
         if (!teamMemberList) return;
-        teamMemberList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">Loading team members... <div class="loader-spinner" style="display: inline-block; width: 14px; height: 14px; margin-left: 8px; border: 2px solid var(--color-primary); border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite;"></div></div>';
+        teamMemberList.innerHTML = '<div class="team-loader">Loading team members... <div class="loader-spinner"></div></div>';
         
         try {
             const { data: { user } } = await supabase.auth.getUser();
@@ -4751,7 +4720,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             // Get user's team ID
             const { data: profile } = await supabase.from('profiles').select('team_id, teams(seat_limit)').eq('id', user.id).single();
             if (!profile || !profile.team_id) {
-                teamMemberList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">You are not part of a team.</div>';
+                teamMemberList.innerHTML = '<div class="team-empty">You are not part of a team.</div>';
                 return;
             }
             
@@ -4786,7 +4755,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
 
             if ((!members || members.length === 0) && (!invites || invites.length === 0)) {
-                teamMemberList.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 20px;">No other members on this team.</div>';
+                teamMemberList.innerHTML = '<div class="team-empty">No other members on this team.</div>';
                 return;
             }
             
@@ -4820,11 +4789,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     const initial = 'I';
                     
                     teamMemberList.innerHTML += `
-                        <div class="team-member-item" style="opacity: 0.7;">
+                        <div class="team-member-item team-member-pending">
                             <div class="team-member-info">
-                                <div class="team-member-avatar" style="background: var(--bg-surface-secondary, #f3f4f6); color: var(--text-muted, #6b7280);">${escapeHtml(initial)}</div>
+                                <div class="team-member-avatar team-member-avatar-pending">${escapeHtml(initial)}</div>
                                 <div class="team-member-details">
-                                    <span class="team-member-name">${escapeHtml(name)} <span class="badge" style="font-size: 0.7rem; background: #ffedd5; color: #ea580c; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px;">Pending</span></span>
+                                    <span class="team-member-name">${escapeHtml(name)} <span class="badge team-member-badge-pending">Pending</span></span>
                                     <span class="team-member-email">${escapeHtml(invite.email)}</span>
                                 </div>
                             </div>
@@ -4835,7 +4804,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             
         } catch (err) {
             console.error("Error loading team members:", err);
-            teamMemberList.innerHTML = `<div style="text-align: center; color: var(--color-red); padding: 20px;">Error loading team: ${err.message}</div>`;
+            teamMemberList.innerHTML = `<div class="team-error">Error loading team: ${err.message}</div>`;
         }
     }
 

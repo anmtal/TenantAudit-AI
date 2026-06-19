@@ -220,7 +220,7 @@ app.use((req, res, next) => {
     // X-XSS-Protection
     res.setHeader('X-XSS-Protection', '1; mode=block');
     // Basic CSP to restrict script execution and prevent token exfiltration
-    res.setHeader('Content-Security-Policy', "default-src 'self'; worker-src 'self' blob:; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://js.stripe.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'self' https://js.stripe.com; img-src 'self' data: https:;");
+    res.setHeader('Content-Security-Policy', "default-src 'self'; worker-src 'self' blob:; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://js.stripe.com https://unpkg.com; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'self' https://js.stripe.com; img-src 'self' data: https:;");
     next();
 });
 
@@ -2749,6 +2749,9 @@ app.post('/api/release-session', requireAuth, async (req, res) => {
 
 // Diagnostic User Profile Endpoint
 app.get('/api/debug-user-profile', requireAuth, async (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({ error: "Access denied. Diagnostic route disabled in production." });
+    }
     try {
         if (!supabaseAdmin) {
             return res.json({ error: "Database admin client not configured." });
@@ -2785,43 +2788,6 @@ app.get('/api/debug-user-profile', requireAuth, async (req, res) => {
     }
 });
 
-
-// Check Email Endpoint
-app.post('/api/check-email', async (req, res) => {
-    try {
-        const { email } = req.body;
-        if (!email) {
-            return res.status(400).json({ error: "Missing email parameter." });
-        }
-
-        if (!supabaseAdmin) {
-            const defaultExisting = ['test@example.com', 'pastdue@example.com', 'guest@leasealign.io'];
-            if (defaultExisting.includes(email.trim().toLowerCase())) {
-                return res.json({ exists: true });
-            }
-            if (global.__mockRegisteredEmails && global.__mockRegisteredEmails[email.trim().toLowerCase()]) {
-                return res.json({ exists: true });
-            }
-            return res.json({ exists: false });
-        }
-
-        const { data: existingProfile, error: selectErr } = await supabaseAdmin
-            .from('profiles')
-            .select('id')
-            .ilike('email', email.trim())
-            .maybeSingle();
-
-        if (selectErr) {
-            console.error("[Check Email] DB error:", selectErr);
-            return res.status(500).json({ error: "Database lookup failed." });
-        }
-
-        return res.json({ exists: !!existingProfile });
-    } catch (err) {
-        console.error("[Check Email] Error:", err);
-        return res.status(500).json({ error: "Internal Server Error" });
-    }
-});
 
 
 // Start Server

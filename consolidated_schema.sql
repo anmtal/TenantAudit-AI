@@ -487,8 +487,13 @@ CREATE POLICY "Allow recipient to decline invitations" ON public.team_invitation
     );
 
 DROP POLICY IF EXISTS "Allow team owner to manage invitations" ON public.team_invitations;
-CREATE POLICY "Allow team owner to manage invitations" ON public.team_invitations
-    FOR ALL USING (
+CREATE POLICY "Allow team owner to insert invitations" ON public.team_invitations
+    FOR INSERT WITH CHECK (
+        team_id IN (SELECT id FROM public.teams WHERE owner_id = auth.uid())
+    );
+
+CREATE POLICY "Allow team owner to delete invitations" ON public.team_invitations
+    FOR DELETE USING (
         team_id IN (SELECT id FROM public.teams WHERE owner_id = auth.uid())
     );
 

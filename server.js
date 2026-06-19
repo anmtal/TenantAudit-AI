@@ -880,6 +880,20 @@ app.get('/api/config', (req, res) => {
 
 
 
+// Test Helper Endpoint for seeding mock registered phone numbers
+if (process.env.NODE_ENV === 'test') {
+    app.post('/api/test/mock-phone', (req, res) => {
+        const { phoneNumber, registered } = req.body;
+        global.__mockRegisteredPhones = global.__mockRegisteredPhones || {};
+        if (registered) {
+            global.__mockRegisteredPhones[phoneNumber] = true;
+        } else {
+            delete global.__mockRegisteredPhones[phoneNumber];
+        }
+        res.json({ success: true });
+    });
+}
+
 // Endpoint to send SMS OTP verification code via Twilio
 app.post('/api/send-otp', smsLimiter, async (req, res) => {
     try {
@@ -889,20 +903,26 @@ app.post('/api/send-otp', smsLimiter, async (req, res) => {
         }
 
         // Check if phone number is already registered in Profiles table
+        let existingProfile = null;
         if (supabaseAdmin) {
-            const { data: existingProfile, error: profileErr } = await supabaseAdmin
+            const { data, error: profileErr } = await supabaseAdmin
                 .from('profiles')
                 .select('id')
                 .eq('phone', phoneNumber)
                 .maybeSingle();
-
-            if (existingProfile) {
-                console.log(`[Send OTP] Phone number ${phoneNumber} already registered. Returning mock success to prevent enumeration.`);
-                return res.json({ success: true, message: "If this number is available, a code has been sent." });
+            existingProfile = data;
+        } else if (process.env.NODE_ENV === 'test') {
+            if (global.__mockRegisteredPhones && global.__mockRegisteredPhones[phoneNumber]) {
+                existingProfile = { id: 'mock-existing-user-id' };
             }
         }
 
-        if (twilio && TWILIO_VERIFY_SERVICE_SID) {
+        if (existingProfile) {
+            console.log(`[Send OTP] Phone number ${phoneNumber} already registered.`);
+            return res.status(400).json({ error: "This phone number is already associated with another account." });
+        }
+
+        if (twilio && TWILIO_VERIFY_SERVICE_SID && process.env.NODE_ENV !== 'test') {
             console.log(`[Twilio Verify] Sending OTP to ${phoneNumber}`);
             await twilio.verify.v2.services(TWILIO_VERIFY_SERVICE_SID)
                 .verifications
@@ -930,7 +950,27 @@ app.post('/api/verify-otp', verifyOtpLimiter, async (req, res) => {
             return res.status(400).json({ error: "Missing phoneNumber or code." });
         }
 
-        if (twilio && TWILIO_VERIFY_SERVICE_SID) {
+        // Check if phone number is already registered in Profiles table
+        let existingProfile = null;
+        if (supabaseAdmin) {
+            const { data: existingProfileData, error: profileErr } = await supabaseAdmin
+                .from('profiles')
+                .select('id')
+                .eq('phone', phoneNumber)
+                .maybeSingle();
+            existingProfile = existingProfileData;
+        } else if (process.env.NODE_ENV === 'test') {
+            if (global.__mockRegisteredPhones && global.__mockRegisteredPhones[phoneNumber]) {
+                existingProfile = { id: 'mock-existing-user-id' };
+            }
+        }
+
+        if (existingProfile) {
+            console.log(`[Verify OTP] Phone number ${phoneNumber} already registered.`);
+            return res.status(400).json({ error: "This phone number is already associated with another account." });
+        }
+
+        if (twilio && TWILIO_VERIFY_SERVICE_SID && process.env.NODE_ENV !== 'test') {
             console.log(`[Twilio Verify] Checking OTP for ${phoneNumber}`);
             const verificationCheck = await twilio.verify.v2.services(TWILIO_VERIFY_SERVICE_SID)
                 .verificationChecks

@@ -303,4 +303,55 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     expect(verifyOneTimeJson.success).toBe(true);
   });
 
+  test('should enforce that a phone number can only be used on one email (no reuse)', async ({ request }) => {
+    const testPhone = '+19999999999';
+
+    // 1. Mark phone number as already registered in server mock
+    const mockRes = await request.post('/api/test/mock-phone', {
+      data: {
+        phoneNumber: testPhone,
+        registered: true
+      }
+    });
+    expect(mockRes.status()).toBe(200);
+
+    // 2. Try to send OTP to the registered phone number, should fail with 400 Bad Request
+    const sendOtpRes = await request.post('/api/send-otp', {
+      data: {
+        phoneNumber: testPhone
+      }
+    });
+    expect(sendOtpRes.status()).toBe(400);
+    const sendOtpJson = await sendOtpRes.json();
+    expect(sendOtpJson.error).toBe('This phone number is already associated with another account.');
+
+    // 3. Try to verify OTP for the registered phone number, should fail with 400 Bad Request
+    const verifyOtpRes = await request.post('/api/verify-otp', {
+      data: {
+        phoneNumber: testPhone,
+        code: '123456'
+      }
+    });
+    expect(verifyOtpRes.status()).toBe(400);
+    const verifyOtpJson = await verifyOtpRes.json();
+    expect(verifyOtpJson.error).toBe('This phone number is already associated with another account.');
+
+    // 4. Unregister/clear the phone number in server mock
+    const clearRes = await request.post('/api/test/mock-phone', {
+      data: {
+        phoneNumber: testPhone,
+        registered: false
+      }
+    });
+    expect(clearRes.status()).toBe(200);
+
+    // 5. Try to send OTP again, should succeed now
+    const sendOtpRetryRes = await request.post('/api/send-otp', {
+      data: {
+        phoneNumber: testPhone
+      }
+    });
+    expect(sendOtpRetryRes.status()).toBe(200);
+  });
+
 });

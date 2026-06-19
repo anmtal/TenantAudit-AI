@@ -1089,6 +1089,46 @@ app.post('/api/grant-welcome-credit', requireAuth, async (req, res) => {
                 .upsert({ phone: phoneVal, verified_at: new Date().toISOString() });
         }
 
+        // Auto-heal missing team_id in profile before calling the RPC
+        let teamIdVal = profile.team_id;
+        if (!teamIdVal) {
+            console.log(`[Grant Welcome Credit] Creating/finding personal team for user ${userId} because profile team_id is NULL`);
+            // Check if a team already exists for this owner
+            const { data: existingTeam, error: teamCheckErr } = await supabaseAdmin
+                .from('teams')
+                .select('id')
+                .eq('owner_id', userId)
+                .maybeSingle();
+            
+            if (!teamCheckErr && existingTeam) {
+                teamIdVal = existingTeam.id;
+                console.log(`[Grant Welcome Credit] Found existing team ${teamIdVal} for owner ${userId}. Linking profile.`);
+            } else {
+                const { data: newTeam, error: createTeamErr } = await supabaseAdmin
+                    .from('teams')
+                    .insert({ name: "Personal Team", owner_id: userId, audit_credits: 0, seat_limit: 1 })
+                    .select('id')
+                    .single();
+                if (createTeamErr || !newTeam) {
+                    console.error("[Grant Welcome Credit] Failed to create team:", createTeamErr);
+                    return res.status(500).json({ error: "Failed to create missing team." });
+                }
+                teamIdVal = newTeam.id;
+            }
+
+            // Update profile with team_id
+            const { error: profileUpdateErr } = await supabaseAdmin
+                .from('profiles')
+                .update({ team_id: teamIdVal })
+                .eq('id', userId);
+            
+            if (profileUpdateErr) {
+                console.error("[Grant Welcome Credit] Failed to link team to profile:", profileUpdateErr);
+                return res.status(500).json({ error: "Failed to link team to profile." });
+            }
+            profile.team_id = teamIdVal;
+        }
+
         // 3. Grant welcome credit using RPC first
         let rpcSuccess = true;
         const { error: grantErr } = await supabaseAdmin.rpc('grant_welcome_credit', { p_user_id: userId });

@@ -1044,7 +1044,20 @@ app.post('/api/grant-welcome-credit', requireAuth, async (req, res) => {
             return res.json({ success: true, granted: false, message: "Welcome credit already granted." });
         }
 
-        if (!profile.phone) {
+        // Auto-heal profile phone number if missing using auth metadata
+        let phoneVal = profile.phone;
+        if (!phoneVal) {
+            phoneVal = req.user.phone || req.user.user_metadata?.phone;
+            if (phoneVal) {
+                console.log(`[Grant Welcome Credit] Auto-healing missing phone number for user ${userId} to ${phoneVal}`);
+                await supabaseAdmin
+                    .from('profiles')
+                    .update({ phone: phoneVal })
+                    .eq('id', userId);
+            }
+        }
+
+        if (!phoneVal) {
             return res.status(400).json({ error: "Phone number is not set on profile." });
         }
 
@@ -1052,14 +1065,14 @@ app.post('/api/grant-welcome-credit', requireAuth, async (req, res) => {
         const { data: verifiedPhone, error: verifiedPhoneErr } = await supabaseAdmin
             .from('verified_phones')
             .select('phone')
-            .eq('phone', profile.phone)
+            .eq('phone', phoneVal)
             .maybeSingle();
 
         if (verifiedPhoneErr || !verifiedPhone) {
-            console.log(`[Grant Welcome Credit] Auto-healing verified_phones for phone ${profile.phone}`);
+            console.log(`[Grant Welcome Credit] Auto-healing verified_phones for phone ${phoneVal}`);
             await supabaseAdmin
                 .from('verified_phones')
-                .upsert({ phone: profile.phone, verified_at: new Date().toISOString() });
+                .upsert({ phone: phoneVal, verified_at: new Date().toISOString() });
         }
 
         // 3. Grant welcome credit using RPC first
@@ -1072,9 +1085,24 @@ app.post('/api/grant-welcome-credit', requireAuth, async (req, res) => {
 
         // 4. JS Fallback logic if RPC failed (e.g. database schema is not fully updated yet)
         if (!rpcSuccess) {
-            const teamId = profile.team_id;
+            let teamId = profile.team_id;
             if (!teamId) {
-                return res.status(400).json({ error: "User does not belong to a team." });
+                console.log(`[Grant Welcome Credit JS Fallback] Creating missing personal team for user ${userId}`);
+                const { data: newTeam, error: createTeamErr } = await supabaseAdmin
+                    .from('teams')
+                    .insert({ name: "Personal Team", owner_id: userId, audit_credits: 0, seat_limit: 1 })
+                    .select('id')
+                    .single();
+                if (createTeamErr || !newTeam) {
+                    console.error("[Grant Welcome Credit JS Fallback] Failed to create team:", createTeamErr);
+                    return res.status(500).json({ error: "Failed to create missing team." });
+                }
+                teamId = newTeam.id;
+                // Update profile with new team_id
+                await supabaseAdmin
+                    .from('profiles')
+                    .update({ team_id: teamId })
+                    .eq('id', userId);
             }
 
             // Insert 1 credit grant
@@ -1093,18 +1121,20 @@ app.post('/api/grant-welcome-credit', requireAuth, async (req, res) => {
                 .select('amount_remaining')
                 .eq('team_id', teamId);
 
+            let totalCredits = 1;
             if (!grantsFetchErr && grants) {
-                const totalCredits = grants.reduce((sum, g) => sum + (g.amount_remaining || 0), 0);
-                await supabaseAdmin
-                    .from('teams')
-                    .update({ audit_credits: totalCredits })
-                    .eq('id', teamId);
+                totalCredits = grants.reduce((sum, g) => sum + (g.amount_remaining || 0), 0);
             }
 
-            // Mark profile as granted
+            await supabaseAdmin
+                .from('teams')
+                .update({ audit_credits: totalCredits })
+                .eq('id', teamId);
+
+            // Mark profile as granted and sync credits
             await supabaseAdmin
                 .from('profiles')
-                .update({ free_credit_granted: true })
+                .update({ free_credit_granted: true, credits: totalCredits })
                 .eq('id', userId);
         }
 

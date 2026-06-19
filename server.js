@@ -2537,6 +2537,45 @@ app.post('/api/release-session', requireAuth, async (req, res) => {
 });
 
 
+// Diagnostic User Profile Endpoint
+app.get('/api/debug-user-profile', requireAuth, async (req, res) => {
+    try {
+        if (!supabaseAdmin) {
+            return res.json({ error: "Database admin client not configured." });
+        }
+        const userId = req.user.id;
+        const { data: profile, error: selectErr } = await supabaseAdmin
+            .from('profiles')
+            .select('id, email, phone, free_credit_granted, team_id, teams(id, audit_credits, plan_tier)')
+            .eq('id', userId)
+            .single();
+
+        if (selectErr || !profile) {
+            return res.json({ error: "Profile not found.", selectErr });
+        }
+
+        let verifiedPhone = null;
+        if (profile.phone) {
+            const { data } = await supabaseAdmin
+                .from('verified_phones')
+                .select('*')
+                .eq('phone', profile.phone)
+                .maybeSingle();
+            verifiedPhone = data;
+        }
+
+        return res.json({
+            userId,
+            profile,
+            verifiedPhone,
+            supabaseAdminConfigured: !!supabaseAdmin
+        });
+    } catch (err) {
+        return res.json({ error: err.message });
+    }
+});
+
+
 // Start Server
 app.listen(PORT, () => {
     console.log(`================================================================`);

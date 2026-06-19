@@ -255,7 +255,7 @@ CREATE OR REPLACE FUNCTION public.handle_user_update()
 RETURNS trigger AS $$
 BEGIN
   BEGIN
-    IF NEW.email_confirmed_at IS NOT NULL AND NEW.raw_user_meta_data IS NOT NULL THEN
+    IF NEW.email_confirmed_at IS NOT NULL AND OLD.email_confirmed_at IS NULL AND NEW.raw_user_meta_data IS NOT NULL THEN
       IF EXISTS (SELECT 1 FROM public.verified_phones WHERE phone = NEW.raw_user_meta_data->>'phone') THEN
         PERFORM public.grant_welcome_credit(NEW.id);
       END IF;
@@ -269,7 +269,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 DROP TRIGGER IF EXISTS on_auth_user_updated ON auth.users;
 CREATE TRIGGER on_auth_user_updated
-  AFTER UPDATE OF email_confirmed_at ON auth.users
+  AFTER UPDATE ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_user_update();
 
 -- --------------------------------------------------------------------

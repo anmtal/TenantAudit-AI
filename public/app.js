@@ -1367,162 +1367,162 @@ function initializeApp() {
     function loadDemoAuditData() {
         auditData = {
             metadata: {
-                tenantName: "Starbucks Corporation",
+                tenantName: "APEX COWORKING SOLUTIONS INTERNATIONAL INC.",
                 leaseFile: "complex_lease_agreement.pdf",
                 estoppelFile: "complex_estoppel_certificate.pdf",
                 auditModel: "Demo Audit Model"
             },
             summary: {
-                matchScore: 82,
-                redFlags: 1,
-                monthlyRent: "$12,500.00 / $12,000.00",
-                premisesSf: "2,200 SF",
-                expiryDate: "11/30/2031"
+                matchScore: 34,
+                redFlags: 8,
+                monthlyRent: "$35,000.00 / $41,569.02",
+                premisesSf: "14,500 SF",
+                expiryDate: "08/31/2031"
             },
             records: [
                 {
                     term: "Tenant Name",
-                    leaseVal: "Starbucks Corporation",
-                    estoppelVal: "Starbucks Corporation",
+                    leaseVal: "APEX COWORKING SOLUTIONS INTERNATIONAL INC.",
+                    estoppelVal: "Apex Coworking Solutions Int'l, Inc.",
                     status: "match",
-                    leaseQuote: "Tenant: Starbucks Corporation",
-                    estoppelQuote: "Starbucks Corp. hereby certifies...",
-                    reason: "Names match exactly."
+                    leaseQuote: "APEX COWORKING SOLUTIONS INTERNATIONAL INC. (hereafter Tenant)",
+                    estoppelQuote: "Tenant Name: Apex Coworking Solutions Int'l, Inc.",
+                    reason: "Tenant names match with minor punctuation and suffix abbreviations."
                 },
                 {
                     term: "Suite / Unit Number",
-                    leaseVal: "Suite 100",
-                    estoppelVal: "Suite 100",
+                    leaseVal: "Suite 4200, 42nd Floor",
+                    estoppelVal: "Suite 4200",
                     status: "match",
-                    leaseQuote: "Suite 100 at the Mall",
-                    estoppelQuote: "Suite 100",
-                    reason: "Suite numbers match."
+                    leaseQuote: "the premises designated as Suite 4200 on the 42nd floor",
+                    estoppelQuote: "Premises: Suite 4200",
+                    reason: "Suite numbers align. Estoppel omits floor details but matches unit."
                 },
                 {
                     term: "Premises Size",
-                    leaseVal: "2,200 SF",
-                    estoppelVal: "2,200 SF",
+                    leaseVal: "14,500 rentable square feet",
+                    estoppelVal: "14,500 SF",
                     status: "match",
-                    leaseQuote: "premises measuring approximately 2,200 square feet",
-                    estoppelQuote: "Premises size: 2,200 SF",
-                    reason: "Square footage matches."
+                    leaseQuote: "comprising approximately 14,500 rentable square feet",
+                    estoppelQuote: "Size of Premises: 14,500 SF",
+                    reason: "Premises square footage aligns exactly."
                 },
                 {
                     term: "Current Monthly Rent",
-                    leaseVal: "$12,500.00",
-                    estoppelVal: "$12,000.00",
-                    status: "mismatch",
-                    leaseQuote: "monthly base rent of $12,500.00",
-                    estoppelQuote: "Current monthly rent is $12,000.00",
-                    reason: "Lease states $12,500/mo but estoppel confirms $12,000/mo."
+                    leaseVal: "$35,000.00 (Months 1–12), escalating at 3.50% per annum to $47,701.41 (Months 109–120)",
+                    estoppelVal: "$41,569.02 per month",
+                    status: "warning",
+                    leaseQuote: "Tenant shall pay Base Rent of $35,000.00 per month for months 1-12, with 3.50% annual escalations.",
+                    estoppelQuote: "Current Monthly Rent: $41,569.02",
+                    reason: "Rent matches the expected escalation schedule (escalated value for current period is correct)."
                 },
                 {
                     term: "Lease Expiration Date",
-                    leaseVal: "11/30/2031",
-                    estoppelVal: "11/30/2031",
-                    status: "match",
-                    leaseQuote: "expiry date of November 30, 2031",
-                    estoppelQuote: "Lease expires on November 30, 2031",
-                    reason: "Dates match."
+                    leaseVal: "August 31, 2031",
+                    estoppelVal: "September 30, 2031",
+                    status: "mismatch",
+                    leaseQuote: "expiration date of August 31, 2031",
+                    estoppelQuote: "Lease Expiration Date: September 30, 2031",
+                    reason: "Discrepancy: Estoppel claims a later expiration date by one month."
                 },
                 {
                     term: "Security Deposit",
-                    leaseVal: "$25,000.00",
-                    estoppelVal: "$25,000.00",
-                    status: "match",
-                    leaseQuote: "Security deposit of $25,000",
-                    estoppelQuote: "Security deposit held: $25,000",
-                    reason: "Deposit amounts match."
+                    leaseVal: "$105,000.00 (three months of initial Base Rent)",
+                    estoppelVal: "$70,000.00, no portion applied",
+                    status: "mismatch",
+                    leaseQuote: "Security Deposit: $105,000.00",
+                    estoppelQuote: "Security Deposit held: $70,000.00",
+                    reason: "Discrepancy: Estoppel lists a lower security deposit amount than the lease requirement."
                 },
                 {
                     term: "Renewal Options",
-                    leaseVal: "Two 5-year options",
-                    estoppelVal: "Two 5-year options",
-                    status: "match",
-                    leaseQuote: "Tenant shall have two options to renew for 5 years each",
-                    estoppelQuote: "Two renewal options remain",
-                    reason: "Renewal options match."
+                    leaseVal: "Two (2) renewal options, each for five (5) years, at Fair Market Value; written notice required at least 270 days prior to then-current Expiration Date",
+                    estoppelVal: "One (1) renewal option to extend the Lease term for 5 years",
+                    status: "mismatch",
+                    leaseQuote: "Tenant shall have two (2) options to renew the Lease, each for a period of five (5) years.",
+                    estoppelQuote: "Remaining Options: One (1) option for 5 years.",
+                    reason: "Discrepancy: Estoppel reports only one option remaining, whereas lease grants two options."
                 },
                 {
                     term: "CAM & Operating Caps",
-                    leaseVal: "$3.50/SF",
-                    estoppelVal: "$3.50/SF",
-                    status: "match",
-                    leaseQuote: "CAM charges at $3.50 per square foot",
-                    estoppelQuote: "CAM at $3.50/SF",
-                    reason: "CAM charges match."
+                    leaseVal: "4.85% pro-rata share of Building operating expenses; annual CAM increases capped at 3% on a cumulative and compounding basis",
+                    estoppelVal: "4.85% pro-rata share of operating costs and CAM expenses; increases capped at 4% annually",
+                    status: "mismatch",
+                    leaseQuote: "Tenant's Pro-Rata Share is 4.85%. Annual increases in CAM expenses shall not exceed 3%.",
+                    estoppelQuote: "CAM cap: 4% annual increase limit.",
+                    reason: "Discrepancy: Estoppel lists a 4% annual cap on CAM increases, but the lease caps them at 3%."
                 },
                 {
                     term: "Lease Guarantor",
-                    leaseVal: "Not Mentioned",
-                    estoppelVal: "Not Mentioned",
-                    status: "warning",
-                    leaseQuote: "No citation found.",
-                    estoppelQuote: "No citation found.",
-                    reason: "Neither document mentions a guarantor."
+                    leaseVal: "APEX GLOBAL ENTERPRISES HOLDINGS LLC",
+                    estoppelVal: "Apex Global Enterprises Holdings LLC",
+                    status: "match",
+                    leaseQuote: "Guarantor: APEX GLOBAL ENTERPRISES HOLDINGS LLC",
+                    estoppelQuote: "Guaranty by: Apex Global Enterprises Holdings LLC",
+                    reason: "Guarantor entities match exactly (minor casing difference)."
                 },
                 {
                     term: "Prepaid Rent",
-                    leaseVal: "Not Mentioned",
-                    estoppelVal: "Not Mentioned",
+                    leaseVal: "$35,000.00 (applied to first full calendar month's Base Rent)",
+                    estoppelVal: "No base rent prepaid in advance except for the current month's rent",
                     status: "warning",
-                    leaseQuote: "No citation found.",
-                    estoppelQuote: "No citation found.",
-                    reason: "Neither document mentions prepaid rent."
+                    leaseQuote: "Prepaid Rent: $35,000.00 for the first month.",
+                    estoppelQuote: "Prepaid Rent: None.",
+                    reason: "First month rent was prepaid at signing, but currently no future rent is prepaid. Estoppel aligns with status."
                 },
                 {
                     term: "Landlord Default Status",
-                    leaseVal: "No default",
-                    estoppelVal: "No default",
-                    status: "match",
-                    leaseQuote: "No landlord default noted.",
-                    estoppelQuote: "No landlord defaults.",
-                    reason: "No defaults in either document."
+                    leaseVal: "Landlord obligated to maintain structural parts, mechanical elevator units, and Building electrical grids at its sole cost; exception for repairs required due to Tenant negligence",
+                    estoppelVal: "Landlord is currently in default under its repair obligations for failing to complete the elevator modernization repairs on the 42nd floor, which impairs tenant access",
+                    status: "mismatch",
+                    leaseQuote: "Landlord shall maintain the structural portions and elevators.",
+                    estoppelQuote: "Landlord is in default for failing to perform elevator repairs.",
+                    reason: "Discrepancy: Estoppel reports active landlord default regarding elevator maintenance."
                 },
                 {
                     term: "Tenant Improvement Allowance",
-                    leaseVal: "$50,000.00",
-                    estoppelVal: "$50,000.00",
+                    leaseVal: "Not Mentioned",
+                    estoppelVal: "Not Mentioned",
                     status: "match",
-                    leaseQuote: "Landlord shall provide a Tenant Improvement Allowance of $50,000.00",
-                    estoppelQuote: "TI Allowance of $50,000.00 has been fully disbursed and accepted.",
-                    reason: "TI allowance amounts and disbursement status align."
+                    leaseQuote: "No citation found.",
+                    estoppelQuote: "No citation found.",
+                    reason: "Neither document mentions a Tenant Improvement Allowance."
                 },
                 {
                     term: "Co-Tenancy Clause",
-                    leaseVal: "Required (Anchor tenant open)",
-                    estoppelVal: "Required (Anchor tenant open)",
+                    leaseVal: "Not Mentioned",
+                    estoppelVal: "Not Mentioned",
                     status: "match",
-                    leaseQuote: "Co-tenancy requires anchor grocery store to remain open.",
-                    estoppelQuote: "Co-tenancy condition is currently satisfied.",
-                    reason: "Co-tenancy requirements and status match."
+                    leaseQuote: "No citation found.",
+                    estoppelQuote: "No citation found.",
+                    reason: "Neither document mentions a co-tenancy requirement."
                 },
                 {
                     term: "Termination Right",
-                    leaseVal: "Early termination after Year 5",
-                    estoppelVal: "Early termination after Year 5",
+                    leaseVal: "Not Mentioned",
+                    estoppelVal: "Not Mentioned",
                     status: "match",
-                    leaseQuote: "Tenant has the right to terminate early after the 5th lease year with 6 months notice.",
-                    estoppelQuote: "Early termination option exists after Year 5.",
-                    reason: "Early termination rights match."
+                    leaseQuote: "No citation found.",
+                    estoppelQuote: "No citation found.",
+                    reason: "Neither document mentions any early termination rights."
                 },
                 {
                     term: "SNDA Status",
-                    leaseVal: "Required",
-                    estoppelVal: "Required / Executed",
+                    leaseVal: "Not Mentioned",
+                    estoppelVal: "Not Mentioned",
                     status: "match",
-                    leaseQuote: "Tenant shall execute a Subordination, Non-Disturbance and Attornment Agreement (SNDA).",
-                    estoppelQuote: "SNDA has been executed and delivered.",
-                    reason: "SNDA requirements and execution status match."
+                    leaseQuote: "No citation found.",
+                    estoppelQuote: "No citation found.",
+                    reason: "Neither document mentions SNDA status or requirements."
                 },
                 {
                     term: "Permitted Use",
-                    leaseVal: "Retail coffee shop and beverage sales",
-                    estoppelVal: "Retail coffee shop and beverage sales",
+                    leaseVal: "Not Mentioned",
+                    estoppelVal: "Not Mentioned",
                     status: "match",
-                    leaseQuote: "The Premises shall be used solely for a retail coffee shop and related beverage sales.",
-                    estoppelQuote: "Permitted Use: Retail coffee shop.",
-                    reason: "Permitted use matches the retail operations."
+                    leaseQuote: "No citation found.",
+                    estoppelQuote: "No citation found.",
+                    reason: "Neither document defines a permitted use restriction."
                 }
             ]
         };
@@ -3194,162 +3194,162 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             
             auditData = {
                 metadata: {
-                    tenantName: "Starbucks Corporation",
+                    tenantName: "APEX COWORKING SOLUTIONS INTERNATIONAL INC.",
                     leaseFile: customLeaseName,
                     estoppelFile: customEstoppelName,
                     auditModel: "Guest Sandbox Audit Model"
                 },
                 summary: {
-                    matchScore: 82,
-                    redFlags: 1,
-                    monthlyRent: "$12,500.00 / $12,000.00",
-                    premisesSf: "2,200 SF",
-                    expiryDate: "11/30/2031"
+                    matchScore: 34,
+                    redFlags: 8,
+                    monthlyRent: "$35,000.00 / $41,569.02",
+                    premisesSf: "14,500 SF",
+                    expiryDate: "08/31/2031"
                 },
                 records: [
                     {
                         term: "Tenant Name",
-                        leaseVal: "Starbucks Corporation",
-                        estoppelVal: "Starbucks Corporation",
+                        leaseVal: "APEX COWORKING SOLUTIONS INTERNATIONAL INC.",
+                        estoppelVal: "Apex Coworking Solutions Int'l, Inc.",
                         status: "match",
-                        leaseQuote: "Tenant: Starbucks Corporation",
-                        estoppelQuote: "Starbucks Corp. hereby certifies...",
-                        reason: "Names match exactly."
+                        leaseQuote: "APEX COWORKING SOLUTIONS INTERNATIONAL INC. (hereafter Tenant)",
+                        estoppelQuote: "Tenant Name: Apex Coworking Solutions Int'l, Inc.",
+                        reason: "Tenant names match with minor punctuation and suffix abbreviations."
                     },
                     {
                         term: "Suite / Unit Number",
-                        leaseVal: "Suite 100",
-                        estoppelVal: "Suite 100",
+                        leaseVal: "Suite 4200, 42nd Floor",
+                        estoppelVal: "Suite 4200",
                         status: "match",
-                        leaseQuote: "Suite 100 at the Mall",
-                        estoppelQuote: "Suite 100",
-                        reason: "Suite numbers match."
+                        leaseQuote: "the premises designated as Suite 4200 on the 42nd floor",
+                        estoppelQuote: "Premises: Suite 4200",
+                        reason: "Suite numbers align. Estoppel omits floor details but matches unit."
                     },
                     {
                         term: "Premises Size",
-                        leaseVal: "2,200 SF",
-                        estoppelVal: "2,200 SF",
+                        leaseVal: "14,500 rentable square feet",
+                        estoppelVal: "14,500 SF",
                         status: "match",
-                        leaseQuote: "premises measuring approximately 2,200 square feet",
-                        estoppelQuote: "Premises size: 2,200 SF",
-                        reason: "Square footage matches."
+                        leaseQuote: "comprising approximately 14,500 rentable square feet",
+                        estoppelQuote: "Size of Premises: 14,500 SF",
+                        reason: "Premises square footage aligns exactly."
                     },
                     {
                         term: "Current Monthly Rent",
-                        leaseVal: "$12,500.00",
-                        estoppelVal: "$12,000.00",
-                        status: "mismatch",
-                        leaseQuote: "monthly base rent of $12,500.00",
-                        estoppelQuote: "Current monthly rent is $12,000.00",
-                        reason: "Lease states $12,500/mo but estoppel confirms $12,000/mo."
+                        leaseVal: "$35,000.00 (Months 1–12), escalating at 3.50% per annum to $47,701.41 (Months 109–120)",
+                        estoppelVal: "$41,569.02 per month",
+                        status: "warning",
+                        leaseQuote: "Tenant shall pay Base Rent of $35,000.00 per month for months 1-12, with 3.50% annual escalations.",
+                        estoppelQuote: "Current Monthly Rent: $41,569.02",
+                        reason: "Rent matches the expected escalation schedule (escalated value for current period is correct)."
                     },
                     {
                         term: "Lease Expiration Date",
-                        leaseVal: "11/30/2031",
-                        estoppelVal: "11/30/2031",
-                        status: "match",
-                        leaseQuote: "expiry date of November 30, 2031",
-                        estoppelQuote: "Lease expires on November 30, 2031",
-                        reason: "Dates match."
+                        leaseVal: "August 31, 2031",
+                        estoppelVal: "September 30, 2031",
+                        status: "mismatch",
+                        leaseQuote: "expiration date of August 31, 2031",
+                        estoppelQuote: "Lease Expiration Date: September 30, 2031",
+                        reason: "Discrepancy: Estoppel claims a later expiration date by one month."
                     },
                     {
                         term: "Security Deposit",
-                        leaseVal: "$25,000.00",
-                        estoppelVal: "$25,000.00",
-                        status: "match",
-                        leaseQuote: "Security deposit of $25,000",
-                        estoppelQuote: "Security deposit held: $25,000",
-                        reason: "Deposit amounts match."
+                        leaseVal: "$105,000.00 (three months of initial Base Rent)",
+                        estoppelVal: "$70,000.00, no portion applied",
+                        status: "mismatch",
+                        leaseQuote: "Security Deposit: $105,000.00",
+                        estoppelQuote: "Security Deposit held: $70,000.00",
+                        reason: "Discrepancy: Estoppel lists a lower security deposit amount than the lease requirement."
                     },
                     {
                         term: "Renewal Options",
-                        leaseVal: "Two 5-year options",
-                        estoppelVal: "Two 5-year options",
-                        status: "match",
-                        leaseQuote: "Tenant shall have two options to renew for 5 years each",
-                        estoppelQuote: "Two renewal options remain",
-                        reason: "Options match."
+                        leaseVal: "Two (2) renewal options, each for five (5) years, at Fair Market Value; written notice required at least 270 days prior to then-current Expiration Date",
+                        estoppelVal: "One (1) renewal option to extend the Lease term for 5 years",
+                        status: "mismatch",
+                        leaseQuote: "Tenant shall have two (2) options to renew the Lease, each for a period of five (5) years.",
+                        estoppelQuote: "Remaining Options: One (1) option for 5 years.",
+                        reason: "Discrepancy: Estoppel reports only one option remaining, whereas lease grants two options."
                     },
                     {
                         term: "CAM & Operating Caps",
-                        leaseVal: "$3.50/SF",
-                        estoppelVal: "$3.50/SF",
-                        status: "match",
-                        leaseQuote: "CAM charges at $3.50 per square foot",
-                        estoppelQuote: "CAM at $3.50/SF",
-                        reason: "CAM configurations match."
+                        leaseVal: "4.85% pro-rata share of Building operating expenses; annual CAM increases capped at 3% on a cumulative and compounding basis",
+                        estoppelVal: "4.85% pro-rata share of operating costs and CAM expenses; increases capped at 4% annually",
+                        status: "mismatch",
+                        leaseQuote: "Tenant's Pro-Rata Share is 4.85%. Annual increases in CAM expenses shall not exceed 3%.",
+                        estoppelQuote: "CAM cap: 4% annual increase limit.",
+                        reason: "Discrepancy: Estoppel lists a 4% annual cap on CAM increases, but the lease caps them at 3%."
                     },
                     {
                         term: "Lease Guarantor",
-                        leaseVal: "Not Mentioned",
-                        estoppelVal: "Not Mentioned",
+                        leaseVal: "APEX GLOBAL ENTERPRISES HOLDINGS LLC",
+                        estoppelVal: "Apex Global Enterprises Holdings LLC",
                         status: "match",
-                        leaseQuote: "No citation found.",
-                        estoppelQuote: "No citation found.",
-                        reason: "Both documents omit this term."
+                        leaseQuote: "Guarantor: APEX GLOBAL ENTERPRISES HOLDINGS LLC",
+                        estoppelQuote: "Guaranty by: Apex Global Enterprises Holdings LLC",
+                        reason: "Guarantor entities match exactly (minor casing difference)."
                     },
                     {
                         term: "Prepaid Rent",
+                        leaseVal: "$35,000.00 (applied to first full calendar month's Base Rent)",
+                        estoppelVal: "No base rent prepaid in advance except for the current month's rent",
+                        status: "warning",
+                        leaseQuote: "Prepaid Rent: $35,000.00 for the first month.",
+                        estoppelQuote: "Prepaid Rent: None.",
+                        reason: "First month rent was prepaid at signing, but currently no future rent is prepaid. Estoppel aligns with status."
+                    },
+                    {
+                        term: "Landlord Default Status",
+                        leaseVal: "Landlord obligated to maintain structural parts, mechanical elevator units, and Building electrical grids at its sole cost; exception for repairs required due to Tenant negligence",
+                        estoppelVal: "Landlord is currently in default under its repair obligations for failing to complete the elevator modernization repairs on the 42nd floor, which impairs tenant access",
+                        status: "mismatch",
+                        leaseQuote: "Landlord shall maintain the structural portions and elevators.",
+                        estoppelQuote: "Landlord is in default for failing to perform elevator repairs.",
+                        reason: "Discrepancy: Estoppel reports active landlord default regarding elevator maintenance."
+                    },
+                    {
+                        term: "Tenant Improvement Allowance",
                         leaseVal: "Not Mentioned",
                         estoppelVal: "Not Mentioned",
                         status: "match",
                         leaseQuote: "No citation found.",
                         estoppelQuote: "No citation found.",
-                        reason: "Both documents omit prepaid rent."
-                    },
-                    {
-                        term: "Landlord Default Status",
-                        leaseVal: "No default",
-                        estoppelVal: "No default",
-                        status: "match",
-                        leaseQuote: "No landlord default noted.",
-                        estoppelQuote: "No landlord defaults.",
-                        reason: "Both documents state landlord is not in default."
-                    },
-                    {
-                        term: "Tenant Improvement Allowance",
-                        leaseVal: "$50.00/SF",
-                        estoppelVal: "$50.00/SF",
-                        status: "match",
-                        leaseQuote: "Landlord shall provide a TI Allowance of $50.00 per SF",
-                        estoppelQuote: "TI Allowance of $50.00/SF has been paid in full",
-                        reason: "TI Allowance configurations match."
+                        reason: "Neither document mentions a Tenant Improvement Allowance."
                     },
                     {
                         term: "Co-Tenancy Clause",
-                        leaseVal: "Required 80% occupancy",
-                        estoppelVal: "Required 80% occupancy",
+                        leaseVal: "Not Mentioned",
+                        estoppelVal: "Not Mentioned",
                         status: "match",
-                        leaseQuote: "Co-tenancy requires 80% occupancy of the shopping center",
-                        estoppelQuote: "Co-tenancy active",
-                        reason: "Co-tenancy terms match."
+                        leaseQuote: "No citation found.",
+                        estoppelQuote: "No citation found.",
+                        reason: "Neither document mentions a co-tenancy requirement."
                     },
                     {
                         term: "Termination Right",
-                        leaseVal: "One-time option at Year 5",
-                        estoppelVal: "One-time option at Year 5",
+                        leaseVal: "Not Mentioned",
+                        estoppelVal: "Not Mentioned",
                         status: "match",
-                        leaseQuote: "Tenant may terminate at end of Lease Year 5",
-                        estoppelQuote: "One termination option exists",
-                        reason: "Termination rights match."
+                        leaseQuote: "No citation found.",
+                        estoppelQuote: "No citation found.",
+                        reason: "Neither document mentions any early termination rights."
                     },
                     {
                         term: "SNDA Status",
-                        leaseVal: "Required within 30 days",
-                        estoppelVal: "Required within 30 days",
+                        leaseVal: "Not Mentioned",
+                        estoppelVal: "Not Mentioned",
                         status: "match",
-                        leaseQuote: "SNDA must be executed within 30 days of lease execution",
-                        estoppelQuote: "SNDA active",
-                        reason: "SNDA statuses match."
+                        leaseQuote: "No citation found.",
+                        estoppelQuote: "No citation found.",
+                        reason: "Neither document mentions SNDA status or requirements."
                     },
                     {
                         term: "Permitted Use",
-                        leaseVal: "Retail coffee shop",
-                        estoppelVal: "Retail coffee shop",
+                        leaseVal: "Not Mentioned",
+                        estoppelVal: "Not Mentioned",
                         status: "match",
-                        leaseQuote: "Permitted use is retail coffee shop",
-                        estoppelQuote: "Coffee shop permitted",
-                        reason: "Permitted uses match."
+                        leaseQuote: "No citation found.",
+                        estoppelQuote: "No citation found.",
+                        reason: "Neither document defines a permitted use restriction."
                     }
                 ]
             };

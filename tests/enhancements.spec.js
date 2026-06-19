@@ -200,7 +200,7 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     
     // Verify it takes us to dashboard directly (guest sandbox mode) and shows the demo audit results
     await expect(page.locator('#dashboard-view')).toBeVisible();
-    await expect(page.locator('#meta-tenant-name')).toHaveText('Starbucks Corporation');
+    await expect(page.locator('#meta-tenant-name')).toHaveText('APEX COWORKING SOLUTIONS INTERNATIONAL INC.');
 
     // Verify credits pill is visible and shows Guest Sandbox text
     await expect(page.locator('#credits-topup-trigger')).toBeVisible();

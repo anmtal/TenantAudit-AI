@@ -349,6 +349,8 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- --------------------------------------------------------------------
 -- 10. Final Secure Credit Deduction RPC (FIFO Expiration & Idempotency)
 -- --------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.deduct_user_credits(UUID, INTEGER, TEXT);
+DROP FUNCTION IF EXISTS public.deduct_user_credits(UUID, INTEGER, TEXT, UUID);
 CREATE OR REPLACE FUNCTION public.deduct_user_credits(target_user_id UUID, credits_to_deduct INTEGER, plan_mode TEXT, p_transaction_id UUID DEFAULT NULL)
 RETURNS BOOLEAN AS $$
 DECLARE
@@ -423,6 +425,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- --------------------------------------------------------------------
 -- 11. Refund and Team Invite RPCs
 -- --------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.refund_user_credits(UUID, INTEGER, TEXT);
 CREATE OR REPLACE FUNCTION public.refund_user_credits(target_user_id UUID, credits_to_refund INTEGER, plan_mode TEXT)
 RETURNS VOID AS $$
 DECLARE

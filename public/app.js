@@ -669,6 +669,16 @@ function initializeApp() {
         }, 3000);
     }
 
+    function hasStoredSession() {
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('sb-') && key.endsWith('-auth-token'))) {
+                return true;
+            }
+        }
+        return localStorage.getItem('ta_logged_in') === 'true';
+    }
+
     window.handleHashRoute = function() {
         let hash = window.location.hash || '#home';
         console.log("[Router] Routing to:", hash);
@@ -714,6 +724,11 @@ function initializeApp() {
         // Security check: if not logged in, they can only go to #home, #login, #register, #forgot-password, #signup-confirm
         if (!isLoggedIn && !isDemoMode) {
             if (hash === '#dashboard') {
+                if (hasStoredSession()) {
+                    console.log("[Router] Stored session detected, keeping on #dashboard while verifying...");
+                    showView('dashboard');
+                    return;
+                }
                 window.location.hash = '#login';
                 return;
             }
@@ -1546,149 +1561,157 @@ function initializeApp() {
                         userEmail = session.user.email;
                         userEmailDisplay.textContent = userEmail;
                         updateNavUI();
-                        
-                        // Sync active session ID to enforce single-seat logins cryptographically
-                        const isFreshLogin = localStorage.getItem('ta_fresh_login') === 'true';
-                        if (isFreshLogin) {
-                            try {
-                                let sessionIdToRegister = '';
-                                const payload = session.access_token.split('.')[1];
-                                if (payload) {
-                                    // Handle base64url decoding
-                                    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-                                    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-                                        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                                    }).join(''));
-                                    sessionIdToRegister = JSON.parse(jsonPayload).session_id;
-                                }
-                                
-                                    const { data: registered, error: syncErr } = await supabase.rpc('register_active_session', {
-                                        p_session_id: sessionIdToRegister
-                                    });
-                                    if (syncErr || !registered) {
-                                        console.warn("[Session Sync Blocked] Concurrent seat session active:", syncErr?.message || "Seat occupied on another device.");
-                                        showToast("🚫 Login Blocked: This account is currently active on another device. Please wait 30 seconds or log out from the other device.", 'error');
-                                        await supabase.auth.signOut();
-                                        isLoggedIn = false;
-                                        window.location.hash = '#home';
-                                        updateNavUI();
-                                        return;
-                                    } else {
-                                        console.log("[Session Sync] Successfully registered active session ID securely.");
-                                    }
-                            } catch (e) {
-                                console.error("[Session Sync Error] Exception during RPC update:", e);
-                            }
-                        }
-                        
-                        localStorage.removeItem('ta_fresh_login');     // Load credits and past history from Supabase
-                        await loadUserProfileAndCredits();
-                        await loadAuditHistory();
-                        
-                        // Check if there was a pending package selection before login
-                        if (window.pendingPurchase) {
-                            const { plan, amount, price, seats, packageName, interval } = window.pendingPurchase;
-                            window.pendingPurchase = null; // Clear state
-                            
-                            const isOffline = !supabase || 
-                                              (supabase.supabaseUrl && supabase.supabaseUrl.includes('mock.supabase.co')) || 
-                                              localStorage.getItem('ta_logged_in') === 'true';
-                            
-                            if (isOffline) {
-                                let currentCredits = parseInt(localStorage.getItem('ta_hosted_credits') || '0', 10);
-                                const amt = parseInt(amount, 10);
-                                localStorage.setItem('ta_hosted_credits', (currentCredits + amt).toString());
-                                hostedCredits = currentCredits + amt;
-                                updateCreditsDisplay();
-                                showToast(`🎉 Simulated Checkout Success: Added +${amount} audits to your offline balance!`, 'success');
-                            } else {
-                                showLoader("Connecting to payment checkout...");
-                                try {
-                                    const { data: { user } } = await supabase.auth.getUser();
-                                    const { data: { session } } = await supabase.auth.getSession();
-                                    if (!session) throw new Error("No active Supabase session.");
-                                    const response = await fetch('/api/create-checkout-session', {
-                                        method: 'POST',
-                                        headers: { 
-                                            'Content-Type': 'application/json',
-                                            'Authorization': `Bearer ${session.access_token}`
-                                        },
-                                        body: JSON.stringify({
-                                            planType: plan,
-                                            userId: user.id,
-                                            packageName: packageName,
-                                            amount: amount,
-                                            auditAmount: amount,
-                                            price: price,
-                                            priceAmount: price,
-                                            seats: seats,
-                                            seatCount: seats,
-                                            interval: interval,
-                                            isSubscription: interval !== 'one-time'
-                                        })
-                                    });
-                                    const sessionData = await response.json();
-                                    hideLoader();
-                                    if (sessionData.error) throw new Error(sessionData.error);
-                                    if (sessionData.url) {
-                                        window.location.href = sessionData.url;
-                                    } else {
-                                        throw new Error("Stripe checkout session creation failed.");
-                                    }
-                                } catch(err) {
-                                    hideLoader();
-                                    showToast("Error initiating checkout: " + err.message, 'error');
-                                }
-                            }
-                        }
 
-                        // --- Check for Stripe Redirect Success ---
-                        const urlParams = new URLSearchParams(window.location.search);
-                        if (urlParams.get('checkout_success') === 'true' && urlParams.get('session_id')) {
-                            const sessionId = urlParams.get('session_id');
-                            showLoader("Verifying Stripe payment...");
-                            try {
-                                const { data: { session } } = await supabase.auth.getSession();
-                                const response = await fetch(`/api/verify-checkout-session?session_id=${sessionId}&t=` + Date.now(), {
-                                    headers: { 'Authorization': `Bearer ${session.access_token}` }
-                                });
-                                const data = await response.json();
-                                if (data.success) {
-                                    const { amount, planType } = data.metadata;
-                                    const amt = parseInt(amount, 10);
-                                    
-                                    // Reload user profile & credits (updated server-side)
-                                    await loadUserProfileAndCredits();
-                                    
-                                    // Clear URL parameters
-                                    window.history.replaceState({}, document.title, window.location.pathname);
-                                    
-                                    const displayAmt = amt >= 900000 ? "Unlimited" : `+${amount}`;
-                                    showToast(`🎉 Payment Verified! Successfully activated your ${planType.toUpperCase()} plan with ${displayAmt} audits.`, 'success');
-                                } else {
-                                    showToast("Stripe Checkout verification failed: " + (data.error || "Unknown error"), 'error');
-                                }
-                            } catch (err) {
-                                console.error("Redirect verification error:", err);
-                                showToast("Failed to verify Stripe payment: " + err.message, 'error');
-                            } finally {
-                                hideLoader();
-                            }
-                        }
-
-                        // --- Check for Stripe Redirect Cancel ---
-                        if (urlParams.get('checkout_cancel') === 'true') {
-                            window.history.replaceState({}, document.title, window.location.pathname);
-                            showToast("Payment canceled. No audits were added.", 'info');
-                        }
-
-                        // Redirect to dashboard if logged in and on landing or auth pages
+                        // Redirect to dashboard immediately if logged in and on landing or auth pages
                         const currentHash = window.location.hash;
                         if (currentHash === '#login' || currentHash === '#register' || currentHash === '#forgot-password' || currentHash === '#signup-confirm' || currentHash === '#home' || !currentHash) {
                             window.location.hash = '#dashboard';
                         } else {
                             window.handleHashRoute();
                         }
+                        
+                        // Execute session verification, profile loading, credits loading, Stripe redirections, and invitations checks
+                        // in a safe background task to ensure it doesn't block the UI transition or freeze the page.
+                        (async () => {
+                            try {
+                                // Sync active session ID to enforce single-seat logins cryptographically
+                                const isFreshLogin = localStorage.getItem('ta_fresh_login') === 'true';
+                                if (isFreshLogin) {
+                                    try {
+                                        let sessionIdToRegister = '';
+                                        const payload = session.access_token.split('.')[1];
+                                        if (payload) {
+                                            // Handle base64url decoding
+                                            const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+                                            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                                                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                                            }).join(''));
+                                            sessionIdToRegister = JSON.parse(jsonPayload).session_id;
+                                        }
+                                        
+                                        const { data: registered, error: syncErr } = await supabase.rpc('register_active_session', {
+                                            p_session_id: sessionIdToRegister
+                                        });
+                                        if (syncErr || !registered) {
+                                            console.warn("[Session Sync Blocked] Concurrent seat session active:", syncErr?.message || "Seat occupied on another device.");
+                                            showToast("🚫 Login Blocked: This account is currently active on another device. Please wait 30 seconds or log out from the other device.", 'error');
+                                            await supabase.auth.signOut();
+                                            isLoggedIn = false;
+                                            window.location.hash = '#home';
+                                            updateNavUI();
+                                            return;
+                                        } else {
+                                            console.log("[Session Sync] Successfully registered active session ID securely.");
+                                        }
+                                    } catch (e) {
+                                        console.error("[Session Sync Error] Exception during RPC update:", e);
+                                    }
+                                }
+                                
+                                localStorage.removeItem('ta_fresh_login');     // Load credits and past history from Supabase
+                                await loadUserProfileAndCredits();
+                                await loadAuditHistory();
+                                
+                                // Check if there was a pending package selection before login
+                                if (window.pendingPurchase) {
+                                    const { plan, amount, price, seats, packageName, interval } = window.pendingPurchase;
+                                    window.pendingPurchase = null; // Clear state
+                                    
+                                    const isOffline = !supabase || 
+                                                      (supabase.supabaseUrl && supabase.supabaseUrl.includes('mock.supabase.co')) || 
+                                                      localStorage.getItem('ta_logged_in') === 'true';
+                                    
+                                    if (isOffline) {
+                                        let currentCredits = parseInt(localStorage.getItem('ta_hosted_credits') || '0', 10);
+                                        const amt = parseInt(amount, 10);
+                                        localStorage.setItem('ta_hosted_credits', (currentCredits + amt).toString());
+                                        hostedCredits = currentCredits + amt;
+                                        updateCreditsDisplay();
+                                        showToast(`🎉 Simulated Checkout Success: Added +${amount} audits to your offline balance!`, 'success');
+                                    } else {
+                                        showLoader("Connecting to payment checkout...");
+                                        try {
+                                            const { data: { user } } = await supabase.auth.getUser();
+                                            const { data: { session: currentSession } } = await supabase.auth.getSession();
+                                            if (!currentSession) throw new Error("No active Supabase session.");
+                                            const response = await fetch('/api/create-checkout-session', {
+                                                method: 'POST',
+                                                headers: { 
+                                                    'Content-Type': 'application/json',
+                                                    'Authorization': `Bearer ${currentSession.access_token}`
+                                                },
+                                                body: JSON.stringify({
+                                                    planType: plan,
+                                                    userId: user.id,
+                                                    packageName: packageName,
+                                                    amount: amount,
+                                                    auditAmount: amount,
+                                                    price: price,
+                                                    priceAmount: price,
+                                                    seats: seats,
+                                                    seatCount: seats,
+                                                    interval: interval,
+                                                    isSubscription: interval !== 'one-time'
+                                                })
+                                            });
+                                            const sessionData = await response.json();
+                                            hideLoader();
+                                            if (sessionData.error) throw new Error(sessionData.error);
+                                            if (sessionData.url) {
+                                                window.location.href = sessionData.url;
+                                            } else {
+                                                throw new Error("Stripe checkout session creation failed.");
+                                            }
+                                        } catch(err) {
+                                            hideLoader();
+                                            showToast("Error initiating checkout: " + err.message, 'error');
+                                        }
+                                    }
+                                }
+
+                                // --- Check for Stripe Redirect Success ---
+                                const urlParams = new URLSearchParams(window.location.search);
+                                if (urlParams.get('checkout_success') === 'true' && urlParams.get('session_id')) {
+                                    const sessionId = urlParams.get('session_id');
+                                    showLoader("Verifying Stripe payment...");
+                                    try {
+                                        const { data: { session: currentSession } } = await supabase.auth.getSession();
+                                        const response = await fetch(`/api/verify-checkout-session?session_id=${sessionId}&t=` + Date.now(), {
+                                            headers: { 'Authorization': `Bearer ${currentSession.access_token}` }
+                                        });
+                                        const data = await response.json();
+                                        if (data.success) {
+                                            const { amount, planType } = data.metadata;
+                                            const amt = parseInt(amount, 10);
+                                            
+                                            // Reload user profile & credits (updated server-side)
+                                            await loadUserProfileAndCredits();
+                                            
+                                            // Clear URL parameters
+                                            window.history.replaceState({}, document.title, window.location.pathname);
+                                            
+                                            const displayAmt = amt >= 900000 ? "Unlimited" : `+${amount}`;
+                                            showToast(`🎉 Payment Verified! Successfully activated your ${planType.toUpperCase()} plan with ${displayAmt} audits.`, 'success');
+                                        } else {
+                                            showToast("Stripe Checkout verification failed: " + (data.error || "Unknown error"), 'error');
+                                        }
+                                    } catch (err) {
+                                        console.error("Redirect verification error:", err);
+                                        showToast("Failed to verify Stripe payment: " + err.message, 'error');
+                                    } finally {
+                                        hideLoader();
+                                    }
+                                }
+
+                                // --- Check for Stripe Redirect Cancel ---
+                                if (urlParams.get('checkout_cancel') === 'true') {
+                                    window.history.replaceState({}, document.title, window.location.pathname);
+                                    showToast("Payment canceled. No audits were added.", 'info');
+                                }
+                            } catch (bgErr) {
+                                console.error("[Auth State Change Background Load Error]:", bgErr);
+                            }
+                        })();
                     } else {
                         window.currentAccessToken = null;
                         isLoggedIn = false;

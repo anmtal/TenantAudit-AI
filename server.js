@@ -60,6 +60,24 @@ if (process.env.NODE_ENV === 'test' || !stripeObj) {
         subscriptions: {
             retrieve: async (subId) => {
                 return global.__mockStripeSubscriptions[subId] || { id: subId, status: 'active' };
+            },
+            update: async (subId, params) => {
+                const subObj = global.__mockStripeSubscriptions[subId] || { id: subId, status: 'active' };
+                if (params.cancel_at_period_end !== undefined) {
+                    subObj.cancel_at_period_end = params.cancel_at_period_end;
+                }
+                subObj.current_period_end = Math.floor(Date.now() / 1000) + 30 * 24 * 3600; // 30 days out
+                global.__mockStripeSubscriptions[subId] = subObj;
+                return subObj;
+            }
+        },
+        webhooks: {
+            constructEvent: (body, sig, secret) => {
+                try {
+                    return typeof body === 'string' ? JSON.parse(body) : body;
+                } catch {
+                    return body;
+                }
             }
         }
     };
@@ -219,6 +237,13 @@ async function requireAuth(req, res, next) {
         return next();
     }
 
+    // B2B Guest Trial Auth Bypass: Allow sample audits without credentials
+    if (req.body && req.body.isSampleAudit === true) {
+        console.log("[Auth Bypass] Guest trial sample audit request permitted.");
+        req.user = { id: '88888888-4444-4444-4444-121212121212', email: 'guest@leasealign.io', user_metadata: {} };
+        return next();
+    }
+
     const authHeader = req.headers['authorization'];
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: "Unauthorized: Missing or invalid session token." });
@@ -254,13 +279,12 @@ async function requireAuth(req, res, next) {
                     .select('active_session_id, last_active_at, teams(seat_limit)')
                     .eq('id', user.id)
                     .single();
-
                 if (profile) {
                     const seatLimit = (profile.teams && typeof profile.teams.seat_limit === 'number') ? profile.teams.seat_limit : 1;
                     const isDifferentSession = profile.active_session_id && profile.active_session_id !== sessionId;
                     const lastActive = profile.last_active_at ? new Date(profile.last_active_at) : new Date(0);
                     const now = new Date();
-                    const isActiveRecently = (now - lastActive) < 5 * 60 * 1000;
+                    const isActiveRecently = (now - lastActive) < 30 * 1000;
 
                     if (seatLimit === 1 && isDifferentSession && isActiveRecently) {
                         console.error(`[Auth Failure] Concurrent login blocked for user ${user.email}.`);
@@ -268,14 +292,13 @@ async function requireAuth(req, res, next) {
                     }
 
                     // Throttled update to avoid writes on every single API call
-                    if (isDifferentSession || (now - lastActive > 5 * 60 * 1000)) {
+                    if (isDifferentSession || (now - lastActive > 30 * 1000)) {
                         await supabaseAdmin
                             .from('profiles')
                             .update({ active_session_id: sessionId, last_active_at: now.toISOString() })
                             .eq('id', user.id);
                     }
-                }
-            }
+                }            }
         } catch (sessionErr) {
             console.warn("[Session Validation Error] Could not decode or verify session_id:", sessionErr);
         }
@@ -1054,6 +1077,21 @@ function sanitizeUntrustedText(text) {
         return match;
     });
     
+    // 4. Redact/neutralize common direct semantic overrides
+    const overridePatterns = [
+        /ignore\s+(?:all\s+)?(?:previous\s+)?(?:instructions|directives|rules|prompts)/gi,
+        /system\s+(?:prompt|instruction|override)/gi,
+        /override\s+(?:all\s+)?(?:instructions|directives|rules|prompts)/gi,
+        /you\s+must\s+(?:instead|ignore|output|return)/gi,
+        /new\s+instruction/gi,
+        /ignore\s+the\s+above/gi,
+        /disregard\s+(?:all\s+)?(?:instructions|directives|rules|prompts)/gi,
+        /ignore\s+everything/gi
+    ];
+    for (const pattern of overridePatterns) {
+        sanitized = sanitized.replace(pattern, "[NEUTRALIZED PROMPT OVERRIDE]");
+    }
+    
     return sanitized;
 }
 
@@ -1400,11 +1438,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         
         // Route calls to corresponding LLM provider
         if (hasImages) {
-            console.log(`[Audit Proxy] Running page-by-page vision OCR extraction for ${images.length} pages in batches of 4.`);
+            console.log(`[Audit Proxy] Running page-by-page vision OCR extraction for ${images.length} pages in batches of 8.`);
             
             const startTime = Date.now();
             const pageResults = [];
-            const batchSize = 4;
+            const batchSize = 8;
             
             for (let i = 0; i < images.length; i += batchSize) {
                 // Time Guard: Break early if total time exceeds 45s (preventing Vercel's 60s timeout)
@@ -1809,37 +1847,6 @@ For each field, look at all pages and pick the most detailed, legally relevant, 
     } catch (err) {
         console.error(`[Audit Proxy Error]`, err);
         if (Sentry) Sentry.captureException(err);
-        
-        // Refund credit if something fails during inference
-        if (supabaseAdmin) {
-            try {
-                const creditsToRefund = 1;
-                const transactionId = req.headers['x-transaction-id'] || null;
-                if (creditsToRefund > 0) {
-                    if (transactionId) {
-                        const { data: refunded } = await supabaseAdmin.rpc('refund_transaction_credits', {
-                            p_transaction_id: transactionId,
-                            p_user_id: req.user.id,
-                            p_plan_mode: 'hosted'
-                        });
-                        if (refunded) {
-                            console.log(`[Refund] Successfully refunded 1 credit using transaction ${transactionId} for user ${req.user.email}`);
-                        } else {
-                            console.warn(`[Refund Skipped] Transaction ${transactionId} was already refunded or does not exist.`);
-                        }
-                    } else {
-                        await supabaseAdmin.rpc('refund_user_credits', { 
-                            target_user_id: req.user.id, 
-                            pages_to_refund: creditsToRefund, 
-                            plan_mode: 'hosted' 
-                        });
-                        console.log(`[Refund Fallback] Successfully refunded ${creditsToRefund} credits to user ${req.user.email} due to error.`);
-                    }
-                }
-            } catch(refundErr) {
-                console.error("[Refund Failure] Failed to refund user credits:", refundErr);
-            }
-        }
         const friendlyMessage = mapLLMErrorToFriendlyMessage(err);
         res.status(500).json({ error: friendlyMessage });
     }
@@ -1877,7 +1884,7 @@ app.post('/api/compare', requireAuth, setExpensiveRateLimitKey, expensiveApiLimi
             const { data: success, error: deductErr } = await supabaseAdmin
                 .rpc('deduct_user_credits', { 
                     target_user_id: req.user.id, 
-                    pages_to_deduct: 1, 
+                    credits_to_deduct: 1, 
                     plan_mode: 'hosted',
                     p_transaction_id: transactionId
                 });
@@ -2064,7 +2071,7 @@ Please compare all fields and return the structured JSON report.`;
                 } else {
                     await supabaseAdmin.rpc('refund_user_credits', {
                         target_user_id: req.user.id,
-                        pages_to_refund: 1,
+                        credits_to_refund: 1,
                         plan_mode: 'hosted'
                     });
                     console.log(`[Refund Fallback] Successfully refunded 1 credit to user ${req.user.email} due to error.`);
@@ -2081,7 +2088,7 @@ Please compare all fields and return the structured JSON report.`;
 
 // Stripe Checkout Session Creation
 app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
-    const { planType, userId, packageName, isSubscription } = req.body;
+    const { planType, userId, packageName } = req.body;
     
     if (!planType || !userId) {
         return res.status(400).json({ error: "Missing required fields for checkout session" });
@@ -2095,32 +2102,21 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
         return res.status(400).json({ error: "Only hosted plan types are supported." });
     }
 
-    let amount, price, seatCount, interval;
-    
-    const planConfig = packageName ? PLANS_CATALOG[packageName] : null;
-    if (planConfig) {
-        amount = planConfig.amount;
-        price = planConfig.price;
-        seatCount = planConfig.seats;
-        interval = planConfig.interval;
-    } else {
-        // Fall back to legacy fields directly passed in request body
-        amount = req.body.auditAmount || req.body.amount;
-        price = req.body.priceAmount || req.body.price;
-        seatCount = req.body.seatCount || req.body.seats || 1;
-        interval = req.body.interval;
-        
-        if (!interval) {
-            const isSub = isSubscription === undefined ? true : isSubscription;
-            interval = isSub ? 'month' : 'one-time';
-        }
+    if (!packageName || !PLANS_CATALOG[packageName]) {
+        return res.status(400).json({ error: "Invalid or missing packageName." });
     }
+
+    const planConfig = PLANS_CATALOG[packageName];
+    const amount = planConfig.amount;
+    const price = planConfig.price;
+    const seatCount = planConfig.seats;
+    const interval = planConfig.interval;
 
     const parsedAmount = parseInt(amount, 10);
     const parsedPrice = parseFloat(price);
 
     if (isNaN(parsedAmount) || parsedAmount <= 0 || isNaN(parsedPrice) || parsedPrice <= 0) {
-        return res.status(400).json({ error: "Missing required fields for checkout session" });
+        return res.status(400).json({ error: "Invalid plan catalog values." });
     }
 
     // Secure verification: client userId must match authentic authenticated userId
@@ -2138,11 +2134,10 @@ app.post('/api/create-checkout-session', requireAuth, async (req, res) => {
         // Dynamically compute absolute URL based on request headers (Vercel-safe)
         const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
         
-        const amtVal = parseInt(amount, 10);
-        const stripeIsSubscription = planConfig.interval === 'one-time' ? false : (isSubscription === undefined ? true : isSubscription);
-        let subscriptionInterval = planConfig.interval === 'one-time' ? 'one-time' : (interval === 'year' ? 'year' : 'month');
+        const stripeIsSubscription = planConfig.interval !== 'one-time';
+        let subscriptionInterval = planConfig.interval;
 
-        const displayAmount = (parseInt(amount, 10) >= 900000) ? 'Unlimited' : amount;
+        const displayAmount = (parsedAmount >= 900000) ? 'Unlimited' : amount;
         
         const priceData = {
             currency: 'usd',
@@ -2225,12 +2220,14 @@ app.get('/api/verify-checkout-session', requireAuth, async (req, res) => {
             if (userId && planType && amount) {
                 // SECURITY: Verify Stripe Metadata against our server catalog configuration
                 const { packageName } = session.metadata || {};
-                if (packageName && packageName !== "Legacy Package") {
-                    const planConfig = PLANS_CATALOG[packageName];
-                    if (!planConfig || planConfig.amount !== parseInt(amount, 10)) {
-                        console.error(`[Stripe Verification Security Mismatch] Package config amount mismatch for session ${session_id}. Expected amount ${planConfig?.amount}, got metadata amount ${amount}`);
-                        return res.status(400).json({ error: "Invalid payment session metadata validation check failed." });
-                    }
+                if (!packageName || !PLANS_CATALOG[packageName]) {
+                    console.error(`[Stripe Verification Security Mismatch] Missing or invalid packageName in session metadata for session ${session_id}. Got: ${packageName}`);
+                    return res.status(400).json({ error: "Invalid payment session metadata validation check failed." });
+                }
+                const planConfig = PLANS_CATALOG[packageName];
+                if (planConfig.amount !== parseInt(amount, 10)) {
+                    console.error(`[Stripe Verification Security Mismatch] Package config amount mismatch for session ${session_id}. Expected amount ${planConfig.amount}, got metadata amount ${amount}`);
+                    return res.status(400).json({ error: "Invalid payment session metadata validation check failed." });
                 }
                 console.log(`[Stripe Verification] Processing purchase for user ${userId}: plan ${planType}, amount ${amount}`);
                 
@@ -2512,7 +2509,32 @@ app.post('/api/reset-phone', requireAuth, async (req, res) => {
 });
 
 
+// Release Active Session Endpoint
+app.post('/api/release-session', requireAuth, async (req, res) => {
+    try {
+        if (!supabaseAdmin) {
+            return res.status(500).json({ error: "Database admin client not configured." });
+        }
 
+        const userId = req.user.id;
+
+        const { error: updateError } = await supabaseAdmin
+            .from('profiles')
+            .update({ active_session_id: null, last_active_at: null })
+            .eq('id', userId);
+
+        if (updateError) {
+            console.error("[Release Session] Error clearing active session:", updateError);
+            return res.status(500).json({ error: "Failed to release active session." });
+        }
+
+        console.log(`[Release Session] Active session released successfully for user ${userId}`);
+        return res.json({ success: true, message: "Active session released successfully." });
+    } catch (err) {
+        console.error("[Release Session] Error:", err);
+        return res.status(500).json({ error: "Failed to release active session. Please try again." });
+    }
+});
 
 
 // Start Server

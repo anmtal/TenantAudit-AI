@@ -172,6 +172,9 @@ RETURNS trigger AS $$
 DECLARE
   new_team_id UUID;
   pending_team_id UUID;
+  v_seat_limit INTEGER;
+  v_member_count INTEGER;
+  v_can_join BOOLEAN := FALSE;
 BEGIN
   -- Check if there is a pending invitation for this email
   SELECT team_id INTO pending_team_id 
@@ -180,6 +183,14 @@ BEGIN
   LIMIT 1;
 
   IF pending_team_id IS NOT NULL THEN
+    SELECT seat_limit INTO v_seat_limit FROM public.teams WHERE id = pending_team_id;
+    SELECT COUNT(*) INTO v_member_count FROM public.profiles WHERE team_id = pending_team_id;
+    IF v_seat_limit IS NULL OR v_seat_limit >= 9999 OR v_member_count < v_seat_limit THEN
+      v_can_join := TRUE;
+    END IF;
+  END IF;
+
+  IF pending_team_id IS NOT NULL AND v_can_join THEN
     -- Assign to the invited team, delete the invitation
     DELETE FROM public.team_invitations WHERE LOWER(email) = LOWER(new.email);
     
@@ -198,7 +209,7 @@ BEGIN
         phone = COALESCE(EXCLUDED.phone, profiles.phone),
         team_id = pending_team_id;
   ELSE
-    -- No pending invitation: create a new personal team
+    -- No pending invitation (or seat limit reached): create a new personal team
     INSERT INTO public.teams (name, owner_id, audit_credits, seat_limit)
     VALUES (COALESCE(new.raw_user_meta_data->>'first_name', 'Personal') || '''s Team', new.id, 0, 1)
     RETURNING id INTO new_team_id;
@@ -338,12 +349,12 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- --------------------------------------------------------------------
 -- 10. Final Secure Credit Deduction RPC (FIFO Expiration & Idempotency)
 -- --------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.deduct_user_credits(target_user_id UUID, pages_to_deduct INTEGER, plan_mode TEXT, p_transaction_id UUID DEFAULT NULL)
+CREATE OR REPLACE FUNCTION public.deduct_user_credits(target_user_id UUID, credits_to_deduct INTEGER, plan_mode TEXT, p_transaction_id UUID DEFAULT NULL)
 RETURNS BOOLEAN AS $$
 DECLARE
   active_balance INTEGER;
   user_team_id UUID;
-  remaining_to_deduct INTEGER := pages_to_deduct;
+  remaining_to_deduct INTEGER := credits_to_deduct;
   grant_record RECORD;
   row_locked BOOLEAN;
 BEGIN
@@ -370,7 +381,7 @@ BEGIN
     FROM public.team_credit_grants 
     WHERE team_id = user_team_id AND (expires_at > NOW() OR expires_at IS NULL);
 
-    IF active_balance >= pages_to_deduct THEN
+    IF active_balance >= credits_to_deduct THEN
       -- FIFO Deduction from soonest-expiring grants (non-expiring credits NULLS LAST)
       FOR grant_record IN 
           SELECT id, amount_remaining 
@@ -392,7 +403,7 @@ BEGIN
       
       IF p_transaction_id IS NOT NULL THEN
           INSERT INTO public.audit_transactions (transaction_id, team_id, user_id, credits_deducted)
-          VALUES (p_transaction_id, user_team_id, target_user_id, pages_to_deduct);
+          VALUES (p_transaction_id, user_team_id, target_user_id, credits_to_deduct);
       END IF;
       
       -- Recalculate cache AFTER deduction exactly once
@@ -412,7 +423,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- --------------------------------------------------------------------
 -- 11. Refund and Team Invite RPCs
 -- --------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.refund_user_credits(target_user_id UUID, pages_to_refund INTEGER, plan_mode TEXT)
+CREATE OR REPLACE FUNCTION public.refund_user_credits(target_user_id UUID, credits_to_refund INTEGER, plan_mode TEXT)
 RETURNS VOID AS $$
 DECLARE
   user_team_id UUID;
@@ -422,7 +433,7 @@ BEGIN
     IF user_team_id IS NOT NULL THEN
       -- Refund as a non-expiring credit grant
       INSERT INTO public.team_credit_grants (team_id, amount_granted, amount_remaining, expires_at)
-      VALUES (user_team_id, pages_to_refund, pages_to_refund, NULL);
+      VALUES (user_team_id, credits_to_refund, credits_to_refund, NULL);
       
       -- Sync UI
       PERFORM public.recalculate_team_credits(user_team_id);
@@ -503,6 +514,8 @@ DECLARE
   v_email TEXT;
   v_target_user_id UUID;
   v_old_team_id UUID;
+  v_seat_limit INTEGER;
+  v_member_count INTEGER;
 BEGIN
   -- Get the invitation details
   SELECT team_id, LOWER(email) INTO v_team_id, v_email 
@@ -520,6 +533,14 @@ BEGIN
 
   IF v_target_user_id IS NULL THEN
     RAISE EXCEPTION 'Unauthorized: You are not the recipient of this invitation.';
+  END IF;
+
+  -- Enforce team seat limit
+  SELECT seat_limit INTO v_seat_limit FROM public.teams WHERE id = v_team_id;
+  SELECT COUNT(*) INTO v_member_count FROM public.profiles WHERE team_id = v_team_id;
+  
+  IF v_seat_limit IS NOT NULL AND v_seat_limit < 9999 AND v_member_count >= v_seat_limit THEN
+    RAISE EXCEPTION 'Seat limit reached for this team. Cannot accept invitation.';
   END IF;
 
   -- Update the user's team ID
@@ -598,12 +619,12 @@ BEGIN
   LEFT JOIN public.teams t ON p.team_id = t.id
   WHERE p.id = auth.uid();
 
-  -- If seat_limit = 1, reject the takeover if active within last 5 minutes
+  -- If seat_limit = 1, reject the takeover if active within last 30 seconds
   IF v_seat_limit IS NOT NULL AND v_seat_limit = 1 THEN
     IF current_active_session IS NOT NULL 
        AND current_active_session != p_session_id 
        AND current_last_active IS NOT NULL 
-       AND current_last_active > (NOW() - INTERVAL '5 minutes') THEN
+       AND current_last_active > (NOW() - INTERVAL '30 seconds') THEN
       RETURN FALSE;
     END IF;
   END IF;

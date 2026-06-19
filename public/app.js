@@ -171,6 +171,25 @@ function initializeApp() {
         });
     }
 
+    function sanitizeFilenameForPdfAndUi(filename) {
+        if (!filename) return 'N/A';
+        // Remove non-printable ASCII, emojis, and control characters
+        let clean = filename.replace(/[^\x20-\x7E]/g, '');
+        // Trim leading/trailing whitespace
+        clean = clean.trim();
+        // Truncate to maximum 40 characters to avoid layout breakage in PDF or UI
+        if (clean.length > 40) {
+            const lastDot = clean.lastIndexOf('.');
+            if (lastDot !== -1 && (clean.length - lastDot) <= 6) {
+                const ext = clean.substring(lastDot);
+                clean = clean.substring(0, 37 - ext.length) + '...' + ext;
+            } else {
+                clean = clean.substring(0, 37) + '...';
+            }
+        }
+        return clean || 'unnamed_file';
+    }
+
     function updateUploadButtonsState() {
         const startAuditBtn = document.getElementById('start-audit-btn');
         const clearUploadBtn = document.getElementById('clear-upload-btn');
@@ -497,6 +516,8 @@ function initializeApp() {
 
         if (viewId !== 'login') {
             window.pendingPurchase = null; // Clear purchase queue on navigation away from login
+            const contextCard = document.getElementById('pricing-context-card');
+            if (contextCard) contextCard.style.display = 'none';
         }
 
         if (viewId === 'home') {
@@ -511,9 +532,15 @@ function initializeApp() {
 
     function syncSignUpUI() {
         if (isSignUpMode) {
-            if (loginTitle) loginTitle.textContent = "Create an Account";
-            if (loginSubtitle) loginSubtitle.textContent = "Sign up for LeaseAlign AI to start auditing commercial leases.";
-            if (loginSubmitBtn) loginSubmitBtn.textContent = "Register Account";
+            if (window.pendingPurchase) {
+                if (loginTitle) loginTitle.textContent = "Create an Account to Subscribe";
+                if (loginSubtitle) loginSubtitle.textContent = `Sign up now to activate your ${window.pendingPurchase.plan} subscription.`;
+                if (loginSubmitBtn) loginSubmitBtn.textContent = "Sign Up & Continue to Checkout";
+            } else {
+                if (loginTitle) loginTitle.textContent = "Create an Account";
+                if (loginSubtitle) loginSubtitle.textContent = "Sign up for LeaseAlign AI to start auditing commercial leases.";
+                if (loginSubmitBtn) loginSubmitBtn.textContent = "Register Account";
+            }
             
             document.querySelectorAll('.register-only').forEach(el => el.style.display = 'block');
             if (registerFirstName) registerFirstName.required = true;
@@ -528,9 +555,15 @@ function initializeApp() {
             
             if (authToggleContainer) authToggleContainer.innerHTML = 'Already have an account? <a href="#" id="auth-toggle-link">Sign In</a>';
         } else {
-            if (loginTitle) loginTitle.textContent = "Sign In to LeaseAlign AI";
-            if (loginSubtitle) loginSubtitle.textContent = "Enter your credentials to access your transaction dashboard";
-            if (loginSubmitBtn) loginSubmitBtn.textContent = "Sign In";
+            if (window.pendingPurchase) {
+                if (loginTitle) loginTitle.textContent = "Sign In to Subscribe";
+                if (loginSubtitle) loginSubtitle.textContent = `Sign in now to complete your purchase of the ${window.pendingPurchase.plan} plan.`;
+                if (loginSubmitBtn) loginSubmitBtn.textContent = "Sign In & Continue to Checkout";
+            } else {
+                if (loginTitle) loginTitle.textContent = "Sign In to LeaseAlign AI";
+                if (loginSubtitle) loginSubtitle.textContent = "Enter your credentials to access your transaction dashboard";
+                if (loginSubmitBtn) loginSubmitBtn.textContent = "Sign In";
+            }
             
             document.querySelectorAll('.register-only').forEach(el => el.style.display = 'none');
             if (registerFirstName) registerFirstName.required = false;
@@ -594,6 +627,25 @@ function initializeApp() {
             showView('login');
         } else if (hash === '#dashboard') {
             showView('dashboard');
+            
+            // Adjust panel visibilities for Guest Sandbox Mode
+            const historyPanel = document.getElementById('history-panel');
+            const openTeamBtn = document.getElementById('open-team-btn');
+            
+            if (isDemoMode && !isLoggedIn) {
+                if (historyPanel) historyPanel.style.display = 'none';
+                if (openTeamBtn) openTeamBtn.style.display = 'none';
+            } else {
+                if (historyPanel) historyPanel.style.display = 'block';
+                if (openTeamBtn) openTeamBtn.style.display = 'inline-flex';
+            }
+            
+            // Hide the guest sandbox warning banner on entering dashboard clean
+            const sandboxBanner = document.getElementById('sandbox-warning-banner');
+            if (sandboxBanner) sandboxBanner.style.display = 'none';
+
+            updateCreditsDisplay();
+
             if (sessionStorage.getItem('ta_load_demo_audit') === 'true') {
                 sessionStorage.removeItem('ta_load_demo_audit');
                 loadDemoAuditData();
@@ -603,13 +655,13 @@ function initializeApp() {
 
     function updateNavUI() {
         if (homeLoginBtn) {
-            homeLoginBtn.textContent = isLoggedIn ? 'Dashboard' : 'Log In';
+            homeLoginBtn.textContent = (isLoggedIn || isDemoMode) ? 'Dashboard' : 'Log In';
         }
         if (heroGetStartedBtn) {
-            heroGetStartedBtn.textContent = isLoggedIn ? 'Go to Dashboard' : 'Start Your Audit';
+            heroGetStartedBtn.textContent = (isLoggedIn || isDemoMode) ? 'Go to Dashboard' : 'Start Your Audit';
         }
         if (homeLogoutBtn) {
-            homeLogoutBtn.style.display = isLoggedIn ? 'flex' : 'none';
+            homeLogoutBtn.style.display = (isLoggedIn || isDemoMode) ? 'flex' : 'none';
         }
         if (homeCreditsDisplay) {
             homeCreditsDisplay.style.display = 'none';
@@ -627,6 +679,41 @@ function initializeApp() {
     }
 
     function updateCreditsDisplay() {
+        if (isDemoMode && !isLoggedIn) {
+            if (creditsCountDisplay) creditsCountDisplay.textContent = "Guest";
+            if (homeCreditsCount) homeCreditsCount.textContent = "Guest";
+            
+            if (creditsTopupTrigger) {
+                creditsTopupTrigger.style.display = 'inline-flex';
+                creditsTopupTrigger.title = "Register to get 1 free audit credit";
+            }
+            if (homeCreditsDisplay) {
+                homeCreditsDisplay.style.display = 'inline-flex';
+                homeCreditsDisplay.title = "Register to get 1 free audit credit";
+            }
+            
+            const suffixEl = document.getElementById('credits-count-suffix');
+            const homeSuffixEl = document.getElementById('home-credits-suffix');
+            if (suffixEl) { suffixEl.style.display = 'inline'; suffixEl.textContent = "Sandbox"; }
+            if (homeSuffixEl) { homeSuffixEl.style.display = 'inline'; homeSuffixEl.textContent = "Sandbox"; }
+            
+            const giftTextEl = document.getElementById('welcome-credits-gift-text');
+            if (giftTextEl) {
+                giftTextEl.style.color = 'var(--color-purple)';
+                giftTextEl.innerHTML = `✨ <strong>Guest Sandbox Mode</strong>: Register an account to get <strong>1 free audit credit</strong> instantly!`;
+            }
+            
+            if (userEmailDisplay) {
+                userEmailDisplay.textContent = "Guest Account";
+                userEmailDisplay.style.display = 'inline-block';
+            }
+            if (logoutBtn) {
+                logoutBtn.innerHTML = '<i data-lucide="log-in"></i> Sign Up / Log In';
+                logoutBtn.title = "Sign up to save audits and export reports";
+            }
+            return;
+        }
+
         const displayVal = hostedCredits >= 900000 ? "Unlimited" : hostedCredits;
         creditsCountDisplay.textContent = displayVal;
         if (homeCreditsCount) homeCreditsCount.textContent = displayVal;
@@ -637,6 +724,14 @@ function initializeApp() {
         }
         if (homeCreditsDisplay) {
             homeCreditsDisplay.style.display = isLoggedIn ? 'inline-flex' : 'none';
+        }
+
+        if (userEmailDisplay) {
+            userEmailDisplay.style.display = isLoggedIn ? 'inline-block' : 'none';
+        }
+        if (logoutBtn) {
+            logoutBtn.innerHTML = '<i data-lucide="log-out"></i> Log Out';
+            logoutBtn.title = "Log Out of Session";
         }
 
         const giftTextEl = document.getElementById('welcome-credits-gift-text');
@@ -1311,6 +1406,7 @@ function initializeApp() {
                         passwordRecoveryModal.classList.add('active');
                     }
                     if (session && session.user) {
+                        window.currentAccessToken = session.access_token;
                         isLoggedIn = true;
                         isDemoMode = false;
                         localStorage.removeItem('ta_hosted_credits');
@@ -1461,6 +1557,7 @@ function initializeApp() {
                             window.handleHashRoute();
                         }
                     } else {
+                        window.currentAccessToken = null;
                         isLoggedIn = false;
                         userEmail = '';
                         updateNavUI();
@@ -1493,6 +1590,21 @@ function initializeApp() {
         }
     }
 
+    // Gracefully release active session on unload/beforeunload
+    window.addEventListener('beforeunload', () => {
+        if (isLoggedIn && window.currentAccessToken) {
+            fetch('/api/release-session', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.currentAccessToken}`
+                },
+                body: JSON.stringify({}),
+                keepalive: true
+            });
+        }
+    });
+
     // Navigation triggers
     if (homeLoginBtn) {
         homeLoginBtn.addEventListener('click', () => {
@@ -1509,12 +1621,9 @@ function initializeApp() {
         heroViewDemoBtn.addEventListener('click', () => {
             console.log("Try Live Demo clicked...");
             sessionStorage.setItem('ta_load_demo_audit', 'true');
-            if (isLoggedIn) {
-                window.location.hash = '#dashboard';
-            } else {
-                showToast("Please log in or sign up to experience the live demo.", "info");
-                window.location.hash = '#login';
-            }
+            isDemoMode = true;
+            updateNavUI();
+            window.location.hash = '#dashboard';
         });
     }
     if (loginToHomeLink) {
@@ -2057,6 +2166,13 @@ function initializeApp() {
 
     const handleLogout = async () => {
         try {
+            if (isDemoMode && !isLoggedIn) {
+                // Exit guest mode and go directly to register page to log in/sign up
+                isDemoMode = false;
+                resetAppSessionState();
+                window.location.hash = '#register';
+                return;
+            }
             if (supabase) {
                 await supabase.auth.signOut();
             }
@@ -2064,6 +2180,7 @@ function initializeApp() {
             console.warn("[Logout Warning] Supabase signOut threw an error, cleaning up local state instead:", signOutErr);
         } finally {
             isLoggedIn = false;
+            isDemoMode = false;
             userEmail = '';
             window.location.hash = '#home';
             updateNavUI();
@@ -2474,7 +2591,7 @@ function initializeApp() {
         
         const fileInfoEl = document.getElementById(`${fileKey}-file-info`);
         if (fileInfoEl) {
-            fileInfoEl.textContent = `${file.name} (${formatBytes(file.size)})`;
+            fileInfoEl.textContent = `${sanitizeFilenameForPdfAndUi(file.name)} (${formatBytes(file.size)})`;
             fileInfoEl.style.display = 'block';
         }
 
@@ -2840,6 +2957,215 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         window.leaseRoutingFallback = false;
         window.estoppelRoutingFallback = false;
 
+        const isSample = filesState.lease?.name === 'sample_lease.pdf' && filesState.estoppel?.name === 'sample_estoppel.pdf';
+
+        // Guest Sandbox Mode Simulated Custom Audit
+        if (isDemoMode && !isLoggedIn && !isSample) {
+            showLoader("Initializing guest audit process...");
+            await new Promise(r => setTimeout(r, 800));
+            showLoader("Reading Lease PDF: Page 1/4");
+            await new Promise(r => setTimeout(r, 800));
+            showLoader("Reading Lease PDF: Page 2/4");
+            await new Promise(r => setTimeout(r, 800));
+            showLoader("Routing Lease layout...");
+            await new Promise(r => setTimeout(r, 600));
+            showLoader("Reading Estoppel PDF: Page 1/2");
+            await new Promise(r => setTimeout(r, 800));
+            showLoader("Routing Estoppel layout...");
+            await new Promise(r => setTimeout(r, 600));
+            showLoader("Analyzing Lease terms with AI...");
+            await new Promise(r => setTimeout(r, 1000));
+            showLoader("Analyzing Estoppel statements with AI...");
+            await new Promise(r => setTimeout(r, 1000));
+            showLoader("Auditing discrepancies...");
+            await new Promise(r => setTimeout(r, 1200));
+
+            // Setup Starbucks mock results but dynamically override metadata names to match user's custom uploads
+            const customLeaseName = sanitizeFilenameForPdfAndUi(filesState.lease.name);
+            const customEstoppelName = sanitizeFilenameForPdfAndUi(filesState.estoppel.name);
+            
+            auditData = {
+                metadata: {
+                    tenantName: "Starbucks Corporation",
+                    leaseFile: customLeaseName,
+                    estoppelFile: customEstoppelName,
+                    auditModel: "Guest Sandbox Audit Model"
+                },
+                summary: {
+                    matchScore: 82,
+                    redFlags: 1,
+                    monthlyRent: "$12,500.00 / $12,000.00",
+                    premisesSf: "2,200 SF",
+                    expiryDate: "11/30/2031"
+                },
+                records: [
+                    {
+                        term: "Tenant Name",
+                        leaseVal: "Starbucks Corporation",
+                        estoppelVal: "Starbucks Corporation",
+                        status: "match",
+                        leaseQuote: "Tenant: Starbucks Corporation",
+                        estoppelQuote: "Starbucks Corp. hereby certifies...",
+                        reason: "Names match exactly."
+                    },
+                    {
+                        term: "Suite / Unit Number",
+                        leaseVal: "Suite 100",
+                        estoppelVal: "Suite 100",
+                        status: "match",
+                        leaseQuote: "Suite 100 at the Mall",
+                        estoppelQuote: "Suite 100",
+                        reason: "Suite numbers match."
+                    },
+                    {
+                        term: "Premises Size",
+                        leaseVal: "2,200 SF",
+                        estoppelVal: "2,200 SF",
+                        status: "match",
+                        leaseQuote: "premises measuring approximately 2,200 square feet",
+                        estoppelQuote: "Premises size: 2,200 SF",
+                        reason: "Square footage matches."
+                    },
+                    {
+                        term: "Current Monthly Rent",
+                        leaseVal: "$12,500.00",
+                        estoppelVal: "$12,000.00",
+                        status: "mismatch",
+                        leaseQuote: "monthly base rent of $12,500.00",
+                        estoppelQuote: "Current monthly rent is $12,000.00",
+                        reason: "Lease states $12,500/mo but estoppel confirms $12,000/mo."
+                    },
+                    {
+                        term: "Lease Expiration Date",
+                        leaseVal: "11/30/2031",
+                        estoppelVal: "11/30/2031",
+                        status: "match",
+                        leaseQuote: "expiry date of November 30, 2031",
+                        estoppelQuote: "Lease expires on November 30, 2031",
+                        reason: "Dates match."
+                    },
+                    {
+                        term: "Security Deposit",
+                        leaseVal: "$25,000.00",
+                        estoppelVal: "$25,000.00",
+                        status: "match",
+                        leaseQuote: "Security deposit of $25,000",
+                        estoppelQuote: "Security deposit held: $25,000",
+                        reason: "Deposit amounts match."
+                    },
+                    {
+                        term: "Renewal Options",
+                        leaseVal: "Two 5-year options",
+                        estoppelVal: "Two 5-year options",
+                        status: "match",
+                        leaseQuote: "Tenant shall have two options to renew for 5 years each",
+                        estoppelQuote: "Two renewal options remain",
+                        reason: "Options match."
+                    },
+                    {
+                        term: "CAM & Operating Caps",
+                        leaseVal: "$3.50/SF",
+                        estoppelVal: "$3.50/SF",
+                        status: "match",
+                        leaseQuote: "CAM charges at $3.50 per square foot",
+                        estoppelQuote: "CAM at $3.50/SF",
+                        reason: "CAM configurations match."
+                    },
+                    {
+                        term: "Lease Guarantor",
+                        leaseVal: "Not Mentioned",
+                        estoppelVal: "Not Mentioned",
+                        status: "match",
+                        leaseQuote: "No citation found.",
+                        estoppelQuote: "No citation found.",
+                        reason: "Both documents omit this term."
+                    },
+                    {
+                        term: "Prepaid Rent",
+                        leaseVal: "Not Mentioned",
+                        estoppelVal: "Not Mentioned",
+                        status: "match",
+                        leaseQuote: "No citation found.",
+                        estoppelQuote: "No citation found.",
+                        reason: "Both documents omit prepaid rent."
+                    },
+                    {
+                        term: "Landlord Default Status",
+                        leaseVal: "No default",
+                        estoppelVal: "No default",
+                        status: "match",
+                        leaseQuote: "No landlord default noted.",
+                        estoppelQuote: "No landlord defaults.",
+                        reason: "Both documents state landlord is not in default."
+                    },
+                    {
+                        term: "Tenant Improvement Allowance",
+                        leaseVal: "$50.00/SF",
+                        estoppelVal: "$50.00/SF",
+                        status: "match",
+                        leaseQuote: "Landlord shall provide a TI Allowance of $50.00 per SF",
+                        estoppelQuote: "TI Allowance of $50.00/SF has been paid in full",
+                        reason: "TI Allowance configurations match."
+                    },
+                    {
+                        term: "Co-Tenancy Clause",
+                        leaseVal: "Required 80% occupancy",
+                        estoppelVal: "Required 80% occupancy",
+                        status: "match",
+                        leaseQuote: "Co-tenancy requires 80% occupancy of the shopping center",
+                        estoppelQuote: "Co-tenancy active",
+                        reason: "Co-tenancy terms match."
+                    },
+                    {
+                        term: "Termination Right",
+                        leaseVal: "One-time option at Year 5",
+                        estoppelVal: "One-time option at Year 5",
+                        status: "match",
+                        leaseQuote: "Tenant may terminate at end of Lease Year 5",
+                        estoppelQuote: "One termination option exists",
+                        reason: "Termination rights match."
+                    },
+                    {
+                        term: "SNDA Status",
+                        leaseVal: "Required within 30 days",
+                        estoppelVal: "Required within 30 days",
+                        status: "match",
+                        leaseQuote: "SNDA must be executed within 30 days of lease execution",
+                        estoppelQuote: "SNDA active",
+                        reason: "SNDA statuses match."
+                    },
+                    {
+                        term: "Permitted Use",
+                        leaseVal: "Retail coffee shop",
+                        estoppelVal: "Retail coffee shop",
+                        status: "match",
+                        leaseQuote: "Permitted use is retail coffee shop",
+                        estoppelQuote: "Coffee shop permitted",
+                        reason: "Permitted uses match."
+                    }
+                ]
+            };
+
+            renderAuditResults(auditData);
+            
+            // Set dynamic filenames in sandbox warning banner
+            const sandboxLeaseFile = document.getElementById('sandbox-lease-file');
+            const sandboxEstoppelFile = document.getElementById('sandbox-estoppel-file');
+            if (sandboxLeaseFile) sandboxLeaseFile.textContent = customLeaseName;
+            if (sandboxEstoppelFile) sandboxEstoppelFile.textContent = customEstoppelName;
+
+            const sandboxBanner = document.getElementById('sandbox-warning-banner');
+            if (sandboxBanner) sandboxBanner.style.display = 'block';
+
+            hideLoader();
+            showToast("🎉 Guest sandbox simulated audit completed!", "success");
+            return;
+        }
+
+        // Hide sandbox banner if a real or sample audit is executed
+        const sandboxBanner = document.getElementById('sandbox-warning-banner');
+        if (sandboxBanner) sandboxBanner.style.display = 'none';
+
         // Generate transaction IDs ONCE outside the retry loop to ensure server-side idempotency across retries
         const leaseTxId = generateUUID();
         const estoppelTxId = generateUUID();
@@ -2866,8 +3192,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             // Refresh profile and credits before client-side check to prevent stale balance errors
             await loadUserProfileAndCredits();
             
-            const isSample = filesState.lease?.name === 'sample_lease.pdf' && filesState.estoppel?.name === 'sample_estoppel.pdf';
-
             if (!isSample && hostedCredits < 1) {
                 hideLoader();
                 showToast(`🚫 Insufficient audits left! This audit requires 1 audit, but you only have ${hostedCredits} left. Please top up.`, 'error');
@@ -2983,8 +3307,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 lastError = err;
                 console.error(`[Audit Error] Attempt ${attempt} failed:`, err);
                 
-                // Auto Refund logic for hosted users if it failed (Awaiting refund requests using Promise.all)
-                const isSample = filesState.lease?.name === 'sample_lease.pdf' && filesState.estoppel?.name === 'sample_estoppel.pdf';
                 if (!isSample && successfulTransactionIds.length > 0) {
                     console.log("[Refund] Attempting to auto-refund credit for failed transactions:", successfulTransactionIds);
                     let tokenResponse = '';
@@ -3272,8 +3594,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         auditData = {
             metadata: {
                 tenantName: leaseJson.tenantName.value || "Unknown Tenant",
-                leaseFile: filesState.lease.name,
-                estoppelFile: filesState.estoppel.name,
+                leaseFile: sanitizeFilenameForPdfAndUi(filesState.lease.name),
+                estoppelFile: sanitizeFilenameForPdfAndUi(filesState.estoppel.name),
                 auditModel: activeModelName
             },
             summary: {
@@ -3648,6 +3970,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     // --- Export Audit to CSV report ---
     if (exportCsvBtn) {
         exportCsvBtn.addEventListener('click', () => {
+            if (isDemoMode && !isLoggedIn) {
+                showToast("Please sign up or log in to export CSV reports.", "warning");
+                window.location.hash = '#register';
+                return;
+            }
             if (!auditData) return;
 
             const headers = ["Audited Term", "Lease Contract Value", "Tenant Estoppel Value", "Verification Status", "Lease Reference Citation", "Estoppel Reference Citation"];
@@ -3681,6 +4008,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     // --- Export Audit to PDF report (Native jsPDF text + autoTable) ---
     if (exportPdfBtn) {
         exportPdfBtn.addEventListener('click', async () => {
+            if (isDemoMode && !isLoggedIn) {
+                showToast("Please sign up or log in to export PDF reports.", "warning");
+                window.location.hash = '#register';
+                return;
+            }
             if (!auditData) return;
             
             showLoader("Generating PDF Report...");
@@ -4094,8 +4426,20 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
             if (!isLoggedIn || isDemoMode) {
                 window.pendingPurchase = purchaseData;
-                showView('login');
-                showToast("Please sign up or log in to purchase a plan.", "info");
+                
+                // Show the pricing context card
+                const contextCard = document.getElementById('pricing-context-card');
+                if (contextCard) {
+                    const planBadge = contextCard.querySelector('.pricing-context-plan-badge');
+                    const planTitle = contextCard.querySelector('.pricing-context-title');
+                    
+                    if (planBadge) planBadge.textContent = purchaseData.plan;
+                    if (planTitle) planTitle.textContent = `${purchaseData.amount} Audits / ${purchaseData.interval === 'year' ? 'yr' : 'mo'}`;
+                    contextCard.style.display = 'block';
+                }
+                
+                window.location.hash = '#register';
+                showToast(`Please sign up or log in to purchase the ${purchaseData.plan} plan.`, "info");
                 return;
             }
 

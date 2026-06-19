@@ -182,7 +182,7 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     await expect(page.locator('#pricing-section')).toBeInViewport();
   });
 
-  test('should verify live demo redirect to login, auto-loading demo audit, and credit hiding on zero balance', async ({ page }) => {
+  test('should verify live demo redirect directly to dashboard in sandbox mode, auto-loading demo audit, and credit display as Guest Sandbox', async ({ page }) => {
     // 1. Mock config
     await page.route('**/api/config**', async route => {
       await route.fulfill({
@@ -192,87 +192,19 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
       });
     });
 
-    // 2. Mock GET **/auth/v1/user
-    await page.route('**/auth/v1/user**', async route => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          id: 'mock-user-id',
-          email: 'test@example.com',
-          user_metadata: { plan_type: 'hosted' }
-        })
-      });
-    });
-
-    // 3. Mock POST **/auth/v1/token
-    await page.route('**/auth/v1/token**', async route => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          access_token: 'mock-token',
-          token_type: 'bearer',
-          expires_in: 3600,
-          refresh_token: 'mock-refresh-token',
-          user: {
-            id: 'mock-user-id',
-            email: 'test@example.com',
-            user_metadata: { plan_type: 'hosted' }
-          }
-        })
-      });
-    });
-
-    // 4. Mock GET **/rest/v1/profiles
-    await page.route('**/rest/v1/profiles**', async route => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          credits: 0,
-          byok_credits: 0,
-          plan_tier: null,
-          teams: {
-            audit_credits: 0,
-            plan_tier: 'free'
-          }
-        })
-      });
-    });
-
-    // 5. Mock POST **/rest/v1/rpc/register_active_session
-    await page.route('**/rest/v1/rpc/register_active_session**', async route => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(true)
-      });
-    });
-
     await page.goto('/');
     await page.waitForSelector('body[data-initialized="true"]', { timeout: 15000 });
 
     // Click Try Live Demo when not logged in
     await page.click('#hero-view-demo-btn');
     
-    // Verify it redirects to login screen with a toast
-    await expect(page.locator('#login-view')).toBeVisible();
-    const toast = page.locator('.toast.info', { hasText: 'Please log in or sign up to experience the live demo.' });
-    await expect(toast).toBeVisible();
-
-    // Log in
-    await page.fill('#login-email', 'test@example.com');
-    await page.fill('#login-password', 'password');
-    await page.click('#login-submit-btn');
-
-    // Verify it takes us to dashboard and shows the demo audit results
+    // Verify it takes us to dashboard directly (guest sandbox mode) and shows the demo audit results
     await expect(page.locator('#dashboard-view')).toBeVisible();
     await expect(page.locator('#meta-tenant-name')).toHaveText('Starbucks Corporation');
 
-    // Verify credits pill is visible (even at 0 balance) and shows the empty/red state class
+    // Verify credits pill is visible and shows Guest Sandbox text
     await expect(page.locator('#credits-topup-trigger')).toBeVisible();
-    await expect(page.locator('#credits-topup-trigger')).toHaveClass(/credits-empty/);
+    await expect(page.locator('#credits-count-display')).toHaveText('Guest');
   });
 
   test('should require a valid x-transaction-id header on /api/audit and /api/compare', async ({ request }) => {

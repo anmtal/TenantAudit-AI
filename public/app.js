@@ -95,6 +95,13 @@ function initializeApp() {
         if (registerLastName) registerLastName.value = '';
         if (registerPhone) registerPhone.value = '';
         
+        // Clear and hide any login error message
+        const loginErrorMsg = document.getElementById('login-error-msg');
+        if (loginErrorMsg) {
+            loginErrorMsg.textContent = '';
+            loginErrorMsg.style.display = 'none';
+        }
+        
         // Clear any password strength bars
         const strengthBar = document.getElementById('password-strength-bar');
         const strengthLabel = document.getElementById('password-strength-label');
@@ -1694,6 +1701,13 @@ function initializeApp() {
             
             e.preventDefault();
             isSignUpMode = !isSignUpMode;
+            
+            // Clear any stale error messages when toggling
+            const loginErrorMsg = document.getElementById('login-error-msg');
+            if (loginErrorMsg) {
+                loginErrorMsg.textContent = '';
+                loginErrorMsg.style.display = 'none';
+            }
             
             if (isSignUpMode) {
                 loginTitle.textContent = "Create an Account";

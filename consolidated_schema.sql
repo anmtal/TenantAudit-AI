@@ -231,9 +231,15 @@ BEGIN
   END IF;
 
   -- Grant welcome credit if both email and phone are verified immediately on insertion
-  IF new.email_confirmed_at IS NOT NULL AND EXISTS (SELECT 1 FROM public.verified_phones WHERE phone = new.raw_user_meta_data->>'phone') THEN
-    PERFORM public.grant_welcome_credit(new.id);
-  END IF;
+  BEGIN
+    IF new.email_confirmed_at IS NOT NULL AND new.raw_user_meta_data IS NOT NULL THEN
+      IF EXISTS (SELECT 1 FROM public.verified_phones WHERE phone = new.raw_user_meta_data->>'phone') THEN
+        PERFORM public.grant_welcome_credit(new.id);
+      END IF;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'Error granting welcome credit in handle_new_user: %', SQLERRM;
+  END;
   
   RETURN new;
 END;
@@ -248,9 +254,15 @@ CREATE TRIGGER on_auth_user_created
 CREATE OR REPLACE FUNCTION public.handle_user_update()
 RETURNS trigger AS $$
 BEGIN
-  IF NEW.email_confirmed_at IS NOT NULL AND EXISTS (SELECT 1 FROM public.verified_phones WHERE phone = NEW.raw_user_meta_data->>'phone') THEN
-    PERFORM public.grant_welcome_credit(NEW.id);
-  END IF;
+  BEGIN
+    IF NEW.email_confirmed_at IS NOT NULL AND NEW.raw_user_meta_data IS NOT NULL THEN
+      IF EXISTS (SELECT 1 FROM public.verified_phones WHERE phone = NEW.raw_user_meta_data->>'phone') THEN
+        PERFORM public.grant_welcome_credit(NEW.id);
+      END IF;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'Error in handle_user_update trigger: %', SQLERRM;
+  END;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

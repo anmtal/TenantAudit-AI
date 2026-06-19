@@ -578,8 +578,18 @@ function initializeApp() {
     }
 
     window.handleHashRoute = function() {
-        const hash = window.location.hash || '#home';
+        let hash = window.location.hash || '#home';
         console.log("[Router] Routing to:", hash);
+
+        // Handle Supabase auth error redirect hash fragments (e.g. #error=server_error&...)
+        if (hash.startsWith('#error=')) {
+            const params = new URLSearchParams(hash.substring(1));
+            const errorDesc = params.get('error_description') || 'Authentication error';
+            showToast(`🚫 Auth Error: ${decodeURIComponent(errorDesc.replace(/\+/g, ' '))}`, 'error');
+            // Redirect to #login to clear the error state and let the user try again
+            window.location.hash = '#login';
+            return;
+        }
 
         // Security check: if not logged in, they can only go to #home, #login, #register, #forgot-password, #signup-confirm
         if (!isLoggedIn && !isDemoMode) {

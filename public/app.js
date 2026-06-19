@@ -81,6 +81,29 @@ async function loadPdfExportLibraries() {
 function initializeApp() {
     let pendingSignup = null;
 
+    // Helper to clear all authentication inputs
+    window.clearAuthInputs = function() {
+        const loginEmail = document.getElementById('login-email');
+        const loginPassword = document.getElementById('login-password');
+        const registerFirstName = document.getElementById('register-first-name');
+        const registerLastName = document.getElementById('register-last-name');
+        const registerPhone = document.getElementById('register-phone');
+        
+        if (loginEmail) loginEmail.value = '';
+        if (loginPassword) loginPassword.value = '';
+        if (registerFirstName) registerFirstName.value = '';
+        if (registerLastName) registerLastName.value = '';
+        if (registerPhone) registerPhone.value = '';
+        
+        // Clear any password strength bars
+        const strengthBar = document.getElementById('password-strength-bar');
+        const strengthLabel = document.getElementById('password-strength-label');
+        const strengthContainer = document.getElementById('password-strength-container');
+        if (strengthBar) strengthBar.style.width = '0%';
+        if (strengthLabel) strengthLabel.textContent = '';
+        if (strengthContainer) strengthContainer.style.display = 'none';
+    };
+
     // --- Toast Notifications ---
     window.createIconsWithA11y = function() {
         if (window.lucide) {
@@ -613,6 +636,7 @@ function initializeApp() {
             showView('home');
         } else if (hash === '#login') {
             isSignUpMode = false;
+            if (window.clearAuthInputs) window.clearAuthInputs();
             syncSignUpUI();
             if (defaultLoginCard) defaultLoginCard.style.display = 'block';
             if (forgotPasswordCard) forgotPasswordCard.style.display = 'none';
@@ -620,6 +644,7 @@ function initializeApp() {
             showView('login');
         } else if (hash === '#register') {
             isSignUpMode = true;
+            if (window.clearAuthInputs) window.clearAuthInputs();
             syncSignUpUI();
             if (defaultLoginCard) defaultLoginCard.style.display = 'block';
             if (forgotPasswordCard) forgotPasswordCard.style.display = 'none';
@@ -1766,9 +1791,20 @@ function initializeApp() {
     }
 
     const confirmBackToLogin = document.getElementById('confirm-back-to-login');
+    const confirmGoToLoginBtn = document.getElementById('confirm-go-to-login-btn');
+
     if (confirmBackToLogin) {
         confirmBackToLogin.addEventListener('click', (e) => {
             e.preventDefault();
+            window.clearAuthInputs();
+            window.location.hash = '#login';
+        });
+    }
+
+    if (confirmGoToLoginBtn) {
+        confirmGoToLoginBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.clearAuthInputs();
             window.location.hash = '#login';
         });
     }
@@ -2157,11 +2193,13 @@ function initializeApp() {
                         throw error;
                     }
                     showToast("🎉 Registration successful! Please check your email for a verification OTP link/code before logging in.", 'success');
+                    window.clearAuthInputs();
                     window.location.hash = '#signup-confirm';
                 } else {
                     // Offline mock signup
                     sessionStorage.setItem('ta_verification_email', pending.email);
                     showToast("🎉 Account created successfully (Local Offline Mode)!", 'success');
+                    window.clearAuthInputs();
                     window.location.hash = '#signup-confirm';
                 }
             } catch (err) {

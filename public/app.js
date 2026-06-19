@@ -1373,8 +1373,8 @@ function initializeApp() {
                 auditModel: "Demo Audit Model"
             },
             summary: {
-                matchScore: 34,
-                redFlags: 8,
+                matchScore: 44,
+                redFlags: 6,
                 monthlyRent: "$35,000.00 / $41,569.02",
                 premisesSf: "14,500 SF",
                 expiryDate: "08/31/2031"
@@ -1393,10 +1393,10 @@ function initializeApp() {
                     term: "Suite / Unit Number",
                     leaseVal: "Suite 4200, 42nd Floor",
                     estoppelVal: "Suite 4200",
-                    status: "mismatch",
+                    status: "match",
                     leaseQuote: "the premises designated as Suite 4200 on the 42nd floor",
                     estoppelQuote: "Premises: Suite 4200",
-                    reason: "The Lease specifies 'Suite 4200, 42nd Floor' whereas the Estoppel only states 'Suite 4200'. Verification of the exact leased premises floor is recommended."
+                    reason: "Suite numbers align. Estoppel omits floor details but matches unit."
                 },
                 {
                     term: "Premises Size",
@@ -1411,10 +1411,10 @@ function initializeApp() {
                     term: "Current Monthly Rent",
                     leaseVal: "$35,000.00 (Months 1–12), escalating at 3.50% per annum to $47,701.41 (Months 109–120)",
                     estoppelVal: "$41,569.02 per month",
-                    status: "mismatch",
+                    status: "warning",
                     leaseQuote: "Tenant shall pay Base Rent of $35,000.00 per month for months 1-12, with 3.50% annual escalations.",
                     estoppelQuote: "Current Monthly Rent: $41,569.02",
-                    reason: "The Estoppel rent of $41,569.02 per month differs from the starting Base Rent of $35,000.00, but is a scheduled escalation step under the Lease progression. Verification is needed to confirm the current lease year."
+                    reason: "The Estoppel monthly rent matches a scheduled rent progression step specified in the Lease escalation schedule. Verification of the current lease year is required."
                 },
                 {
                     term: "Lease Expiration Date",
@@ -3200,8 +3200,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     auditModel: "Guest Sandbox Audit Model"
                 },
                 summary: {
-                    matchScore: 34,
-                    redFlags: 8,
+                    matchScore: 44,
+                    redFlags: 6,
                     monthlyRent: "$35,000.00 / $41,569.02",
                     premisesSf: "14,500 SF",
                     expiryDate: "08/31/2031"
@@ -3220,10 +3220,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         term: "Suite / Unit Number",
                         leaseVal: "Suite 4200, 42nd Floor",
                         estoppelVal: "Suite 4200",
-                        status: "mismatch",
+                        status: "match",
                         leaseQuote: "the premises designated as Suite 4200 on the 42nd floor",
                         estoppelQuote: "Premises: Suite 4200",
-                        reason: "The Lease specifies 'Suite 4200, 42nd Floor' whereas the Estoppel only states 'Suite 4200'. Verification of the exact leased premises floor is recommended."
+                        reason: "Suite numbers align. Estoppel omits floor details but matches unit."
                     },
                     {
                         term: "Premises Size",
@@ -3238,10 +3238,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         term: "Current Monthly Rent",
                         leaseVal: "$35,000.00 (Months 1–12), escalating at 3.50% per annum to $47,701.41 (Months 109–120)",
                         estoppelVal: "$41,569.02 per month",
-                        status: "mismatch",
+                        status: "warning",
                         leaseQuote: "Tenant shall pay Base Rent of $35,000.00 per month for months 1-12, with 3.50% annual escalations.",
                         estoppelQuote: "Current Monthly Rent: $41,569.02",
-                        reason: "The Estoppel rent of $41,569.02 per month differs from the starting Base Rent of $35,000.00, but is a scheduled escalation step under the Lease progression. Verification is needed to confirm the current lease year."
+                        reason: "The Estoppel monthly rent matches a scheduled rent progression step specified in the Lease escalation schedule. Verification of the current lease year is required."
                     },
                     {
                         term: "Lease Expiration Date",

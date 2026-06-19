@@ -1347,9 +1347,9 @@ const MOCK_SAMPLE_ESTOPPEL_DATA = {
 
 const MOCK_SAMPLE_COMPARE_DATA = {
   "tenantName": { "status": "match", "reason": "The Estoppel tenant name 'Apex Coworking Solutions Int'l, Inc.' is a semantic match to the Lease tenant name 'APEX COWORKING SOLUTIONS INTERNATIONAL INC.'." },
-  "suiteNumber": { "status": "mismatch", "reason": "The Lease specifies 'Suite 4200, 42nd Floor' whereas the Estoppel only states 'Suite 4200'. Verification of the exact leased premises floor is recommended." },
+  "suiteNumber": { "status": "match", "reason": "Suite numbers align. Estoppel omits floor details but matches unit." },
   "premisesSf": { "status": "match", "reason": "The premises sizes are identical (14,500 SF)." },
-  "monthlyRent": { "status": "mismatch", "reason": "The Estoppel rent of $41,569.02 per month differs from the starting Base Rent of $35,000.00, but is a scheduled escalation step under the Lease progression. Verification is needed to confirm the current lease year." },
+  "monthlyRent": { "status": "warning", "reason": "The Estoppel monthly rent matches a scheduled rent progression step specified in the Lease escalation schedule. Verification of the current lease year is required." },
   "expiryDate": { "status": "mismatch", "reason": "The Lease expiration date is August 31, 2031, whereas the Estoppel states September 30, 2031, representing a one-month discrepancy." },
   "securityDeposit": { "status": "mismatch", "reason": "The Lease specifies a security deposit of $105,000.00 (three months rent), but the Estoppel states the landlord is only holding $70,000.00." },
   "renewalOptions": { "status": "mismatch", "reason": "The Lease outlines two (2) five-year options, whereas the Estoppel only acknowledges one (1) extension option." },

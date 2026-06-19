@@ -1393,10 +1393,10 @@ function initializeApp() {
                     term: "Suite / Unit Number",
                     leaseVal: "Suite 4200, 42nd Floor",
                     estoppelVal: "Suite 4200",
-                    status: "match",
+                    status: "mismatch",
                     leaseQuote: "the premises designated as Suite 4200 on the 42nd floor",
                     estoppelQuote: "Premises: Suite 4200",
-                    reason: "Suite numbers align. Estoppel omits floor details but matches unit."
+                    reason: "The Lease specifies 'Suite 4200, 42nd Floor' whereas the Estoppel only states 'Suite 4200'. Verification of the exact leased premises floor is recommended."
                 },
                 {
                     term: "Premises Size",
@@ -1411,10 +1411,10 @@ function initializeApp() {
                     term: "Current Monthly Rent",
                     leaseVal: "$35,000.00 (Months 1–12), escalating at 3.50% per annum to $47,701.41 (Months 109–120)",
                     estoppelVal: "$41,569.02 per month",
-                    status: "warning",
+                    status: "mismatch",
                     leaseQuote: "Tenant shall pay Base Rent of $35,000.00 per month for months 1-12, with 3.50% annual escalations.",
                     estoppelQuote: "Current Monthly Rent: $41,569.02",
-                    reason: "Rent matches the expected escalation schedule (escalated value for current period is correct)."
+                    reason: "The Estoppel rent of $41,569.02 per month differs from the starting Base Rent of $35,000.00, but is a scheduled escalation step under the Lease progression. Verification is needed to confirm the current lease year."
                 },
                 {
                     term: "Lease Expiration Date",
@@ -1465,10 +1465,10 @@ function initializeApp() {
                     term: "Prepaid Rent",
                     leaseVal: "$35,000.00 (applied to first full calendar month's Base Rent)",
                     estoppelVal: "No base rent prepaid in advance except for the current month's rent",
-                    status: "warning",
+                    status: "mismatch",
                     leaseQuote: "Prepaid Rent: $35,000.00 for the first month.",
                     estoppelQuote: "Prepaid Rent: None.",
-                    reason: "First month rent was prepaid at signing, but currently no future rent is prepaid. Estoppel aligns with status."
+                    reason: "The Lease notes prepaid rent of $35,000.00 applied to the first month, but the Estoppel notes no prepaid rent exists."
                 },
                 {
                     term: "Landlord Default Status",
@@ -1477,13 +1477,13 @@ function initializeApp() {
                     status: "mismatch",
                     leaseQuote: "Landlord shall maintain the structural portions and elevators.",
                     estoppelQuote: "Landlord is in default for failing to perform elevator repairs.",
-                    reason: "Discrepancy: Estoppel reports active landlord default regarding elevator maintenance."
+                    reason: "The Estoppel notes a landlord default regarding structural elevator repairs, which is not mentioned in the Lease document."
                 },
                 {
                     term: "Tenant Improvement Allowance",
                     leaseVal: "Not Mentioned",
                     estoppelVal: "Not Mentioned",
-                    status: "match",
+                    status: "warning",
                     leaseQuote: "No citation found.",
                     estoppelQuote: "No citation found.",
                     reason: "Neither document mentions a Tenant Improvement Allowance."
@@ -1492,7 +1492,7 @@ function initializeApp() {
                     term: "Co-Tenancy Clause",
                     leaseVal: "Not Mentioned",
                     estoppelVal: "Not Mentioned",
-                    status: "match",
+                    status: "warning",
                     leaseQuote: "No citation found.",
                     estoppelQuote: "No citation found.",
                     reason: "Neither document mentions a co-tenancy requirement."
@@ -1501,7 +1501,7 @@ function initializeApp() {
                     term: "Termination Right",
                     leaseVal: "Not Mentioned",
                     estoppelVal: "Not Mentioned",
-                    status: "match",
+                    status: "warning",
                     leaseQuote: "No citation found.",
                     estoppelQuote: "No citation found.",
                     reason: "Neither document mentions any early termination rights."
@@ -1510,7 +1510,7 @@ function initializeApp() {
                     term: "SNDA Status",
                     leaseVal: "Not Mentioned",
                     estoppelVal: "Not Mentioned",
-                    status: "match",
+                    status: "warning",
                     leaseQuote: "No citation found.",
                     estoppelQuote: "No citation found.",
                     reason: "Neither document mentions SNDA status or requirements."
@@ -1519,7 +1519,7 @@ function initializeApp() {
                     term: "Permitted Use",
                     leaseVal: "Not Mentioned",
                     estoppelVal: "Not Mentioned",
-                    status: "match",
+                    status: "warning",
                     leaseQuote: "No citation found.",
                     estoppelQuote: "No citation found.",
                     reason: "Neither document defines a permitted use restriction."
@@ -3220,10 +3220,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         term: "Suite / Unit Number",
                         leaseVal: "Suite 4200, 42nd Floor",
                         estoppelVal: "Suite 4200",
-                        status: "match",
+                        status: "mismatch",
                         leaseQuote: "the premises designated as Suite 4200 on the 42nd floor",
                         estoppelQuote: "Premises: Suite 4200",
-                        reason: "Suite numbers align. Estoppel omits floor details but matches unit."
+                        reason: "The Lease specifies 'Suite 4200, 42nd Floor' whereas the Estoppel only states 'Suite 4200'. Verification of the exact leased premises floor is recommended."
                     },
                     {
                         term: "Premises Size",
@@ -3238,10 +3238,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         term: "Current Monthly Rent",
                         leaseVal: "$35,000.00 (Months 1–12), escalating at 3.50% per annum to $47,701.41 (Months 109–120)",
                         estoppelVal: "$41,569.02 per month",
-                        status: "warning",
+                        status: "mismatch",
                         leaseQuote: "Tenant shall pay Base Rent of $35,000.00 per month for months 1-12, with 3.50% annual escalations.",
                         estoppelQuote: "Current Monthly Rent: $41,569.02",
-                        reason: "Rent matches the expected escalation schedule (escalated value for current period is correct)."
+                        reason: "The Estoppel rent of $41,569.02 per month differs from the starting Base Rent of $35,000.00, but is a scheduled escalation step under the Lease progression. Verification is needed to confirm the current lease year."
                     },
                     {
                         term: "Lease Expiration Date",
@@ -3292,10 +3292,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         term: "Prepaid Rent",
                         leaseVal: "$35,000.00 (applied to first full calendar month's Base Rent)",
                         estoppelVal: "No base rent prepaid in advance except for the current month's rent",
-                        status: "warning",
+                        status: "mismatch",
                         leaseQuote: "Prepaid Rent: $35,000.00 for the first month.",
                         estoppelQuote: "Prepaid Rent: None.",
-                        reason: "First month rent was prepaid at signing, but currently no future rent is prepaid. Estoppel aligns with status."
+                        reason: "The Lease notes prepaid rent of $35,000.00 applied to the first month, but the Estoppel notes no prepaid rent exists."
                     },
                     {
                         term: "Landlord Default Status",
@@ -3304,13 +3304,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         status: "mismatch",
                         leaseQuote: "Landlord shall maintain the structural portions and elevators.",
                         estoppelQuote: "Landlord is in default for failing to perform elevator repairs.",
-                        reason: "Discrepancy: Estoppel reports active landlord default regarding elevator maintenance."
+                        reason: "The Estoppel notes a landlord default regarding structural elevator repairs, which is not mentioned in the Lease document."
                     },
                     {
                         term: "Tenant Improvement Allowance",
                         leaseVal: "Not Mentioned",
                         estoppelVal: "Not Mentioned",
-                        status: "match",
+                        status: "warning",
                         leaseQuote: "No citation found.",
                         estoppelQuote: "No citation found.",
                         reason: "Neither document mentions a Tenant Improvement Allowance."
@@ -3319,7 +3319,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         term: "Co-Tenancy Clause",
                         leaseVal: "Not Mentioned",
                         estoppelVal: "Not Mentioned",
-                        status: "match",
+                        status: "warning",
                         leaseQuote: "No citation found.",
                         estoppelQuote: "No citation found.",
                         reason: "Neither document mentions a co-tenancy requirement."
@@ -3328,7 +3328,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         term: "Termination Right",
                         leaseVal: "Not Mentioned",
                         estoppelVal: "Not Mentioned",
-                        status: "match",
+                        status: "warning",
                         leaseQuote: "No citation found.",
                         estoppelQuote: "No citation found.",
                         reason: "Neither document mentions any early termination rights."
@@ -3337,7 +3337,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         term: "SNDA Status",
                         leaseVal: "Not Mentioned",
                         estoppelVal: "Not Mentioned",
-                        status: "match",
+                        status: "warning",
                         leaseQuote: "No citation found.",
                         estoppelQuote: "No citation found.",
                         reason: "Neither document mentions SNDA status or requirements."
@@ -3346,7 +3346,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         term: "Permitted Use",
                         leaseVal: "Not Mentioned",
                         estoppelVal: "Not Mentioned",
-                        status: "match",
+                        status: "warning",
                         leaseQuote: "No citation found.",
                         estoppelQuote: "No citation found.",
                         reason: "Neither document defines a permitted use restriction."

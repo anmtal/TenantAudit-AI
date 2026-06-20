@@ -5006,7 +5006,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         billingSection.style.display = 'none';
 
         // Check if we are in local offline mode
-        const isOffline = localStorage.getItem('ta_logged_in') !== 'true';
+        const isOffline = !supabase || 
+                          (supabase.supabaseUrl && supabase.supabaseUrl.includes('mock.supabase.co')) || 
+                          localStorage.getItem('ta_logged_in') === 'true';
         if (isOffline) {
             const planTier = localStorage.getItem('ta_user_plan_type') || 'free';
             if (planTier && planTier !== 'free' && planTier !== 'null') {
@@ -5097,7 +5099,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
 
             // Check if we are in local offline mode
-            const isOffline = localStorage.getItem('ta_logged_in') !== 'true';
+            const isOffline = !supabase || 
+                              (supabase.supabaseUrl && supabase.supabaseUrl.includes('mock.supabase.co')) || 
+                              localStorage.getItem('ta_logged_in') === 'true';
             if (isOffline) {
                 localStorage.setItem('ta_mock_cancelled', 'true');
                 showToast("🎉 Subscription cancelled successfully (offline mock mode)!", 'success');

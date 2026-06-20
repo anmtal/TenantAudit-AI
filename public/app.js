@@ -3154,6 +3154,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
     // --- Action: Run Live AI Lease Audit ---
     async function runLiveAudit() {
+        if (startAuditBtn) startAuditBtn.disabled = true;
+        if (disclaimerProceedBtn) disclaimerProceedBtn.disabled = true;
+
         window.isAuditTruncated = false;
         window.auditPagesProcessed = 0;
         window.leaseRoutingFallback = false;
@@ -3369,9 +3372,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         if (sandboxBanner) sandboxBanner.style.display = 'none';
 
         // Generate transaction IDs ONCE outside the retry loop to ensure server-side idempotency across retries
-        const leaseTxId = generateUUID();
-        const estoppelTxId = generateUUID();
-        const compareTxId = generateUUID();
+        const auditTxId = generateUUID();
+        const leaseTxId = auditTxId;
+        const estoppelTxId = auditTxId;
+        const compareTxId = auditTxId;
 
         let maxRetries = 3;
         let lastError = null;
@@ -3555,7 +3559,12 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const err = lastError;
             console.error(err);
             hideLoader();
-            showToast(`Error: ${err.message}`, 'error');
+            
+            let ocrTip = "";
+            if (filesState.lease || filesState.estoppel) {
+                ocrTip = "\n\n💡 Tip: If you are uploading scanned or image-only documents, try enabling **Force OCR / Vision Mode** under Advanced Document Options.";
+            }
+            showToast(`Error: ${err.message}${ocrTip}`, 'error');
             if (supabase) {
                 try {
                     await loadUserProfileAndCredits();
@@ -3622,6 +3631,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             isRoutingRequest: isRoutingRequest,
             isSampleAudit: isSample
         };
+
+        // Size validation to prevent 413 Payload Too Large errors on the express server
+        const payloadStr = JSON.stringify(payload);
+        const payloadSize = payloadStr.length; // rough estimate in bytes
+        if (payloadSize > 9.5 * 1024 * 1024) { // 9.5 MB
+            throw new Error(`The uploaded scanned document pages are too large (${(payloadSize / 1024 / 1024).toFixed(1)}MB). Please reduce the page range override or upload a lower-resolution document.`);
+        }
 
         const headers = {
             "Content-Type": "application/json"
@@ -4223,6 +4239,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 await loadPdfExportLibraries();
                 const { jsPDF } = window.jspdf;
                 
+                const stripEmojis = (str) => {
+                    if (!str || typeof str !== 'string') return str || '';
+                    return str.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F170}-\u{1F251}]/gu, '');
+                };
+                
                 const doc = new jsPDF('p', 'pt', 'a4');
                 const pageWidth = doc.internal.pageSize.getWidth();
                 const pageHeight = doc.internal.pageSize.getHeight();
@@ -4289,21 +4310,21 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 doc.text('Tenant Name:', margin + 10, y + 16);
                 doc.setFont('helvetica', 'normal');
                 doc.setTextColor(31, 41, 55);
-                doc.text(auditData.metadata.tenantName || 'Unknown', margin + 85, y + 16);
+                doc.text(stripEmojis(auditData.metadata.tenantName || 'Unknown'), margin + 85, y + 16);
 
                 doc.setFont('helvetica', 'bold');
                 doc.setTextColor(55, 65, 81);
                 doc.text('Source Lease File:', margin + 10, y + 32);
                 doc.setFont('helvetica', 'normal');
                 doc.setTextColor(31, 41, 55);
-                doc.text(auditData.metadata.leaseFile || 'N/A', margin + 105, y + 32);
+                doc.text(stripEmojis(auditData.metadata.leaseFile || 'N/A'), margin + 105, y + 32);
 
                 doc.setFont('helvetica', 'bold');
                 doc.setTextColor(55, 65, 81);
                 doc.text('Source Estoppel File:', margin + 10, y + 48);
                 doc.setFont('helvetica', 'normal');
                 doc.setTextColor(31, 41, 55);
-                doc.text(auditData.metadata.estoppelFile || 'N/A', margin + 118, y + 48);
+                doc.text(stripEmojis(auditData.metadata.estoppelFile || 'N/A'), margin + 118, y + 48);
 
                 y += 72;
 
@@ -4341,7 +4362,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     doc.setFont('helvetica', 'bold');
                     doc.setTextColor(...kpi.valueColor);
                     // Truncate long values
-                    let val = String(kpi.value);
+                    let val = stripEmojis(String(kpi.value));
                     if (val.length > 14) val = val.substring(0, 13) + '…';
                     doc.text(val, cx + cardW / 2, y + 34, { align: 'center' });
                 });
@@ -4359,13 +4380,13 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
                 // ============ MATRIX TABLE via autoTable ============
                 const tableBody = auditData.records.map(r => {
-                    const leaseText = r.leaseVal + ((r.leaseQuote || r.leaseCite) ? `\nQuote: "${r.leaseQuote || r.leaseCite}"` : '');
-                    const estoppelText = r.estoppelVal + ((r.estoppelQuote || r.estoppelCite) ? `\nQuote: "${r.estoppelQuote || r.estoppelCite}"` : '');
+                    const leaseText = stripEmojis(r.leaseVal) + ((r.leaseQuote || r.leaseCite) ? `\nQuote: "${stripEmojis(r.leaseQuote || r.leaseCite)}"` : '');
+                    const estoppelText = stripEmojis(r.estoppelVal) + ((r.estoppelQuote || r.estoppelCite) ? `\nQuote: "${stripEmojis(r.estoppelQuote || r.estoppelCite)}"` : '');
                     const statusLower = (r.status || '').toLowerCase();
                     let statusText = 'Mismatch';
                     if (statusLower === 'match') statusText = 'Verified';
                     else if (statusLower === 'warning') statusText = 'Warning';
-                    return [r.term, leaseText, estoppelText, statusText];
+                    return [stripEmojis(r.term), leaseText, estoppelText, statusText];
                 });
 
                 doc.autoTable({
@@ -4412,20 +4433,24 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                             const cellY = data.cell.y;
                             const cellW = data.cell.width;
                             const cellH = data.cell.height;
-                            doc.setFillColor(255, 255, 255);
-                            doc.rect(cellX + 0.5, cellY + 0.5, cellW - 1, cellH - 1, 'F');
 
-                            // Draw pill
-                            const pillW = 48;
-                            const pillH = 14;
-                            const pillX = cellX + (cellW - pillW) / 2;
-                            const pillY = cellY + (cellH - pillH) / 2;
-                            doc.setFillColor(...pillBg);
-                            doc.roundedRect(pillX, pillY, pillW, pillH, 3, 3, 'F');
-                            doc.setFontSize(6.5);
-                            doc.setFont('helvetica', 'bold');
-                            doc.setTextColor(...pillColor);
-                            doc.text(cellText.toUpperCase(), pillX + pillW / 2, pillY + pillH / 2 + 2.5, { align: 'center' });
+                            // Only draw custom pill badge if cell height is sufficient to avoid page break overlaps/issues
+                            if (cellH >= 16) {
+                                doc.setFillColor(255, 255, 255);
+                                doc.rect(cellX + 0.5, cellY + 0.5, cellW - 1, cellH - 1, 'F');
+
+                                // Draw pill
+                                const pillW = 48;
+                                const pillH = Math.min(14, cellH - 4);
+                                const pillX = cellX + (cellW - pillW) / 2;
+                                const pillY = cellY + (cellH - pillH) / 2;
+                                doc.setFillColor(...pillBg);
+                                doc.roundedRect(pillX, pillY, pillW, pillH, 3, 3, 'F');
+                                doc.setFontSize(6.5);
+                                doc.setFont('helvetica', 'bold');
+                                doc.setTextColor(...pillColor);
+                                doc.text(cellText.toUpperCase(), pillX + pillW / 2, pillY + pillH / 2 + 2.5, { align: 'center' });
+                            }
                         }
                     },
                     didDrawPage: () => {
@@ -4516,6 +4541,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         }
         const subTextEl = document.getElementById('loader-sub-status-text');
         if (subTextEl) subTextEl.remove();
+
+        // Re-enable audit execution buttons
+        if (startAuditBtn) startAuditBtn.disabled = false;
+        if (disclaimerProceedBtn) disclaimerProceedBtn.disabled = false;
     }
 
     function escapeHtml(str) {

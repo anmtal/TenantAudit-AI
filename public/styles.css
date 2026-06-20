@@ -2675,7 +2675,7 @@ select option {
 .style-extracted-110 { display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 .style-extracted-111 { display: flex; justify-content: space-between; }
 .style-extracted-112 { color: var(--text-muted); }
-.style-extracted-113 { color: var(--text-primary); }
+.style-extracted-113 { color: var(--text-primary); max-width: 140px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
 .style-extracted-114 { max-width: 140px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
 .style-extracted-115 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .style-extracted-116 { margin: 0; }

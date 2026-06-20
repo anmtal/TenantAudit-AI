@@ -2956,29 +2956,35 @@ app.get('/api/debug-cancel-state', async (req, res) => {
             return res.status(500).json({ error: "Database admin client not configured." });
         }
 
-        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-        if (listErr) throw listErr;
+        const { data: ownerProfile, error: ownerErr } = await supabaseAdmin
+            .from('profiles')
+            .select('team_id, id')
+            .eq('email', 'anmtal@gmail.com')
+            .single();
 
-        const owner = users.find(u => u.email?.toLowerCase() === 'anmtal@gmail.com');
-        if (!owner) {
-            return res.json({ error: "Owner not found" });
+        if (ownerErr || !ownerProfile) {
+            return res.json({ error: "Owner profile not found", details: ownerErr });
         }
 
         const { data: team, error: teamErr } = await supabaseAdmin
             .from('teams')
             .select('*')
-            .eq('owner_id', owner.id)
+            .eq('id', ownerProfile.team_id)
             .single();
-        if (teamErr) throw teamErr;
+        if (teamErr) {
+            return res.json({ error: "Team not found", details: teamErr, ownerProfile });
+        }
 
         const { data: profiles, error: profErr } = await supabaseAdmin
             .from('profiles')
             .select('*')
             .eq('team_id', team.id);
-        if (profErr) throw profErr;
+        if (profErr) {
+            return res.json({ error: "Failed to fetch profiles", details: profErr, team });
+        }
 
         return res.json({
-            owner_id: owner.id,
+            owner_id: ownerProfile.id,
             team,
             profiles_count: profiles.length,
             profiles

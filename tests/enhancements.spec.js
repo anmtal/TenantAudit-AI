@@ -363,6 +363,33 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     expect(compareNoTxJson.error).toContain('Missing or invalid transaction ID');
   });
 
+  test('should verify guest isSampleAudit bypass security boundary', async ({ request }) => {
+    // 1. A request claiming to be sample audit but containing non-sample text should be rejected as Unauthorized (401)
+    const bypassRes = await request.post('/api/audit', {
+      data: {
+        isSampleAudit: true,
+        text: 'This is a completely real non-sample lease document text for ACME Corp.',
+        docType: 'lease',
+        isRoutingRequest: false
+      }
+    });
+    expect(bypassRes.status()).toBe(401);
+    const bypassJson = await bypassRes.json();
+    expect(bypassJson.error).toContain('Unauthorized');
+
+    // 2. A valid sample audit routing request should bypass and succeed (200)
+    const validSampleRes = await request.post('/api/audit', {
+      data: {
+        isSampleAudit: true,
+        isRoutingRequest: true,
+        docType: 'lease'
+      }
+    });
+    expect(validSampleRes.status()).toBe(200);
+    const sampleJson = await validSampleRes.json();
+    expect(sampleJson.pageNumbers).toBeDefined();
+  });
+
   test('should complete E2E checkouts for subscription, annual, and one-time plans', async ({ request }) => {
     const userId = '88888888-4444-4444-4444-121212121212';
     

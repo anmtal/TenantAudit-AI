@@ -2414,7 +2414,8 @@ function initializeApp() {
         setTimeout(() => {
             const pricingSection = document.getElementById('pricing-section');
             if (pricingSection) {
-                pricingSection.scrollIntoView({ behavior: 'smooth' });
+                const behavior = window.navigator.webdriver ? 'auto' : 'smooth';
+                pricingSection.scrollIntoView({ behavior });
             }
         }, 100);
     };

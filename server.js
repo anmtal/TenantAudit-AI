@@ -227,6 +227,29 @@ app.use((req, res, next) => {
 
 // Auth Middleware to authenticate user and check seat limits
 async function requireAuth(req, res, next) {
+    // 1. B2B Guest Trial Auth Bypass: Allow sample audits without credentials only if payload contains mock keywords or is routing
+    if (req.body && req.body.isSampleAudit === true) {
+        const isSampleRequest = req.body.isRoutingRequest || 
+            (req.body.text && (
+                req.body.text.toUpperCase().includes("APEX COWORKING") || 
+                req.body.text.toUpperCase().includes("APEX GLOBAL") || 
+                req.body.text.toUpperCase().includes("ELEVATOR MODERNIZATION") ||
+                req.body.text.toUpperCase().includes("SUITE 4200")
+            )) ||
+            (req.body.leaseJson && JSON.stringify(req.body.leaseJson).toUpperCase().includes("APEX COWORKING")) ||
+            (req.body.estoppelJson && JSON.stringify(req.body.estoppelJson).toUpperCase().includes("APEX COWORKING"));
+
+        if (!isSampleRequest) {
+            console.warn("[Auth Blocked] Guest bypass attempted with invalid sample payload.");
+            return res.status(401).json({ error: "Unauthorized: Invalid sample audit payload." });
+        }
+
+        console.log("[Auth Bypass] Guest trial sample audit request permitted.");
+        req.user = { id: '88888888-4444-4444-4444-121212121212', email: 'guest@leasealign.io', user_metadata: {} };
+        return next();
+    }
+
+    // 2. Test environment/unconfigured dev environment bypass
     if (process.env.NODE_ENV === 'test' || !supabaseAdmin) {
         if (process.env.NODE_ENV === 'production') {
             console.error("FATAL: Auth bypass attempted in production mode while supabaseAdmin is not configured.");
@@ -234,13 +257,6 @@ async function requireAuth(req, res, next) {
         }
         console.warn("[Security Bypass] Test or unconfigured environment: Proceeding without auth validation.");
         req.user = { id: '88888888-4444-4444-4444-121212121212', email: 'mock@example.com', user_metadata: {} };
-        return next();
-    }
-
-    // B2B Guest Trial Auth Bypass: Allow sample audits without credentials
-    if (req.body && req.body.isSampleAudit === true) {
-        console.log("[Auth Bypass] Guest trial sample audit request permitted.");
-        req.user = { id: '88888888-4444-4444-4444-121212121212', email: 'guest@leasealign.io', user_metadata: {} };
         return next();
     }
 
@@ -464,7 +480,7 @@ function mapLLMErrorToFriendlyMessage(err) {
 }
 
 
-app.post('/api/refund-credit', requireAuth, async (req, res) => {
+app.post('/api/refund-credit', express.json(), requireAuth, async (req, res) => {
     try {
         const { transactionId, planMode, pagesToRefund } = req.body;
         if (!transactionId) return res.status(400).json({ error: 'Missing transactionId' });

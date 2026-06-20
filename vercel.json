@@ -37,6 +37,7 @@
     },
     {
       "src": "/(.*)",
+      "headers": { "Cache-Control": "public, max-age=3600, must-revalidate" },
       "dest": "/public/$1"
     }
   ]

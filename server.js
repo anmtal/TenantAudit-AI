@@ -1250,7 +1250,7 @@ app.post('/api/check-email-verified', async (req, res) => {
 
         const user = users.find(u => u.email?.toLowerCase() === email.trim().toLowerCase());
         if (!user) {
-            return res.status(404).json({ error: "User not found." });
+            return res.json({ verified: false });
         }
 
         return res.json({ verified: !!user.email_confirmed_at });

@@ -2678,21 +2678,78 @@ app.get('/api/subscription-status', requireAuth, async (req, res) => {
         const team = profile.teams;
         const isOwner = team.owner_id === req.user.id;
 
+        // Parse plans from plan_tier
+        const planNames = team.plan_tier ? team.plan_tier.split(' + ') : [];
+
         if (!team.stripe_subscription_id) {
-            return res.json({ active: false, planTier: team.plan_tier, isOwner });
+            const plans = planNames.map(name => ({
+                name,
+                cancelAtPeriodEnd: false,
+                currentPeriodEnd: null
+            }));
+            return res.json({ 
+                active: plans.length > 0, 
+                planTier: team.plan_tier, 
+                isOwner,
+                plans
+            });
         }
 
         if (!stripe) {
-            return res.json({ active: true, planTier: team.plan_tier, cancelAtPeriodEnd: false, isOwner });
+            const plans = planNames.map(name => ({
+                name,
+                cancelAtPeriodEnd: false,
+                currentPeriodEnd: null
+            }));
+            return res.json({ 
+                active: plans.length > 0, 
+                planTier: team.plan_tier, 
+                isOwner,
+                plans
+            });
         }
 
+        // Retrieve the main subscription
         const subscription = await stripe.subscriptions.retrieve(team.stripe_subscription_id);
+        const stripeCustomerId = subscription.customer;
+
+        // List all active subscriptions for the customer
+        const activeSubsList = await stripe.subscriptions.list({
+            customer: stripeCustomerId,
+            status: 'active'
+        });
+
+        const plans = [];
+        if (activeSubsList && activeSubsList.data) {
+            for (const sub of activeSubsList.data) {
+                if (sub.metadata && sub.metadata.planType === 'hosted') {
+                    plans.push({
+                        id: sub.id,
+                        name: sub.metadata.packageName || 'Active Plan',
+                        cancelAtPeriodEnd: sub.cancel_at_period_end,
+                        currentPeriodEnd: sub.current_period_end
+                    });
+                }
+            }
+        }
+
+        // Fallback: If no active plans were found from customer active subscriptions list, fallback to main subscription info
+        if (plans.length === 0 && team.plan_tier) {
+            plans.push({
+                id: subscription.id,
+                name: team.plan_tier,
+                cancelAtPeriodEnd: subscription.cancel_at_period_end,
+                currentPeriodEnd: subscription.current_period_end
+            });
+        }
+
         return res.json({
-            active: true,
+            active: plans.length > 0,
             planTier: team.plan_tier,
             cancelAtPeriodEnd: subscription.cancel_at_period_end,
             currentPeriodEnd: subscription.current_period_end,
-            isOwner
+            isOwner,
+            plans
         });
     } catch (err) {
         console.error("Error fetching subscription status:", err);
@@ -2722,40 +2779,91 @@ app.post('/api/cancel-subscription', requireAuth, async (req, res) => {
             return res.status(403).json({ error: "Forbidden: Only the team owner can cancel the subscription." });
         }
 
+        // Parse plans to cancel
+        let plansToCancel = [];
+        if (req.body.plansToCancel && Array.isArray(req.body.plansToCancel)) {
+            plansToCancel = req.body.plansToCancel.map(p => p.trim());
+        } else if (req.body.planToCancel) {
+            plansToCancel = [req.body.planToCancel.trim()];
+        }
+
+        if (plansToCancel.length === 0) {
+            return res.status(400).json({ error: "No plan specified for cancellation." });
+        }
+
         if (!team.stripe_subscription_id) {
             if (team.plan_tier && team.plan_tier !== 'free') {
-                // For manual/admin-assigned subscriptions (no stripe_subscription_id),
-                // we directly update their plan_tier to null, and seat_limit to 1 in the database.
-                const { error: updateError } = await supabaseAdmin
-                    .from('teams')
-                    .update({ 
-                        plan_tier: null,
-                        seat_limit: 1
-                    })
-                    .eq('id', profile.team_id);
+                // Parse current manual plans
+                const currentPlans = team.plan_tier.split(' + ').map(p => p.trim());
                 
-                if (updateError) {
-                    console.error("[Cancel Subscription] Error updating team plan to free:", updateError);
-                    return res.status(500).json({ error: "Failed to cancel manual subscription." });
-                }
+                // Filter out plans to cancel
+                const remainingPlans = currentPlans.filter(p => !plansToCancel.includes(p));
 
-                // Force immediate expiration of all remaining active subscription credit grants for this team
-                const { error: updateGrantsErr } = await supabaseAdmin
-                    .from('team_credit_grants')
-                    .update({ expires_at: new Date().toISOString() })
-                    .eq('team_id', profile.team_id)
-                    .gt('amount_remaining', 0)
-                    .not('expires_at', 'is', null);
-                if (updateGrantsErr) {
-                    console.warn("[Cancel Subscription] Error updating credit grants:", updateGrantsErr);
+                if (remainingPlans.length > 0) {
+                    // Update database with remaining plans
+                    const newPlanTier = remainingPlans.join(' + ');
+                    
+                    // Sum the seats for remaining plans
+                    let totalSeats = 0;
+                    for (const plan of remainingPlans) {
+                        const planDetails = PLANS_CATALOG[plan];
+                        totalSeats += planDetails ? planDetails.seats : 1;
+                    }
+
+                    const { error: updateError } = await supabaseAdmin
+                        .from('teams')
+                        .update({ 
+                            plan_tier: newPlanTier,
+                            seat_limit: totalSeats
+                        })
+                        .eq('id', profile.team_id);
+                    
+                    if (updateError) {
+                        console.error("[Cancel Subscription] Error updating team remaining plans:", updateError);
+                        return res.status(500).json({ error: "Failed to cancel subscription package." });
+                    }
+
+                    console.log(`[Subscription Cancellation] Updated manual plans for team ${profile.team_id}: ${newPlanTier} (seats: ${totalSeats})`);
+                    return res.json({
+                        success: true,
+                        cancelAtPeriodEnd: false,
+                        currentPeriodEnd: null,
+                        remainingPlans: newPlanTier
+                    });
+                } else {
+                    // No remaining plans, downgrade to free
+                    const { error: updateError } = await supabaseAdmin
+                        .from('teams')
+                        .update({ 
+                            plan_tier: null,
+                            seat_limit: 1
+                        })
+                        .eq('id', profile.team_id);
+                    
+                    if (updateError) {
+                        console.error("[Cancel Subscription] Error updating team plan to free:", updateError);
+                        return res.status(500).json({ error: "Failed to cancel manual subscription." });
+                    }
+
+                    // Force immediate expiration of all remaining active subscription credit grants for this team
+                    const { error: updateGrantsErr } = await supabaseAdmin
+                        .from('team_credit_grants')
+                        .update({ expires_at: new Date().toISOString() })
+                        .eq('team_id', profile.team_id)
+                        .gt('amount_remaining', 0)
+                        .not('expires_at', 'is', null);
+                    if (updateGrantsErr) {
+                        console.warn("[Cancel Subscription] Error updating credit grants:", updateGrantsErr);
+                    }
+                    
+                    console.log(`[Subscription Cancellation] Directly downgraded manual subscription to free for team ${profile.team_id} (User: ${req.user.email})`);
+                    return res.json({
+                        success: true,
+                        cancelAtPeriodEnd: false,
+                        currentPeriodEnd: null,
+                        remainingPlans: null
+                    });
                 }
-                
-                console.log(`[Subscription Cancellation] Directly downgraded manual subscription to free for team ${profile.team_id} (User: ${req.user.email})`);
-                return res.json({
-                    success: true,
-                    cancelAtPeriodEnd: false,
-                    currentPeriodEnd: null
-                });
             } else {
                 return res.status(400).json({ error: "No active subscription found for this team." });
             }
@@ -2765,17 +2873,41 @@ app.post('/api/cancel-subscription', requireAuth, async (req, res) => {
             return res.status(400).json({ error: "Stripe client is not configured." });
         }
 
-        // Set cancel_at_period_end = true to cancel at the end of current cycle (grace period retention)
-        const subscription = await stripe.subscriptions.update(team.stripe_subscription_id, {
-            cancel_at_period_end: true
+        // Fetch customer active subscriptions list
+        const mainSub = await stripe.subscriptions.retrieve(team.stripe_subscription_id);
+        const stripeCustomerId = mainSub.customer;
+
+        const activeSubsList = await stripe.subscriptions.list({
+            customer: stripeCustomerId,
+            status: 'active'
         });
 
-        console.log(`[Subscription Cancellation] Set cancel_at_period_end = true for subscription ${team.stripe_subscription_id} (User: ${req.user.email})`);
+        let cancelledCount = 0;
+        if (activeSubsList && activeSubsList.data) {
+            for (const sub of activeSubsList.data) {
+                const subPlanName = sub.metadata ? sub.metadata.packageName : null;
+                if (subPlanName && plansToCancel.includes(subPlanName)) {
+                    await stripe.subscriptions.update(sub.id, {
+                        cancel_at_period_end: true
+                    });
+                    console.log(`[Subscription Cancellation] Set cancel_at_period_end = true for subscription ${sub.id} (Package: ${subPlanName})`);
+                    cancelledCount++;
+                }
+            }
+        }
+
+        // Fallback: If no metadata matched or nothing cancelled, cancel the main subscription
+        if (cancelledCount === 0) {
+            await stripe.subscriptions.update(team.stripe_subscription_id, {
+                cancel_at_period_end: true
+            });
+            console.log(`[Subscription Cancellation] Fallback: Set cancel_at_period_end = true for main subscription ${team.stripe_subscription_id}`);
+        }
 
         return res.json({
             success: true,
-            cancelAtPeriodEnd: subscription.cancel_at_period_end,
-            currentPeriodEnd: subscription.current_period_end
+            cancelAtPeriodEnd: true,
+            currentPeriodEnd: mainSub.current_period_end
         });
     } catch (err) {
         console.error("Error canceling subscription:", err);

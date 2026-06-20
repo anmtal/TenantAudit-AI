@@ -5252,6 +5252,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         });
     }
 
+    let currentSubscriptionData = null;
+
     async function loadSubscriptionStatus() {
         const billingSection = document.getElementById('subscription-billing-section');
         const planDisplay = document.getElementById('billing-plan-display');
@@ -5304,6 +5306,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
             if (response.ok) {
                 const data = await response.json();
+                currentSubscriptionData = data;
                 const hasPaidPlan = data.planTier && data.planTier.toLowerCase() !== 'free' && data.planTier.toLowerCase() !== 'null';
                 if (data.active || hasPaidPlan) {
                     billingSection.style.display = 'block';
@@ -5316,6 +5319,9 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         expiryDisplay.textContent = 'N/A';
                     }
 
+                    // Check if all plans in list are cancelled
+                    const allPlansCancelled = data.plans && data.plans.length > 0 && data.plans.every(p => p.cancelAtPeriodEnd);
+
                     if (!data.isOwner) {
                         cancelBtn.disabled = true;
                         cancelBtn.textContent = 'Contact Owner to Cancel';
@@ -5323,7 +5329,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                         cancelBtn.style.color = 'var(--text-muted)';
                         cancelBtn.style.background = 'transparent';
                         cancelBtn.style.cursor = 'not-allowed';
-                    } else if (data.cancelAtPeriodEnd) {
+                    } else if (allPlansCancelled || data.cancelAtPeriodEnd) {
                         cancelBtn.disabled = true;
                         cancelBtn.textContent = 'Scheduled to Cancel';
                         cancelBtn.style.borderColor = 'var(--border-color)';
@@ -5348,19 +5354,167 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
     }
 
     const cancelSubscriptionBtn = document.getElementById('cancel-subscription-btn');
+    const cancelSubscriptionModal = document.getElementById('cancel-subscription-modal');
+    const btnCancelModalClose = document.getElementById('btn-cancel-modal-close');
+    const btnCancelModalBack = document.getElementById('btn-cancel-modal-back');
+    const btnCancelModalConfirm = document.getElementById('btn-cancel-modal-confirm');
+    const cancelModalSelectionContainer = document.getElementById('cancel-modal-selection-container');
+
+    const PLANS_DETAILS = {
+        "Starter Monthly": { seats: 1, credits: 5 },
+        "Pro Monthly": { seats: 3, credits: 75 },
+        "Team Monthly": { seats: 5, credits: 150 },
+        "Business Monthly": { seats: 20, credits: 500 },
+        "Starter Annual": { seats: 1, credits: 60 },
+        "Pro Annual": { seats: 3, credits: 900 },
+        "Team Annual": { seats: 5, credits: 1800 },
+        "Business Annual": { seats: 20, credits: 6000 }
+    };
+
+    function showCancelModal() {
+        if (!cancelSubscriptionModal || !cancelModalSelectionContainer) return;
+        
+        cancelModalSelectionContainer.innerHTML = '';
+        
+        // Check if we are in local offline mode
+        const isOffline = !supabase || 
+                          (supabase.supabaseUrl && supabase.supabaseUrl.includes('mock.supabase.co')) || 
+                          localStorage.getItem('ta_logged_in') === 'true';
+                          
+        let plans = [];
+        if (isOffline) {
+            const planTier = localStorage.getItem('ta_user_plan_type') || 'free';
+            if (planTier && planTier !== 'free' && planTier !== 'null') {
+                const planNames = planTier.split(' + ');
+                const isCancelled = localStorage.getItem('ta_mock_cancelled') === 'true';
+                plans = planNames.map(name => ({
+                    name: name.trim(),
+                    cancelAtPeriodEnd: isCancelled,
+                    currentPeriodEnd: Math.floor(Date.now() / 1000 + 30 * 24 * 60 * 60)
+                }));
+            }
+        } else if (currentSubscriptionData && currentSubscriptionData.plans) {
+            plans = currentSubscriptionData.plans;
+        } else if (currentSubscriptionData && currentSubscriptionData.planTier) {
+            const planNames = currentSubscriptionData.planTier.split(' + ');
+            plans = planNames.map(name => ({
+                name: name.trim(),
+                cancelAtPeriodEnd: currentSubscriptionData.cancelAtPeriodEnd,
+                currentPeriodEnd: currentSubscriptionData.currentPeriodEnd
+            }));
+        }
+        
+        if (plans.length === 0) {
+            showToast("No active subscription found to cancel.", "error");
+            return;
+        }
+        
+        plans.forEach(plan => {
+            const planDetails = PLANS_DETAILS[plan.name] || { seats: 1, credits: 0 };
+            const div = document.createElement('div');
+            div.className = 'cancel-plan-option';
+            
+            const isCancelled = plan.cancelAtPeriodEnd;
+            const checkboxHtml = isCancelled 
+                ? `<input type="checkbox" name="cancel-plan" value="${plan.name}" checked disabled>`
+                : `<input type="checkbox" name="cancel-plan" value="${plan.name}">`;
+                
+            const detailsText = isCancelled 
+                ? `<span class="cancel-plan-option-details color-red">Scheduled to cancel</span>`
+                : `<span class="cancel-plan-option-details">Seats: ${planDetails.seats}, Credits: ${planDetails.credits}</span>`;
+                
+            div.innerHTML = `
+                ${checkboxHtml}
+                <div class="cancel-plan-option-content">
+                    <span class="cancel-plan-option-label">${plan.name}</span>
+                    ${detailsText}
+                </div>
+            `;
+            
+            const checkbox = div.querySelector('input[type="checkbox"]');
+            if (isCancelled) {
+                div.classList.add('selected');
+            }
+            
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) {
+                    div.classList.add('selected');
+                } else {
+                    div.classList.remove('selected');
+                }
+            });
+            
+            div.addEventListener('click', (e) => {
+                if (e.target !== checkbox && !checkbox.disabled) {
+                    checkbox.checked = !checkbox.checked;
+                    checkbox.dispatchEvent(new Event('change'));
+                }
+            });
+            
+            cancelModalSelectionContainer.appendChild(div);
+        });
+        
+        cancelSubscriptionModal.classList.add('active');
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+    }
+
+    function hideCancelModal() {
+        if (cancelSubscriptionModal) {
+            cancelSubscriptionModal.classList.remove('active');
+        }
+    }
+
     if (cancelSubscriptionBtn) {
-        cancelSubscriptionBtn.addEventListener('click', async () => {
-            if (!confirm("Are you sure you want to cancel your subscription? Your remaining audits and team seats will stay active until the end of the billing period, but it will not renew and you won't be charged again.")) {
+        cancelSubscriptionBtn.addEventListener('click', showCancelModal);
+    }
+
+    if (btnCancelModalClose) {
+        btnCancelModalClose.addEventListener('click', hideCancelModal);
+    }
+
+    if (btnCancelModalBack) {
+        btnCancelModalBack.addEventListener('click', hideCancelModal);
+    }
+    
+    if (cancelSubscriptionModal) {
+        cancelSubscriptionModal.addEventListener('click', (e) => {
+            if (e.target === cancelSubscriptionModal) {
+                hideCancelModal();
+            }
+        });
+    }
+
+    if (btnCancelModalConfirm) {
+        btnCancelModalConfirm.addEventListener('click', async () => {
+            const checkedBoxes = Array.from(document.querySelectorAll('input[name="cancel-plan"]:checked:not(:disabled)'));
+            if (checkedBoxes.length === 0) {
+                showToast("Please select at least one active subscription to cancel.", "warning");
                 return;
             }
-
+            
+            const selectedPlans = checkedBoxes.map(cb => cb.value);
+            
+            hideCancelModal();
+            
             // Check if we are in local offline mode
             const isOffline = !supabase || 
                               (supabase.supabaseUrl && supabase.supabaseUrl.includes('mock.supabase.co')) || 
                               localStorage.getItem('ta_logged_in') === 'true';
             if (isOffline) {
-                localStorage.setItem('ta_mock_cancelled', 'true');
-                showToast("🎉 Subscription cancelled successfully (offline mock mode)!", 'success');
+                const planTier = localStorage.getItem('ta_user_plan_type') || 'free';
+                const currentPlans = planTier.split(' + ').map(p => p.trim());
+                const remaining = currentPlans.filter(p => !selectedPlans.includes(p));
+                
+                if (remaining.length > 0) {
+                    localStorage.setItem('ta_user_plan_type', remaining.join(' + '));
+                    showToast("🎉 Selected subscription cancelled successfully (offline mock mode)!", 'success');
+                } else {
+                    localStorage.setItem('ta_user_plan_type', 'free');
+                    localStorage.setItem('ta_mock_cancelled', 'true');
+                    showToast("🎉 All subscriptions cancelled successfully (offline mock mode)!", 'success');
+                }
                 loadSubscriptionStatus();
                 return;
             }
@@ -5376,13 +5530,17 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 const response = await fetch('/api/cancel-subscription', {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${session.access_token}`
-                    }
+                        'Authorization': `Bearer ${session.access_token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        plansToCancel: selectedPlans
+                    })
                 });
 
                 hideLoader();
                 if (response.ok) {
-                    showToast("🎉 Subscription cancelled successfully! Your plan will remain active until the end of the billing period.", 'success');
+                    showToast("🎉 Selected subscription(s) cancelled successfully! Remaining plans will remain active until the end of the billing period.", 'success');
                     loadSubscriptionStatus();
                 } else {
                     const errData = await response.json();

@@ -1281,6 +1281,31 @@
         </div>
     </div>
 
+
+    <!-- CANCEL SUBSCRIPTION MODAL -->
+    <div class="modal-overlay" id="cancel-subscription-modal">
+        <div class="modal-card">
+            <button class="modal-close-btn" id="btn-cancel-modal-close" aria-label="Close modal">&times;</button>
+            <div class="modal-title-wrapper">
+                <h3><i data-lucide="alert-triangle" class="inline-icon color-red"></i> Cancel Subscription</h3>
+                <p>Please select the subscription(s) you wish to cancel.</p>
+            </div>
+            
+            <div id="cancel-modal-selection-container" class="cancel-modal-selection">
+                <!-- Selection inputs will be dynamically generated here -->
+            </div>
+            
+            <div class="cancel-modal-warning">
+                <p><strong>Warning:</strong> Remaining audits and seats will stay active until the end of the billing period, but the cancelled plan will not renew and you won't be charged for it again.</p>
+            </div>
+            
+            <div class="style-extracted-160">
+                <button type="button" class="btn btn-secondary style-extracted-161" id="btn-cancel-modal-back">Go Back</button>
+                <button type="button" class="primary-btn style-extracted-161 btn-danger" id="btn-cancel-modal-confirm">Confirm Cancellation</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Terms of Service & Privacy Policy Modal -->
     <div class="modal-overlay" id="tos-modal">
         <div class="modal-card style-extracted-162" >

@@ -3258,3 +3258,110 @@ select option {
     background: rgba(255, 255, 255, 0.08);
 }
 
+/* --- Custom Cancel Subscription Modal Styles --- */
+.color-red {
+    color: var(--color-red) !important;
+}
+
+.btn-danger {
+    background: var(--color-red) !important;
+    color: #ffffff !important;
+    border: none !important;
+    box-shadow: 0 0 15px var(--color-red-glow) !important;
+    transition: all 0.2s ease !important;
+}
+
+.btn-danger:hover {
+    background: #dc2626 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3) !important;
+}
+
+.cancel-modal-selection {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 16px 0;
+}
+
+.cancel-plan-option {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--card-border);
+    border-radius: var(--border-radius-lg);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cancel-plan-option:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.cancel-plan-option.selected {
+    background: rgba(239, 68, 68, 0.04);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.cancel-plan-option input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cancel-plan-option input[type="checkbox"]:checked {
+    background: var(--color-red);
+    border-color: var(--color-red);
+}
+
+.cancel-plan-option input[type="checkbox"]:checked::after {
+    content: '✓';
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.cancel-plan-option-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cancel-plan-option-label {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text-color);
+}
+
+.cancel-plan-option-details {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.cancel-modal-warning {
+    background: rgba(239, 68, 68, 0.03);
+    border-left: 3px solid var(--color-red);
+    padding: 12px 16px;
+    border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-color);
+}
+
+.cancel-modal-warning p {
+    margin: 0;
+}
+

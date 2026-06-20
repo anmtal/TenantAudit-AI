@@ -3222,6 +3222,7 @@ select option {
     margin-bottom: 5px;
 }
 .google-divider {
+    width: 100%;
     text-align: center;
     margin-bottom: 12px;
     font-size: 12px;

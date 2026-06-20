@@ -146,6 +146,7 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
           credits: 10,
           byok_credits: 0,
           plan_tier: null,
+          phone: '+14155552671',
           teams: {
             audit_credits: 10,
             plan_tier: 'past_due'
@@ -588,6 +589,188 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     const toast = page.locator('.toast');
     await expect(toast).toBeVisible({ timeout: 15000 });
     await expect(toast).toContainText('Email verified successfully!');
+  });
+
+  test('should verify mandatory phone setup and OTP verification flow for logged-in users', async ({ page }) => {
+    // 1. Mock config
+    await page.route('**/api/config**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ supabaseUrl: 'https://mock.supabase.co', supabaseAnonKey: 'mock-key' }),
+      });
+    });
+
+    // 2. Mock GET **/auth/v1/user - initially has NO phone number in metadata
+    await page.route('**/auth/v1/user**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'mock-user-id',
+          email: 'nophone@example.com',
+          user_metadata: { plan_type: 'hosted' }
+        })
+      });
+    });
+
+    // 3. Mock POST **/auth/v1/token
+    await page.route('**/auth/v1/token**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          access_token: 'mock-token',
+          token_type: 'bearer',
+          expires_in: 3600,
+          refresh_token: 'mock-refresh-token',
+          user: {
+            id: 'mock-user-id',
+            email: 'nophone@example.com',
+            user_metadata: { plan_type: 'hosted' }
+          }
+        })
+      });
+    });
+
+    // 4. Mock GET **/rest/v1/profiles - initially has NO phone number
+    let profileHasPhone = false;
+    await page.route('**/rest/v1/profiles**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          credits: 0,
+          byok_credits: 0,
+          plan_tier: null,
+          phone: profileHasPhone ? '+14155552671' : null,
+          teams: {
+            audit_credits: 0,
+            plan_tier: 'free'
+          }
+        })
+      });
+    });
+
+    // 5. Mock POST **/rest/v1/rpc/register_active_session
+    await page.route('**/rest/v1/rpc/register_active_session**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(true)
+      });
+    });
+
+    // 6. Mock POST **/api/send-otp
+    await page.route('**/api/send-otp', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true })
+      });
+    });
+
+    // 7. Mock POST **/api/verify-otp
+    await page.route('**/api/verify-otp', async route => {
+      const request = route.request();
+      const postData = JSON.parse(request.postData() || '{}');
+      if (postData.code === '123456') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true })
+        });
+      } else {
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: "Invalid code" })
+        });
+      }
+    });
+
+    // 8. Mock profiles update
+    await page.route('**/rest/v1/profiles?id=eq.mock-user-id', async route => {
+      profileHasPhone = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true })
+      });
+    });
+
+    // 9. Mock auth updateUser
+    await page.route('**/auth/v1/user?**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true })
+      });
+    });
+
+    // 10. Mock /api/grant-welcome-credit
+    await page.route('**/api/grant-welcome-credit', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, granted: true })
+      });
+    });
+
+    // Go to landing and login
+    await page.goto('/');
+    await page.waitForSelector('body[data-initialized="true"]', { timeout: 15000 });
+
+    await page.click('#home-login-btn');
+    await page.fill('#login-email', 'nophone@example.com');
+    await page.fill('#login-password', 'password');
+    await page.click('#login-submit-btn');
+
+    // Setup phone overlay modal should be displayed automatically because user profile has no phone
+    const setupModal = page.locator('#phone-setup-modal');
+    await expect(setupModal).toHaveClass(/active/);
+
+    // Try submitting empty/invalid phone number
+    await page.click('#btn-setup-phone-submit');
+    const setupError = page.locator('#setup-phone-error-msg');
+    await expect(setupError).toBeVisible();
+    await expect(setupError).toContainText('Please enter a valid phone number');
+
+    // Fill valid phone number and submit
+    await page.fill('#setup-phone-input', '+14155552671');
+    await page.click('#btn-setup-phone-submit');
+
+    // OTP modal should show up
+    const otpModal = page.locator('#phone-otp-modal');
+    await expect(otpModal).toHaveClass(/active/);
+    await expect(setupModal).not.toHaveClass(/active/);
+
+    // Verify canceling OTP modal goes back to Setup phone modal
+    await page.click('#btn-otp-cancel');
+    await expect(otpModal).not.toHaveClass(/active/);
+    await expect(setupModal).toHaveClass(/active/);
+
+    // Re-submit setup
+    await page.click('#btn-setup-phone-submit');
+    await expect(otpModal).toHaveClass(/active/);
+
+    // Try verifying wrong code
+    await page.fill('#phone-otp-input', '000000');
+    await page.click('#btn-otp-verify');
+    const otpError = page.locator('#otp-error-msg');
+    await expect(otpError).toBeVisible();
+    await expect(otpError).toContainText('Invalid code');
+
+    // Verify correct code
+    await page.fill('#phone-otp-input', '123456');
+    await page.click('#btn-otp-verify');
+
+    // Both modals should close, and toast shows success
+    await expect(otpModal).not.toHaveClass(/active/);
+    await expect(setupModal).not.toHaveClass(/active/);
+
+    const successToast = page.locator('.toast', { hasText: 'Phone setup completed successfully!' });
+    await expect(successToast).toBeVisible();
   });
 
 });

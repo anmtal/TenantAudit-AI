@@ -631,6 +631,23 @@
 
                     <button type="submit" class="btn btn-primary full-width-btn" id="login-submit-btn">Sign In</button>
                     
+                    <!-- Google Auth Option -->
+                    <div id="google-auth-container" class="google-auth-wrap">
+                        <div class="google-divider">
+                            <span class="google-divider-text">Or continue with</span>
+                            <div class="google-divider-line"></div>
+                        </div>
+                        <button type="button" class="btn btn-secondary full-width-btn google-btn" id="google-login-btn">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 48 48">
+                                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                                <path fill="#4285F4" d="M46.5 24c0-1.55-.15-3.24-.47-4.77H24v9.03h12.75c-.55 2.87-2.22 5.3-4.72 6.96l7.3 5.66C43.5 36.33 46.5 30.77 46.5 24z"/>
+                                <path fill="#FBBC05" d="M10.54 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.98-6.19z"/>
+                                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.3-5.66c-2.11 1.41-4.8 2.22-7.59 2.22-6.26 0-11.57-4.22-13.46-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                            </svg>
+                            Sign In with Google
+                        </button>
+                    </div>
+                    
                     <div class="auth-toggle-link" id="auth-toggle-container">
                         Don't have an account? <a href="#" id="auth-toggle-link">Sign Up</a>
                     </div>
@@ -1205,6 +1222,25 @@
 
     <!-- Toast Container -->
     <div id="toast-container"></div>
+
+    <!-- PHONE SETUP MODAL -->
+    <div class="modal-overlay" id="phone-setup-modal">
+        <div class="modal-card style-extracted-153">
+            <h3 class="style-extracted-154"><i data-lucide="smartphone" class="inline-icon style-extracted-155"></i>Phone Number Setup</h3>
+            <p class="style-extracted-156">Please add and verify your phone number to activate your account and claim your <strong>1 free welcome audit credit</strong>.</p>
+            <p class="phone-disclaimer">Note: Each phone number can only be linked to a single LeaseAlign account and cannot be reused on a second email.</p>
+            <div class="form-group style-extracted-139">
+                <label for="setup-phone-input">Mobile Phone Number (with Country Code, e.g. +14155552671)</label>
+                <input type="tel" id="setup-phone-input" class="text-input" placeholder="+14155552671">
+                <div id="setup-phone-validation-msg" class="phone-validation-hint"></div>
+            </div>
+            <div id="setup-phone-error-msg" class="style-extracted-159"></div>
+            <div class="style-extracted-160">
+                <button type="button" class="btn btn-secondary style-extracted-161" id="btn-setup-phone-logout">Log Out</button>
+                <button type="button" class="primary-btn style-extracted-161" id="btn-setup-phone-submit">Send Verification Code</button>
+            </div>
+        </div>
+    </div>
 
     <!-- PHONE VERIFICATION OTP MODAL -->
     <div class="modal-overlay" id="phone-otp-modal">

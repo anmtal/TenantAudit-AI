@@ -454,6 +454,14 @@ function initializeApp() {
     const btnOtpResend = document.getElementById('btn-otp-resend');
     const disclaimerDontShowCheckbox = document.getElementById('disclaimer-dont-show-checkbox');
 
+    // --- Phone Setup Elements ---
+    const phoneSetupModal = document.getElementById('phone-setup-modal');
+    const setupPhoneInput = document.getElementById('setup-phone-input');
+    const setupPhoneValidationMsg = document.getElementById('setup-phone-validation-msg');
+    const setupPhoneErrorMsg = document.getElementById('setup-phone-error-msg');
+    const btnSetupPhoneLogout = document.getElementById('btn-setup-phone-logout');
+    const btnSetupPhoneSubmit = document.getElementById('btn-setup-phone-submit');
+
     // Inline validation for phone input
     if (registerPhone) {
         registerPhone.addEventListener('input', () => {
@@ -468,6 +476,23 @@ function initializeApp() {
                 hint.style.display = 'block';
             } else {
                 hint.style.display = 'none';
+            }
+        });
+    }
+
+    // Inline validation for setup phone input
+    if (setupPhoneInput) {
+        setupPhoneInput.addEventListener('input', () => {
+            const phone = setupPhoneInput.value.trim();
+            if (!setupPhoneValidationMsg) return;
+            
+            if (!phone) {
+                setupPhoneValidationMsg.style.display = 'none';
+            } else if (!/^\+[1-9]\d{1,14}$/.test(phone)) {
+                setupPhoneValidationMsg.textContent = "⚠️ Number must start with '+' followed by country code (e.g. +14155552671). No spaces/dashes.";
+                setupPhoneValidationMsg.style.display = 'block';
+            } else {
+                setupPhoneValidationMsg.style.display = 'none';
             }
         });
     }
@@ -1066,7 +1091,7 @@ function initializeApp() {
             let profileData = null;
             const { data, error } = await supabase
                 .from('profiles')
-                .select('credits, plan_tier, team_id, free_credit_granted, teams(id, audit_credits, plan_tier, pruned_members_count, owner_id)')
+                .select('credits, plan_tier, team_id, free_credit_granted, phone, teams(id, audit_credits, plan_tier, pruned_members_count, owner_id)')
                 .eq('id', user.id)
                 .single();
                 
@@ -1074,6 +1099,15 @@ function initializeApp() {
                 console.warn("Could not fetch profile fields. Error:", error);
             } else {
                 profileData = data;
+
+                // Mandate phone verification setup if missing on a logged-in user
+                if ((!profileData || !profileData.phone) && isLoggedIn && !isDemoMode) {
+                    console.log("[Phone Setup Required] Displaying setup phone number modal.");
+                    const setupModal = document.getElementById('phone-setup-modal');
+                    if (setupModal) {
+                        setupModal.classList.add('active');
+                    }
+                }
                 
                 // Re-fetch the team row to get the updated cached balance from server
                 const teamId = profileData.team_id || (profileData.teams && profileData.teams.id);
@@ -2259,6 +2293,113 @@ function initializeApp() {
         });
     }
 
+    // --- Google OAuth Sign In Handler ---
+    const googleLoginBtn = document.getElementById('google-login-btn');
+    if (googleLoginBtn) {
+        googleLoginBtn.addEventListener('click', async () => {
+            isDemoMode = false;
+            localStorage.removeItem('ta_hosted_credits');
+            localStorage.removeItem('ta_byok_credits');
+            localStorage.removeItem('ta_connection_mode');
+            localStorage.removeItem('ta_user_plan_type');
+            localStorage.removeItem('ta_logged_in');
+            
+            try {
+                if (supabase) {
+                    localStorage.setItem('ta_fresh_login', 'true');
+                    const { error } = await supabase.auth.signInWithOAuth({
+                        provider: 'google',
+                        options: {
+                            redirectTo: window.location.origin
+                        }
+                    });
+                    if (error) throw error;
+                } else {
+                    // Offline Mock OAuth Login
+                    console.log("Mock Google Sign-In activated.");
+                    localStorage.setItem('ta_logged_in', 'true');
+                    const mockEmail = "googleuser@example.com";
+                    localStorage.setItem('ta_user_email', mockEmail);
+                    isLoggedIn = true;
+                    userEmail = mockEmail;
+                    userEmailDisplay.textContent = userEmail;
+                    window.location.hash = '#dashboard';
+                    updateNavUI();
+                    updateCreditsDisplay();
+                    showToast("🎉 Logged in via Google (Local Offline Mode).", "success");
+                }
+            } catch (err) {
+                console.error("Google Auth error:", err);
+                showToast(`🚫 Google Sign In failed: ${err.message}`, 'error');
+            }
+        });
+    }
+
+    // --- Phone Setup Modal Logout Handler ---
+    if (btnSetupPhoneLogout) {
+        btnSetupPhoneLogout.addEventListener('click', async () => {
+            const setupModal = document.getElementById('phone-setup-modal');
+            if (setupModal) {
+                setupModal.classList.remove('active');
+            }
+            await handleLogout();
+        });
+    }
+
+    // --- Phone Setup Modal Submit Handler ---
+    if (btnSetupPhoneSubmit) {
+        btnSetupPhoneSubmit.addEventListener('click', async () => {
+            const phone = setupPhoneInput.value.trim();
+            if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
+                setupPhoneErrorMsg.textContent = "Please enter a valid phone number (e.g. +14155552671).";
+                setupPhoneErrorMsg.style.display = 'block';
+                return;
+            }
+            
+            btnSetupPhoneSubmit.disabled = true;
+            btnSetupPhoneSubmit.textContent = "Sending...";
+            setupPhoneErrorMsg.style.display = 'none';
+            
+            try {
+                const sendOtpRes = await fetch('/api/send-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phoneNumber: phone })
+                });
+                const sendOtpData = await sendOtpRes.json();
+                if (!sendOtpRes.ok) {
+                    throw new Error(sendOtpData.error || 'Failed to send verification code.');
+                }
+                
+                // Open OTP verification modal
+                otpPhoneDisplay.textContent = phone;
+                otpErrorMsg.style.display = 'none';
+                phoneOtpInput.value = '';
+                if (btnOtpVerify) btnOtpVerify.textContent = 'Verify Code';
+                
+                // Save context for the verification flow
+                pendingSignup = {
+                    phone: phone,
+                    isLoggedInPhoneSetup: true
+                };
+                
+                // Hide setup phone modal, open OTP modal
+                const setupModal = document.getElementById('phone-setup-modal');
+                if (setupModal) {
+                    setupModal.classList.remove('active');
+                }
+                phoneOtpModal.classList.add('active');
+                startOtpResendTimer();
+            } catch (err) {
+                setupPhoneErrorMsg.textContent = err.message;
+                setupPhoneErrorMsg.style.display = 'block';
+            } finally {
+                btnSetupPhoneSubmit.disabled = false;
+                btnSetupPhoneSubmit.textContent = "Send Verification Code";
+            }
+        });
+    }
+
     // --- Phone Verification OTP Modal Click Listeners ---
     let otpTimerInterval = null;
     function startOtpResendTimer() {
@@ -2284,6 +2425,15 @@ function initializeApp() {
     if (btnOtpCancel) {
         btnOtpCancel.addEventListener('click', () => {
             phoneOtpModal.classList.remove('active');
+            
+            // If we cancel phone setup modal, re-show the setup modal to prevent bypassing it
+            if (pendingSignup && pendingSignup.isLoggedInPhoneSetup) {
+                const setupModal = document.getElementById('phone-setup-modal');
+                if (setupModal) {
+                    setupModal.classList.add('active');
+                }
+            }
+            
             pendingSignup = null;
             if (otpTimerInterval) {
                 clearInterval(otpTimerInterval);
@@ -2362,6 +2512,72 @@ function initializeApp() {
                     otpTimerInterval = null;
                 }
 
+                if (pending.isLoggedInPhoneSetup) {
+                    // Logged-in phone setup flow
+                    if (supabase) {
+                        const { data: { session } } = await supabase.auth.getSession();
+                        if (session && session.user) {
+                            const user = session.user;
+                            
+                            // 1. Update profiles table with the verified phone number
+                            const { error: profileUpdateErr } = await supabase
+                                .from('profiles')
+                                .update({ phone: pending.phone })
+                                .eq('id', user.id);
+                                
+                            if (profileUpdateErr) {
+                                throw new Error(`Failed to update profile: ${profileUpdateErr.message}`);
+                            }
+                            
+                            // 2. Update auth user metadata
+                            const { error: authUpdateErr } = await supabase.auth.updateUser({
+                                data: {
+                                    phone: pending.phone,
+                                    phone_verified: true
+                                }
+                            });
+                            
+                            if (authUpdateErr) {
+                                console.warn("Failed to update auth metadata:", authUpdateErr.message);
+                            }
+                            
+                            // 3. Call server-side /api/grant-welcome-credit to grant welcome credits
+                            const grantRes = await fetch('/api/grant-welcome-credit', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${session.access_token}`
+                                }
+                            });
+                            
+                            const grantData = await grantRes.json();
+                            if (!grantRes.ok) {
+                                console.warn("Welcome credit grant server call returned error:", grantData.error);
+                            }
+                        }
+                    } else {
+                        // Offline mock phone setup: just record phone locally
+                        console.log("Mock Phone Setup completed offline.");
+                    }
+                    
+                    showToast("🎉 Phone setup completed successfully!", "success");
+                    pendingSignup = null;
+                    
+                    // Reload profile/credits to refresh state and remove modals
+                    const setupModal = document.getElementById('phone-setup-modal');
+                    if (setupModal) {
+                        setupModal.classList.remove('active');
+                    }
+                    
+                    if (supabase) {
+                        await loadUserProfileAndCredits();
+                    } else {
+                        // Offline mode fallback: mock credits update
+                        updateCreditsDisplay();
+                    }
+                    return; // End flow
+                }
+
                 // Proceed with registration
                 if (supabase) {
                     localStorage.setItem('ta_fresh_login', 'true');
@@ -2397,7 +2613,7 @@ function initializeApp() {
                 otpErrorMsg.style.display = 'block';
             } finally {
                 btnOtpVerify.disabled = false;
-                btnOtpVerify.textContent = 'Verify & Register';
+                btnOtpVerify.textContent = (pendingSignup && pendingSignup.isLoggedInPhoneSetup) ? 'Verify Code' : 'Verify & Register';
             }
         });
     }

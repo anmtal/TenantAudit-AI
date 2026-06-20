@@ -40,5 +40,8 @@
       "headers": { "Cache-Control": "public, max-age=3600, must-revalidate" },
       "dest": "/public/$1"
     }
+  ],
+  "crons": [
+    { "path": "/api/cron/purge-old-audits", "schedule": "0 3 * * *" }
   ]
 }

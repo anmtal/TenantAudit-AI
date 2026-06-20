@@ -5085,94 +5085,25 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         });
     });
 
-    // --- Simulated Walkthrough Player Logic ---
+    // --- Walkthrough Video Player Logic ---
     const walkthroughVideoModal = document.getElementById('walkthrough-video-modal');
     const playBtnContainer = document.querySelector('.video-player-container');
     const walkthroughVideoClose = document.getElementById('walkthrough-video-close');
     const walkthroughCloseBtn = document.getElementById('walkthrough-close-btn');
-    const walkthroughRestartBtn = document.getElementById('walkthrough-restart-btn');
-    
-    const logsContainer = document.getElementById('walkthrough-logs-container');
-    const progressFill = document.getElementById('walkthrough-progress-fill');
-    const currentTimeDisplay = document.getElementById('walkthrough-current-time');
-    const statusBadge = document.getElementById('walkthrough-status-badge');
-    
-    let walkthroughInterval = null;
-    let walkthroughTime = 0;
-    
-    const steps = [
-        { time: 0, text: "> Initializing LeaseAlign AI guest session...", type: "system" },
-        { time: 3, text: "> Loading sample documents: APEX Lease & Estoppel...", type: "system" },
-        { time: 7, text: "> Uploading complex_lease_agreement.pdf (7.5 KB)...", type: "upload" },
-        { time: 12, text: "> Uploading complex_estoppel_certificate.pdf (3.2 KB)...", type: "upload" },
-        { time: 18, text: "> Processing Lease: Extracting Base Rent schedule & Expiry date...", type: "process" },
-        { time: 26, text: "> Processing Estoppel: Extracting Current Rent & Tenant verification...", type: "process" },
-        { time: 34, text: "> Comparing 15 lease clauses against tenant estoppel certification...", type: "compare" },
-        { time: 41, text: "⚠️ Mismatch: Estoppel rent ($41,569.02) does not align with lease schedule ($35k)!", type: "alert" },
-        { time: 47, text: "⚠️ Mismatch: Estoppel expiration (Sept 30) does not match lease (Aug 31)!", type: "alert" },
-        { time: 53, text: "> Generating side-by-side reconciliation matrix...", type: "report" },
-        { time: 58, text: "🎉 Audit complete! 6 discrepancies found. Compliance score: 34%.", type: "complete" }
-    ];
+    const walkthroughVideoPlayer = document.getElementById('walkthrough-video-player');
     
     function startWalkthrough() {
-        walkthroughTime = 0;
-        if (logsContainer) logsContainer.innerHTML = '';
-        if (progressFill) progressFill.style.width = '0%';
-        if (currentTimeDisplay) currentTimeDisplay.textContent = '0:00';
-        if (statusBadge) {
-            statusBadge.textContent = 'Processing...';
-            statusBadge.className = 'simulated-badge';
+        if (walkthroughVideoPlayer) {
+            walkthroughVideoPlayer.currentTime = 0;
+            walkthroughVideoPlayer.play().catch(err => {
+                console.warn("Video playback was prevented:", err);
+            });
         }
-        
-        if (walkthroughInterval) clearInterval(walkthroughInterval);
-        
-        walkthroughInterval = setInterval(() => {
-            walkthroughTime++;
-            if (walkthroughTime > 60) {
-                clearInterval(walkthroughInterval);
-                if (statusBadge) {
-                    statusBadge.textContent = 'Complete';
-                    statusBadge.className = 'simulated-badge complete';
-                }
-                return;
-            }
-            
-            // Update progress bar
-            const percent = (walkthroughTime / 60) * 100;
-            if (progressFill) progressFill.style.width = `${percent}%`;
-            
-            // Update timer display
-            const secStr = walkthroughTime < 10 ? `0${walkthroughTime}` : `${walkthroughTime}`;
-            if (currentTimeDisplay) currentTimeDisplay.textContent = `0:${secStr}`;
-            
-            // Check if there is a step to display
-            const currentStep = steps.find(s => s.time === walkthroughTime);
-            if (currentStep && logsContainer) {
-                const line = document.createElement('div');
-                line.className = `simulated-log-line ${currentStep.type}`;
-                
-                let color = '#34d399'; // Default terminal green
-                if (currentStep.type === 'system') color = '#a1a1ab'; // Muted
-                else if (currentStep.type === 'alert') color = '#f87171'; // Red
-                else if (currentStep.type === 'complete') color = '#10b981'; // Emerald
-                
-                line.style.color = color;
-                line.textContent = currentStep.text;
-                logsContainer.appendChild(line);
-                
-                // Auto-scroll screen
-                const screen = logsContainer.parentElement;
-                if (screen) {
-                    screen.scrollTop = screen.scrollHeight;
-                }
-            }
-        }, 150);
     }
     
     function stopWalkthrough() {
-        if (walkthroughInterval) {
-            clearInterval(walkthroughInterval);
-            walkthroughInterval = null;
+        if (walkthroughVideoPlayer) {
+            walkthroughVideoPlayer.pause();
         }
     }
     
@@ -5194,12 +5125,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
         walkthroughCloseBtn.addEventListener('click', () => {
             walkthroughVideoModal.classList.remove('active');
             stopWalkthrough();
-        });
-    }
-    
-    if (walkthroughRestartBtn) {
-        walkthroughRestartBtn.addEventListener('click', () => {
-            startWalkthrough();
         });
     }
 

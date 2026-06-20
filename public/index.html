@@ -1205,29 +1205,14 @@
             <button class="modal-close-btn" id="walkthrough-video-close" aria-label="Close Walkthrough">&times;</button>
             <div class="modal-title-wrapper">
                 <h3><i data-lucide="play" class="inline-icon color-purple"></i> LeaseAlign AI Walkthrough</h3>
-                <p>Simulated real-time audit run of the APEX Coworking Lease & Estoppel pair.</p>
+                <p>Watch a real-time audit run of the APEX Coworking Lease & Estoppel pair.</p>
             </div>
             
-            <div class="simulated-player">
-                <div class="simulated-screen">
-                    <div class="simulated-logs" id="walkthrough-logs-container">
-                        <!-- Step logs will append here -->
-                    </div>
-                    <div class="simulated-badge" id="walkthrough-status-badge">Processing...</div>
-                </div>
-                <div class="simulated-controls">
-                    <div class="simulated-progress-bar">
-                        <div class="simulated-progress-fill" id="walkthrough-progress-fill"></div>
-                    </div>
-                    <div class="simulated-time-row">
-                        <span id="walkthrough-current-time">0:00</span>
-                        <span>1:00</span>
-                    </div>
-                </div>
+            <div class="video-walkthrough-player-wrapper">
+                <video id="walkthrough-video-player" src="assets/walkthrough_video.mp4" controls preload="metadata" class="video-walkthrough-element"></video>
             </div>
             
             <div class="style-extracted-134">
-                <button type="button" class="btn btn-secondary" id="walkthrough-restart-btn">Restart</button>
                 <button type="button" class="btn btn-primary" id="walkthrough-close-btn">Close Walkthrough</button>
             </div>
         </div>

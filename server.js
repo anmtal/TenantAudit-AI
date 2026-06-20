@@ -2947,6 +2947,7 @@ app.post('/api/cron/purge-old-audits', async (req, res) => {
         console.error("[Purge Cron Error] Failed to run daily cleanup:", err);
         if (Sentry) Sentry.captureException(err);
         return res.status(500).json({ error: err.message || "Failed to execute purge" });
+    }
 });
 
 // Debug Endpoint to check team and profiles state

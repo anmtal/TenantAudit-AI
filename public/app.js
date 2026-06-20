@@ -4783,12 +4783,15 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             const isOwner = !!(ownedTeam && ownedTeam.id === profile.team_id);
             
             let seatLimit = 1;
+            let teamOwnerId = null;
             if (ownedTeam) {
                 seatLimit = ownedTeam.seat_limit;
+                teamOwnerId = user.id;
             } else {
-                const { data: memberTeam } = await supabase.from('teams').select('seat_limit').eq('id', profile.team_id).maybeSingle();
+                const { data: memberTeam } = await supabase.from('teams').select('owner_id, seat_limit').eq('id', profile.team_id).maybeSingle();
                 if (memberTeam) {
                     seatLimit = memberTeam.seat_limit;
+                    teamOwnerId = memberTeam.owner_id;
                 }
             }
             
@@ -4833,9 +4836,17 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             // Render active team members
             if (members) {
                 members.forEach(member => {
-                    const name = member.first_name ? `${member.first_name} ${member.last_name || ''}`.trim() : 'Team Member';
+                    const isOwnerMember = member.id === teamOwnerId;
+                    const defaultName = isOwnerMember ? 'Team Owner' : 'Team Member';
+                    const name = member.first_name ? `${member.first_name} ${member.last_name || ''}`.trim() : defaultName;
                     const initial = name.charAt(0).toUpperCase();
-                    const isYou = member.id === user.id ? ' (You)' : '';
+                    
+                    let label = '';
+                    if (member.id === user.id) {
+                        label += ' (You)';
+                    } else if (isOwnerMember) {
+                        label += ' (Owner)';
+                    }
                     
                     const showRemove = isOwner && member.id !== user.id;
                     const removeButtonHtml = showRemove ? `
@@ -4847,7 +4858,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                             <div class="team-member-info">
                                 <div class="team-member-avatar">${escapeHtml(initial)}</div>
                                 <div class="team-member-details">
-                                    <span class="team-member-name">${escapeHtml(name)}${escapeHtml(isYou)}</span>
+                                    <span class="team-member-name">${escapeHtml(name)}${escapeHtml(label)}</span>
                                     <span class="team-member-email">${escapeHtml(member.email)}</span>
                                 </div>
                             </div>

@@ -3157,15 +3157,19 @@ select option {
 
 /* Team Management Remove & Cancel Actions */
 .team-action-btn {
-    padding: 6px 12px;
-    font-size: 11px;
+    width: 75px !important;
+    text-align: center !important;
+    padding: 6px 0 !important;
+    font-size: 11px !important;
     border: 1px solid rgba(239, 68, 68, 0.25) !important;
     color: #fca5a5 !important;
     background: rgba(239, 68, 68, 0.05) !important;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: var(--transition-smooth);
-    font-weight: 500;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    transition: var(--transition-smooth) !important;
+    font-weight: 500 !important;
+    box-sizing: border-box !important;
+    display: inline-block !important;
 }
 
 .team-action-btn:hover {
@@ -3175,6 +3179,6 @@ select option {
 }
 
 .team-action-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
 }

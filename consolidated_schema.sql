@@ -540,8 +540,10 @@ DECLARE
   v_old_team_id UUID;
   v_seat_limit INTEGER;
   v_member_count INTEGER;
+  v_auth_email TEXT;
+  v_raw_meta JSONB;
 BEGIN
-  -- Get the invitation details
+  -- 1. Get the invitation details
   SELECT team_id, LOWER(email) INTO v_team_id, v_email 
   FROM public.team_invitations 
   WHERE id = p_invitation_id;
@@ -550,16 +552,40 @@ BEGIN
     RAISE EXCEPTION 'Invitation not found.';
   END IF;
 
-  -- Ensure the authenticated user is the recipient of the invitation
-  SELECT id, team_id INTO v_target_user_id, v_old_team_id 
-  FROM public.profiles 
-  WHERE id = auth.uid() AND LOWER(email) = v_email;
+  -- 2. Verify that the current authenticated user's email matches the invitation
+  SELECT email, raw_user_meta_data INTO v_auth_email, v_raw_meta
+  FROM auth.users
+  WHERE id = auth.uid();
 
-  IF v_target_user_id IS NULL THEN
+  IF v_auth_email IS NULL THEN
+    RAISE EXCEPTION 'Unauthorized: User not found in auth system.';
+  END IF;
+
+  IF LOWER(v_auth_email) != v_email THEN
     RAISE EXCEPTION 'Unauthorized: You are not the recipient of this invitation.';
   END IF;
 
-  -- Enforce team seat limit
+  -- 3. Check if the profile exists in public.profiles. If not, auto-create it.
+  SELECT id, team_id INTO v_target_user_id, v_old_team_id 
+  FROM public.profiles 
+  WHERE id = auth.uid();
+
+  IF v_target_user_id IS NULL THEN
+    -- Auto-create the profile (mirroring the handle_new_user trigger logic)
+    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id, phone)
+    VALUES (
+      auth.uid(),
+      v_auth_email,
+      0,
+      COALESCE(v_raw_meta->>'first_name', ''),
+      COALESCE(v_raw_meta->>'last_name', ''),
+      NULL, -- will be updated to the invited team next
+      v_raw_meta->>'phone'
+    )
+    RETURNING id INTO v_target_user_id;
+  END IF;
+
+  -- 4. Enforce team seat limit
   SELECT seat_limit INTO v_seat_limit FROM public.teams WHERE id = v_team_id;
   SELECT COUNT(*) INTO v_member_count FROM public.profiles WHERE team_id = v_team_id;
   
@@ -567,15 +593,15 @@ BEGIN
     RAISE EXCEPTION 'Seat limit reached for this team. Cannot accept invitation.';
   END IF;
 
-  -- Update the user's team ID
+  -- 5. Update the user's team ID
   UPDATE public.profiles 
   SET team_id = v_team_id 
   WHERE id = v_target_user_id;
 
-  -- Delete the invitation after acceptance
+  -- 6. Delete the invitation after acceptance
   DELETE FROM public.team_invitations WHERE id = p_invitation_id;
 
-  -- Recalculate team credits for both old and new teams
+  -- 7. Recalculate team credits for both old and new teams
   IF v_old_team_id IS NOT NULL THEN
     PERFORM public.recalculate_team_credits(v_old_team_id);
     
@@ -740,6 +766,57 @@ BEGIN
   RETURN v_confirmed IS NOT NULL;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- RPC: Remove Team Member
+CREATE OR REPLACE FUNCTION public.remove_team_member(target_member_id UUID, inviter_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+  v_team_id UUID;
+  v_member_team_id UUID;
+  v_new_team_id UUID;
+  v_member_email TEXT;
+BEGIN
+  -- Security check: Verify that the caller is the inviter and matches auth.uid()
+  IF auth.uid() IS NULL OR auth.uid() != inviter_id THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  -- Get the team ID owned by the inviter
+  SELECT id INTO v_team_id FROM public.teams WHERE owner_id = inviter_id;
+  IF v_team_id IS NULL THEN
+    RAISE EXCEPTION 'You do not own a team.';
+  END IF;
+
+  -- Get the team ID and email of the member to be removed
+  SELECT team_id, email INTO v_member_team_id, v_member_email FROM public.profiles WHERE id = target_member_id;
+  
+  -- Verify the target user is actually on the owner's team
+  IF v_member_team_id IS NULL OR v_member_team_id != v_team_id THEN
+    RAISE EXCEPTION 'User is not a member of your team.';
+  END IF;
+
+  -- Prevent the owner from removing themselves
+  IF target_member_id = inviter_id THEN
+    RAISE EXCEPTION 'You cannot remove yourself from your own team.';
+  END IF;
+
+  -- Create a new personal team for the removed member
+  INSERT INTO public.teams (name, owner_id, audit_credits, seat_limit)
+  VALUES (COALESCE(v_member_email, 'Personal') || '''s Team', target_member_id, 0, 1)
+  RETURNING id INTO v_new_team_id;
+
+  -- Assign the removed user to their new personal team
+  UPDATE public.profiles 
+  SET team_id = v_new_team_id 
+  WHERE id = target_member_id;
+
+  -- Recalculate team credits for the original team
+  PERFORM public.recalculate_team_credits(v_team_id);
+
+  RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 
 -- --------------------------------------------------------------------
 -- 10. SQL Backfill Trigger: Retroactively Grant Welcome Credits

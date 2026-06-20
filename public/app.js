@@ -4767,11 +4767,32 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             if (!user) return;
             
             // Get user's team ID
-            const { data: profile } = await supabase.from('profiles').select('team_id, teams(seat_limit)').eq('id', user.id).single();
-            if (!profile || !profile.team_id) {
+            const { data: profile, error: profErr } = await supabase.from('profiles').select('team_id').eq('id', user.id).single();
+            if (profErr || !profile || !profile.team_id) {
+                console.warn("loadTeamMembers: Failed to fetch user profile or team_id:", profErr);
                 teamMemberList.innerHTML = '<div class="team-empty">You are not part of a team.</div>';
                 return;
             }
+            
+            // Check if user is the owner of their current team (robust direct query to bypass join formats)
+            const { data: ownedTeam, error: teamErr } = await supabase.from('teams').select('id, seat_limit').eq('owner_id', user.id).maybeSingle();
+            if (teamErr) {
+                console.warn("loadTeamMembers: Failed to fetch owned team:", teamErr);
+            }
+            
+            const isOwner = !!(ownedTeam && ownedTeam.id === profile.team_id);
+            
+            let seatLimit = 1;
+            if (ownedTeam) {
+                seatLimit = ownedTeam.seat_limit;
+            } else {
+                const { data: memberTeam } = await supabase.from('teams').select('seat_limit').eq('id', profile.team_id).maybeSingle();
+                if (memberTeam) {
+                    seatLimit = memberTeam.seat_limit;
+                }
+            }
+            
+            console.log("loadTeamMembers: user =", user.email, "| team_id =", profile.team_id, "| isOwner =", isOwner);
             
             // Get all profiles on this team
             const { data: members, error } = await supabase.rpc('get_team_members', { p_team_id: profile.team_id });
@@ -4784,7 +4805,6 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
             
             const totalSeatsUsed = (members ? members.length : 0) + (invites ? invites.length : 0);
-            const seatLimit = profile.teams?.seat_limit || 1;
             const displayLimit = seatLimit >= 9999 ? 'Unlimited' : seatLimit;
             const seatsDisplay = document.getElementById('team-seats-display');
             if (seatsDisplay) {
@@ -4817,6 +4837,11 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     const initial = name.charAt(0).toUpperCase();
                     const isYou = member.id === user.id ? ' (You)' : '';
                     
+                    const showRemove = isOwner && member.id !== user.id;
+                    const removeButtonHtml = showRemove ? `
+                        <button class="team-action-btn remove-member-btn" data-member-id="${member.id}" data-email="${escapeHtml(member.email)}">Remove</button>
+                    ` : '';
+                    
                     teamMemberList.innerHTML += `
                         <div class="team-member-item">
                             <div class="team-member-info">
@@ -4826,6 +4851,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                                     <span class="team-member-email">${escapeHtml(member.email)}</span>
                                 </div>
                             </div>
+                            ${removeButtonHtml}
                         </div>
                     `;
                 });
@@ -4837,6 +4863,10 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     const name = 'Invited User';
                     const initial = 'I';
                     
+                    const cancelButtonHtml = isOwner ? `
+                        <button class="team-action-btn cancel-invite-btn" data-email="${escapeHtml(invite.email)}">Cancel</button>
+                    ` : '';
+                    
                     teamMemberList.innerHTML += `
                         <div class="team-member-item team-member-pending">
                             <div class="team-member-info">
@@ -4846,10 +4876,69 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                                     <span class="team-member-email">${escapeHtml(invite.email)}</span>
                                 </div>
                             </div>
+                            ${cancelButtonHtml}
                         </div>
                     `;
                 });
             }
+
+            // Wire up event listeners for cancel invite
+            teamMemberList.querySelectorAll('.cancel-invite-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const email = btn.getAttribute('data-email');
+                    if (!confirm(`Are you sure you want to cancel the invitation for ${email}?`)) return;
+                    
+                    btn.disabled = true;
+                    btn.textContent = 'Cancelling...';
+                    
+                    try {
+                        const { error } = await supabase
+                            .from('team_invitations')
+                            .delete()
+                            .eq('team_id', profile.team_id)
+                            .eq('email', email.toLowerCase());
+                            
+                        if (error) throw error;
+                        
+                        showToast(`Successfully cancelled invitation for ${email}`, 'success');
+                        await loadTeamMembers();
+                    } catch (err) {
+                        console.error("Cancel invite error:", err);
+                        showToast("Failed to cancel invitation: " + err.message, 'error');
+                        btn.disabled = false;
+                        btn.textContent = 'Cancel';
+                    }
+                });
+            });
+
+            // Wire up event listeners for remove member
+            teamMemberList.querySelectorAll('.remove-member-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const memberId = btn.getAttribute('data-member-id');
+                    const email = btn.getAttribute('data-email');
+                    if (!confirm(`Are you sure you want to remove ${email} from your team?`)) return;
+                    
+                    btn.disabled = true;
+                    btn.textContent = 'Removing...';
+                    
+                    try {
+                        const { data, error } = await supabase.rpc('remove_team_member', {
+                            target_member_id: memberId,
+                            inviter_id: user.id
+                        });
+                        
+                        if (error) throw error;
+                        
+                        showToast(`Successfully removed ${email} from your team`, 'success');
+                        await loadTeamMembers();
+                    } catch (err) {
+                        console.error("Remove team member error:", err);
+                        showToast("Failed to remove member: " + err.message, 'error');
+                        btn.disabled = false;
+                        btn.textContent = 'Remove';
+                    }
+                });
+            });
             
         } catch (err) {
             console.error("Error loading team members:", err);

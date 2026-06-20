@@ -768,16 +768,45 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                             const newPlanTier = packageName || `hosted_${amt}`;
                             const isUpgrade = team.plan_tier !== newPlanTier;
 
+                            // Calculate combined seats if customer has multiple active subscriptions on Stripe
+                            let totalSeats = seats;
+                            let combinedPlanTier = newPlanTier;
+                            try {
+                                const activeSubsList = await stripe.subscriptions.list({
+                                    customer: subscription.customer,
+                                    status: 'active'
+                                });
+                                if (activeSubsList && activeSubsList.data && activeSubsList.data.length > 0) {
+                                    totalSeats = 0;
+                                    const activePlans = [];
+                                    for (const sub of activeSubsList.data) {
+                                        if (sub.metadata && sub.metadata.planType === 'hosted') {
+                                            const subSeats = parseInt(sub.metadata.seatCount || '1', 10);
+                                            totalSeats += subSeats;
+                                            const name = sub.metadata.packageName || 'Active Plan';
+                                            if (!activePlans.includes(name)) {
+                                                activePlans.push(name);
+                                            }
+                                        }
+                                    }
+                                    if (activePlans.length > 0) {
+                                        combinedPlanTier = activePlans.join(' + ');
+                                    }
+                                }
+                            } catch (subListErr) {
+                                console.warn("[Stripe Webhook] Error listing active subscriptions for customer:", subListErr);
+                            }
+
                             const { error: updateTeamErr } = await supabaseAdmin
                                 .from('teams')
                                 .update({ 
-                                    seat_limit: seats,
+                                    seat_limit: totalSeats,
                                     stripe_subscription_id: subscription.id,
-                                    plan_tier: newPlanTier
+                                    plan_tier: combinedPlanTier
                                 })
                                 .eq('id', team.id);
                             if (updateTeamErr) throw updateTeamErr;
-                            console.log(`[Stripe Webhook] Successfully updated team ${team.id} plan to ${newPlanTier} on subscription update.`);
+                            console.log(`[Stripe Webhook] Successfully updated team ${team.id} plan to ${combinedPlanTier} (seats: ${totalSeats}) on subscription update.`);
 
                             if (isUpgrade) {
                                 const expiryDays = planInterval === 'year' ? 365 : 30;
@@ -825,12 +854,6 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                         if (profile && profile.team_id) {
                             const team = profile.teams;
                             
-                            // Verify if the event subscription ID matches the team's active subscription ID
-                            if (team && team.stripe_subscription_id !== subscription.id) {
-                                console.log(`[Stripe Webhook] subscription.deleted ignored: Event subscription ID ${subscription.id} does not match team active subscription ${team.stripe_subscription_id}.`);
-                                return res.json({ received: true });
-                            }
-                            
                             // Fetch the latest subscription status directly from Stripe
                             const liveSub = await stripe.subscriptions.retrieve(subscription.id);
                             if (liveSub.status !== 'canceled') {
@@ -838,28 +861,63 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                                 return res.json({ received: true });
                             }
                             
-                            // Clear subscription details
+                            // Check for remaining active subscriptions on Stripe to recalculate seats
+                            let totalSeats = 1;
+                            let combinedPlanTier = null;
+                            let latestSubId = null;
+                            try {
+                                const activeSubsList = await stripe.subscriptions.list({
+                                    customer: subscription.customer,
+                                    status: 'active'
+                                });
+                                if (activeSubsList && activeSubsList.data && activeSubsList.data.length > 0) {
+                                    totalSeats = 0;
+                                    const activePlans = [];
+                                    for (const sub of activeSubsList.data) {
+                                        if (sub.metadata && sub.metadata.planType === 'hosted') {
+                                            const subSeats = parseInt(sub.metadata.seatCount || '1', 10);
+                                            totalSeats += subSeats;
+                                            const name = sub.metadata.packageName || 'Active Plan';
+                                            if (!activePlans.includes(name)) {
+                                                activePlans.push(name);
+                                            }
+                                            latestSubId = sub.id;
+                                        }
+                                    }
+                                    if (activePlans.length > 0) {
+                                        combinedPlanTier = activePlans.join(' + ');
+                                    }
+                                }
+                            } catch (subListErr) {
+                                console.warn("[Stripe Webhook] Error listing active subscriptions for customer on delete:", subListErr);
+                            }
+
+                            // Update team details with remaining active subscriptions or reset to free
                             const { error: updateErr } = await supabaseAdmin
                                 .from('teams')
                                 .update({ 
-                                    stripe_subscription_id: null,
-                                    plan_tier: null
+                                    stripe_subscription_id: latestSubId,
+                                    plan_tier: combinedPlanTier,
+                                    seat_limit: totalSeats
                                 })
                                 .eq('id', profile.team_id);
                             if (updateErr) throw updateErr;
                             
-                            // Force immediate expiration of all remaining active subscription credit grants for this team
-                            const { error: updateGrantsErr } = await supabaseAdmin
-                                .from('team_credit_grants')
-                                .update({ expires_at: new Date().toISOString() })
-                                .eq('team_id', profile.team_id)
-                                .gt('amount_remaining', 0)
-                                .not('expires_at', 'is', null);
-                            if (updateGrantsErr) throw updateGrantsErr;
+                            if (!latestSubId) {
+                                // Force immediate expiration of all remaining active subscription credit grants for this team
+                                // only if they have NO active subscriptions left
+                                const { error: updateGrantsErr } = await supabaseAdmin
+                                    .from('team_credit_grants')
+                                    .update({ expires_at: new Date().toISOString() })
+                                    .eq('team_id', profile.team_id)
+                                    .gt('amount_remaining', 0)
+                                    .not('expires_at', 'is', null);
+                                if (updateGrantsErr) throw updateGrantsErr;
+                            }
                             
                             // Recalculate team active credits cache
                             await supabaseAdmin.rpc('recalculate_team_credits', { p_team_id: profile.team_id });
-                            console.log(`[Stripe Webhook] Successfully processed subscription termination for user ${userId} and expired active grants.`);
+                            console.log(`[Stripe Webhook] Successfully processed subscription termination for user ${userId}. Remaining active plans: ${combinedPlanTier || 'None'} (seats: ${totalSeats}).`);
                         }
                     }
                 } else {

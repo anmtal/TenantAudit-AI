@@ -2408,7 +2408,7 @@ function initializeApp() {
 
     // Credits Modal Handlers
     const handleTopupClick = () => {
-        showView('home');
+        window.location.hash = '#home';
         setTimeout(() => {
             const pricingSection = document.getElementById('pricing-section');
             if (pricingSection) {

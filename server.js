@@ -2618,9 +2618,6 @@ app.post('/api/cancel-subscription', requireAuth, async (req, res) => {
         if (!supabaseAdmin) {
             return res.status(400).json({ error: "Database client is not configured." });
         }
-        if (!stripe) {
-            return res.status(400).json({ error: "Stripe client is not configured." });
-        }
 
         const { data: profile, error: profileErr } = await supabaseAdmin
             .from('profiles')
@@ -2638,7 +2635,46 @@ app.post('/api/cancel-subscription', requireAuth, async (req, res) => {
         }
 
         if (!team.stripe_subscription_id) {
-            return res.status(400).json({ error: "No active subscription found for this team." });
+            if (team.plan_tier && team.plan_tier !== 'free') {
+                // For manual/admin-assigned subscriptions (no stripe_subscription_id),
+                // we directly update their plan_tier to null, and seat_limit to 1 in the database.
+                const { error: updateError } = await supabaseAdmin
+                    .from('teams')
+                    .update({ 
+                        plan_tier: null,
+                        seat_limit: 1
+                    })
+                    .eq('id', profile.team_id);
+                
+                if (updateError) {
+                    console.error("[Cancel Subscription] Error updating team plan to free:", updateError);
+                    return res.status(500).json({ error: "Failed to cancel manual subscription." });
+                }
+
+                // Force immediate expiration of all remaining active subscription credit grants for this team
+                const { error: updateGrantsErr } = await supabaseAdmin
+                    .from('team_credit_grants')
+                    .update({ expires_at: new Date().toISOString() })
+                    .eq('team_id', profile.team_id)
+                    .gt('amount_remaining', 0)
+                    .not('expires_at', 'is', null);
+                if (updateGrantsErr) {
+                    console.warn("[Cancel Subscription] Error updating credit grants:", updateGrantsErr);
+                }
+                
+                console.log(`[Subscription Cancellation] Directly downgraded manual subscription to free for team ${profile.team_id} (User: ${req.user.email})`);
+                return res.json({
+                    success: true,
+                    cancelAtPeriodEnd: false,
+                    currentPeriodEnd: null
+                });
+            } else {
+                return res.status(400).json({ error: "No active subscription found for this team." });
+            }
+        }
+
+        if (!stripe) {
+            return res.status(400).json({ error: "Stripe client is not configured." });
         }
 
         // Set cancel_at_period_end = true to cancel at the end of current cycle (grace period retention)

@@ -5046,7 +5046,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
 
             if (response.ok) {
                 const data = await response.json();
-                if (data.active) {
+                const hasPaidPlan = data.planTier && data.planTier.toLowerCase() !== 'free' && data.planTier.toLowerCase() !== 'null';
+                if (data.active || hasPaidPlan) {
                     billingSection.style.display = 'block';
                     planDisplay.textContent = data.planTier || 'Active Subscription';
                     

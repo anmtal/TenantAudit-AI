@@ -865,7 +865,16 @@ BEGIN
 
       -- Recalculate team credits if we removed anyone
       IF v_removed_count > 0 THEN
-        PERFORM public.recalculate_team_credits(NEW.id);
+        -- Zero out any expired grants
+        UPDATE public.team_credit_grants 
+        SET amount_remaining = 0 
+        WHERE team_id = NEW.id AND expires_at <= NOW() AND amount_remaining > 0;
+        
+        -- Calculate sum of all unexpired, remaining credits
+        SELECT COALESCE(SUM(amount_remaining), 0) INTO NEW.audit_credits
+        FROM public.team_credit_grants 
+        WHERE team_id = NEW.id AND (expires_at > NOW() OR expires_at IS NULL);
+
         NEW.pruned_members_count := COALESCE(OLD.pruned_members_count, 0) + v_removed_count;
       END IF;
     END IF;

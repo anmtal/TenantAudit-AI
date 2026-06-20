@@ -638,14 +638,43 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                             
                             let userTeamId = team?.id;
                             
+                            // Calculate combined seats and plans if customer has multiple active subscriptions on Stripe
+                            let totalSeats = seats;
+                            let combinedPlanTier = packageName || `hosted_${amt}`;
+                            try {
+                                const activeSubsList = await stripe.subscriptions.list({
+                                    customer: subscription.customer,
+                                    status: 'active'
+                                });
+                                if (activeSubsList && activeSubsList.data && activeSubsList.data.length > 0) {
+                                    totalSeats = 0;
+                                    const activePlans = [];
+                                    for (const sub of activeSubsList.data) {
+                                        if (sub.metadata && sub.metadata.planType === 'hosted') {
+                                            const subSeats = parseInt(sub.metadata.seatCount || '1', 10);
+                                            totalSeats += subSeats;
+                                            const name = sub.metadata.packageName || 'Active Plan';
+                                            if (!activePlans.includes(name)) {
+                                                activePlans.push(name);
+                                            }
+                                        }
+                                    }
+                                    if (activePlans.length > 0) {
+                                        combinedPlanTier = activePlans.join(' + ');
+                                    }
+                                }
+                            } catch (subListErr) {
+                                console.warn("[Stripe Webhook] Error listing active subscriptions for customer on invoice payment:", subListErr);
+                            }
+                            
                             if (team) {
                                 // Update existing team seat limit and plan_tier
                                 const { error: updateTeamErr } = await supabaseAdmin
                                     .from('teams')
                                     .update({ 
-                                        seat_limit: seats,
+                                        seat_limit: totalSeats,
                                         stripe_subscription_id: subscription.id,
-                                        plan_tier: packageName || `hosted_${amt}`
+                                        plan_tier: combinedPlanTier
                                     })
                                     .eq('id', team.id);
                                 if (updateTeamErr) throw updateTeamErr;
@@ -658,9 +687,9 @@ app.post('/api/stripe-webhook', express.raw({ type: 'application/json' }), async
                                             name: `Premium Team`,
                                             owner_id: userId,
                                             audit_credits: 0,
-                                            seat_limit: seats,
+                                            seat_limit: totalSeats,
                                             stripe_subscription_id: subscription.id,
-                                            plan_tier: packageName || `hosted_${amt}`
+                                            plan_tier: combinedPlanTier
                                         })
                                         .select('id')
                                         .single();

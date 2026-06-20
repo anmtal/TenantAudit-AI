@@ -2950,51 +2950,6 @@ app.post('/api/cron/purge-old-audits', async (req, res) => {
     }
 });
 
-// Debug Endpoint to check team and profiles state
-app.get('/api/debug-cancel-state', async (req, res) => {
-    try {
-        if (!supabaseAdmin) {
-            return res.status(500).json({ error: "Database admin client not configured." });
-        }
-
-        const { data: ownerProfile, error: ownerErr } = await supabaseAdmin
-            .from('profiles')
-            .select('team_id, id')
-            .eq('email', 'anmtal@gmail.com')
-            .single();
-
-        if (ownerErr || !ownerProfile) {
-            return res.json({ error: "Owner profile not found", details: ownerErr });
-        }
-
-        const { data: team, error: teamErr } = await supabaseAdmin
-            .from('teams')
-            .select('*')
-            .eq('id', ownerProfile.team_id)
-            .single();
-        if (teamErr) {
-            return res.json({ error: "Team not found", details: teamErr, ownerProfile });
-        }
-
-        const { data: profiles, error: profErr } = await supabaseAdmin
-            .from('profiles')
-            .select('*')
-            .eq('team_id', team.id);
-        if (profErr) {
-            return res.json({ error: "Failed to fetch profiles", details: profErr, team });
-        }
-
-        return res.json({
-            owner_id: ownerProfile.id,
-            team,
-            profiles_count: profiles.length,
-            profiles
-        });
-    } catch (err) {
-        return res.status(500).json({ error: err.message });
-    }
-});
-
 // Reset Phone Number Endpoint
 app.post('/api/reset-phone', requireAuth, async (req, res) => {
     try {

@@ -113,7 +113,8 @@ const allowedOrigins = [
     'https://leasealign.io',
     'https://www.leasealign.io',
     'https://leasealign-ai.vercel.app',
-    'https://leasealign.vercel.app'
+    'https://leasealign.vercel.app',
+    'https://tenant-audit-ai.vercel.app'
 ];
 
 function getCorsOptions() {

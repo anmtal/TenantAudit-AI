@@ -819,6 +819,67 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 
 -- --------------------------------------------------------------------
+-- 9b. Auto Prune Team Members Trigger on Seat Limit Decrease
+-- --------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.trg_prune_team_members_on_seat_decrease()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_current_count INT;
+  v_to_remove INT;
+  v_member RECORD;
+  v_new_team_id UUID;
+  v_removed_count INT := 0;
+BEGIN
+  -- Only execute if the seat limit has decreased
+  IF NEW.seat_limit < OLD.seat_limit THEN
+    -- Count current members (including owner)
+    SELECT COUNT(*) INTO v_current_count FROM public.profiles WHERE team_id = NEW.id;
+    
+    -- Calculate how many need to be removed
+    v_to_remove := v_current_count - NEW.seat_limit;
+    
+    IF v_to_remove > 0 THEN
+      -- Fetch the members to remove (newest registered first, excluding the owner)
+      FOR v_member IN 
+        SELECT p.id, p.email 
+        FROM public.profiles p
+        JOIN auth.users u ON p.id = u.id
+        WHERE p.team_id = NEW.id AND p.id != NEW.owner_id
+        ORDER BY u.created_at DESC
+        LIMIT v_to_remove
+      LOOP
+        -- Create a new personal team for the removed member
+        INSERT INTO public.teams (name, owner_id, audit_credits, seat_limit)
+        VALUES (COALESCE(v_member.email, 'Personal') || '''s Team', v_member.id, 0, 1)
+        RETURNING id INTO v_new_team_id;
+
+        -- Move the member to their new personal team
+        UPDATE public.profiles 
+        SET team_id = v_new_team_id 
+        WHERE id = v_member.id;
+
+        v_removed_count := v_removed_count + 1;
+      END LOOP;
+
+      -- Recalculate team credits if we removed anyone
+      IF v_removed_count > 0 THEN
+        PERFORM public.recalculate_team_credits(NEW.id);
+      END IF;
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS prune_team_members_on_seat_decrease ON public.teams;
+CREATE TRIGGER prune_team_members_on_seat_decrease
+  AFTER UPDATE OF seat_limit ON public.teams
+  FOR EACH ROW
+  EXECUTE FUNCTION public.trg_prune_team_members_on_seat_decrease();
+
+
+-- --------------------------------------------------------------------
 -- 10. SQL Backfill Trigger: Retroactively Grant Welcome Credits
 -- --------------------------------------------------------------------
 DO $$

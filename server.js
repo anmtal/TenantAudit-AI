@@ -1232,28 +1232,18 @@ app.post('/api/check-email-verified', async (req, res) => {
 
         // 1. Try checking via RPC
         const { data: isVerified, error: rpcErr } = await supabaseAdmin.rpc('check_email_confirmed', { p_email: email });
-        if (!rpcErr && isVerified !== null && isVerified !== undefined) {
-            return res.json({ verified: isVerified });
-        }
-
-        // 2. Fallback: list users and search (in case database migration wasn't run yet)
-        console.warn("[Check Email Verified] RPC failed or returned null, falling back to listUsers. Error:", rpcErr);
-        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers({
-            page: 1,
-            perPage: 1000
-        });
-
-        if (listErr) {
-            console.error("[Check Email Verified Fallback] listUsers error:", listErr);
-            return res.status(500).json({ error: "Failed to check email verification status." });
-        }
-
-        const user = users.find(u => u.email?.toLowerCase() === email.trim().toLowerCase());
-        if (!user) {
+        if (rpcErr) {
+            console.error("[Check Email Verified] RPC error:", rpcErr);
+            if (Sentry) Sentry.captureException(rpcErr);
             return res.json({ verified: false });
         }
 
-        return res.json({ verified: !!user.email_confirmed_at });
+        if (isVerified === null || isVerified === undefined) {
+            console.warn("[Check Email Verified] RPC returned null or undefined status.");
+            return res.json({ verified: false });
+        }
+
+        return res.json({ verified: isVerified });
     } catch (err) {
         console.error("[Check Email Verified Error]", err);
         return res.status(500).json({ error: "Internal Server Error" });
@@ -1409,8 +1399,9 @@ app.post('/api/audit', requireAuth, setExpensiveRateLimitKey, expensiveApiLimite
             });
         }
         
+        let transactionId = null;
         if (!isRoutingRequest) {
-            const transactionId = req.headers['x-transaction-id'];
+            transactionId = req.headers['x-transaction-id'];
             if (!transactionId || !/^[0-9a-f-]{36}$/i.test(transactionId)) {
                 return res.status(400).json({ error: "Missing or invalid transaction ID header." });
             }
@@ -1471,7 +1462,25 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 console.warn(`[Blocked] User ${req.user.email} attempted audit with 0 credits.`);
                 return res.status(403).json({ error: "Forbidden: Insufficient audit credits. This audit requires at least 1 audit credit from your team balance." });
             }
-            console.log(`[Authorized] Hosted audit request by ${req.user.email} (has ${team.audit_credits} audit credits)`);
+
+            if (!isRoutingRequest) {
+                // Call deduct_user_credits to atomically deduct and register transaction
+                const { data: success, error: deductErr } = await supabaseAdmin
+                    .rpc('deduct_user_credits', { 
+                        target_user_id: req.user.id, 
+                        credits_to_deduct: 1, 
+                        plan_mode: 'hosted',
+                        p_transaction_id: transactionId
+                    });
+
+                if (deductErr || !success) {
+                    console.warn(`[Blocked] User ${req.user.email} attempted hosted extraction with insufficient credits.`);
+                    return res.status(403).json({ error: "Forbidden: Insufficient audit credits." });
+                }
+                console.log(`[Authorized & Deducted] Hosted audit extraction request by ${req.user.email} (needs 1 credit)`);
+            } else {
+                console.log(`[Authorized] Hosted routing request by ${req.user.email} (has ${team.audit_credits} audit credits)`);
+            }
         }
 
         // Hosted SaaS Mode uses the server's private key and runs Claude Sonnet
@@ -2104,23 +2113,7 @@ app.post('/api/compare', requireAuth, setExpensiveRateLimitKey, expensiveApiLimi
             });
         }
 
-        if (supabaseAdmin) {
-            const transactionId = req.headers['x-transaction-id'] || null;
-            // Atomic pre-deduction of 1 audit credits via RPC (idempotent per transaction)
-            const { data: success, error: deductErr } = await supabaseAdmin
-                .rpc('deduct_user_credits', { 
-                    target_user_id: req.user.id, 
-                    credits_to_deduct: 1, 
-                    plan_mode: 'hosted',
-                    p_transaction_id: transactionId
-                });
-
-            if (deductErr || !success) {
-                console.warn(`[Blocked] User ${req.user.email} attempted hosted comparison with insufficient credits.`);
-                return res.status(403).json({ error: "Forbidden: Insufficient audit credits." });
-            }
-            console.log(`[Authorized & Deducted] Hosted comparison request by ${req.user.email} (needs 1 credit)`);
-        }
+        // Comparison is free as credits are now deducted during the extraction stage (/api/audit)
 
         // Determine which API key to use
         let activeKey = process.env.ANTHROPIC_API_KEY;

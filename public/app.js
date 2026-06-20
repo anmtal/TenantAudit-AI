@@ -1075,12 +1075,10 @@ function initializeApp() {
             } else {
                 profileData = data;
                 
-                // Recalculate team credits to filter out any expired grants and update cached teams.audit_credits
+                // Re-fetch the team row to get the updated cached balance from server
                 const teamId = profileData.team_id || (profileData.teams && profileData.teams.id);
                 if (teamId) {
                     try {
-                        await supabase.rpc('recalculate_team_credits', { p_team_id: teamId });
-                        // Re-fetch the team row to get the updated cached balance
                         const { data: freshTeam, error: freshTeamErr } = await supabase
                             .from('teams')
                             .select('audit_credits, plan_tier')
@@ -1091,7 +1089,7 @@ function initializeApp() {
                             profileData.teams.plan_tier = freshTeam.plan_tier;
                         }
                     } catch (recalcErr) {
-                        console.warn("Failed to recalculate team credits during profile load:", recalcErr);
+                        console.warn("Failed to fetch fresh team credits during profile load:", recalcErr);
                     }
                 }
             }

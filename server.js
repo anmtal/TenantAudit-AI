@@ -2947,6 +2947,44 @@ app.post('/api/cron/purge-old-audits', async (req, res) => {
         console.error("[Purge Cron Error] Failed to run daily cleanup:", err);
         if (Sentry) Sentry.captureException(err);
         return res.status(500).json({ error: err.message || "Failed to execute purge" });
+});
+
+// Debug Endpoint to check team and profiles state
+app.get('/api/debug-cancel-state', async (req, res) => {
+    try {
+        if (!supabaseAdmin) {
+            return res.status(500).json({ error: "Database admin client not configured." });
+        }
+
+        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        if (listErr) throw listErr;
+
+        const owner = users.find(u => u.email?.toLowerCase() === 'anmtal@gmail.com');
+        if (!owner) {
+            return res.json({ error: "Owner not found" });
+        }
+
+        const { data: team, error: teamErr } = await supabaseAdmin
+            .from('teams')
+            .select('*')
+            .eq('owner_id', owner.id)
+            .single();
+        if (teamErr) throw teamErr;
+
+        const { data: profiles, error: profErr } = await supabaseAdmin
+            .from('profiles')
+            .select('*')
+            .eq('team_id', team.id);
+        if (profErr) throw profErr;
+
+        return res.json({
+            owner_id: owner.id,
+            team,
+            profiles_count: profiles.length,
+            profiles
+        });
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
     }
 });
 

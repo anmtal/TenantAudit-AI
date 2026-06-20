@@ -3182,3 +3182,36 @@ select option {
     opacity: 0.5 !important;
     cursor: not-allowed !important;
 }
+
+/* --- Seat Pruning Warning Banner --- */
+.seat-pruned-alert {
+    display: none;
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 8px;
+    padding: 12px 20px;
+    margin-bottom: 20px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    color: #93c5fd;
+}
+.seat-pruned-ok-btn-style {
+    background: rgba(59, 130, 246, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    color: #93c5fd;
+    cursor: pointer;
+}
+.seat-pruned-ok-btn-style:hover {
+    background: rgba(59, 130, 246, 0.3);
+}
+.seat-pruned-info-icon {
+    color: #60a5fa;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+.seat-pruned-text {
+    color: #e2e8f0;
+    font-size: 0.9rem;
+    font-weight: 500;
+}

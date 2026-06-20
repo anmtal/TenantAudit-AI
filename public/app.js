@@ -1066,7 +1066,7 @@ function initializeApp() {
             let profileData = null;
             const { data, error } = await supabase
                 .from('profiles')
-                .select('credits, plan_tier, team_id, free_credit_granted, teams(id, audit_credits, plan_tier)')
+                .select('credits, plan_tier, team_id, free_credit_granted, teams(id, audit_credits, plan_tier, pruned_members_count, owner_id)')
                 .eq('id', user.id)
                 .single();
                 
@@ -1081,12 +1081,14 @@ function initializeApp() {
                     try {
                         const { data: freshTeam, error: freshTeamErr } = await supabase
                             .from('teams')
-                            .select('audit_credits, plan_tier')
+                            .select('audit_credits, plan_tier, pruned_members_count, owner_id')
                             .eq('id', teamId)
                             .single();
                         if (!freshTeamErr && freshTeam && profileData.teams) {
                             profileData.teams.audit_credits = freshTeam.audit_credits;
                             profileData.teams.plan_tier = freshTeam.plan_tier;
+                            profileData.teams.pruned_members_count = freshTeam.pruned_members_count;
+                            profileData.teams.owner_id = freshTeam.owner_id;
                         }
                     } catch (recalcErr) {
                         console.warn("Failed to fetch fresh team credits during profile load:", recalcErr);
@@ -1180,6 +1182,41 @@ function initializeApp() {
             }
             
             updateCreditsDisplay();
+
+            // Handle Seat Pruning Notification Banner for Team Owner
+            const prunedBanner = document.getElementById('seat-pruned-warning-banner');
+            const prunedCountDisplay = document.getElementById('pruned-members-count-display');
+            const prunedOkBtn = document.getElementById('seat-pruned-ok-btn');
+            
+            if (prunedBanner && prunedCountDisplay && prunedOkBtn && profileData && profileData.teams) {
+                const team = profileData.teams;
+                const prunedCount = team.pruned_members_count || 0;
+                const isTeamOwner = team.owner_id === user.id;
+                
+                if (prunedCount > 0 && isTeamOwner) {
+                    prunedCountDisplay.textContent = prunedCount;
+                    showEl(prunedBanner, 'flex-visible');
+                    
+                    prunedOkBtn.onclick = async () => {
+                        hideEl(prunedBanner);
+                        try {
+                            const { error: clearErr } = await supabase
+                                .from('teams')
+                                .update({ pruned_members_count: 0 })
+                                .eq('id', team.id);
+                            if (clearErr) {
+                                console.warn("Failed to clear pruned members count from DB:", clearErr.message);
+                            } else {
+                                team.pruned_members_count = 0;
+                            }
+                        } catch (err) {
+                            console.error("Error clearing pruned count:", err);
+                        }
+                    };
+                } else {
+                    hideEl(prunedBanner);
+                }
+            }
         } catch (e) {
             console.error("Failed to load user profile:", e);
         }

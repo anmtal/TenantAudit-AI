@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS public.teams (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+ALTER TABLE public.teams ADD COLUMN IF NOT EXISTS pruned_members_count INTEGER DEFAULT 0;
+
 ALTER TABLE public.teams DROP CONSTRAINT IF EXISTS teams_owner_id_key;
 ALTER TABLE public.teams ADD CONSTRAINT teams_owner_id_key UNIQUE (owner_id);
 
@@ -864,6 +866,7 @@ BEGIN
       -- Recalculate team credits if we removed anyone
       IF v_removed_count > 0 THEN
         PERFORM public.recalculate_team_credits(NEW.id);
+        NEW.pruned_members_count := COALESCE(OLD.pruned_members_count, 0) + v_removed_count;
       END IF;
     END IF;
   END IF;
@@ -874,7 +877,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 DROP TRIGGER IF EXISTS prune_team_members_on_seat_decrease ON public.teams;
 CREATE TRIGGER prune_team_members_on_seat_decrease
-  AFTER UPDATE OF seat_limit ON public.teams
+  BEFORE UPDATE OF seat_limit ON public.teams
   FOR EACH ROW
   EXECUTE FUNCTION public.trg_prune_team_members_on_seat_decrease();
 

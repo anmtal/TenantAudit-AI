@@ -2206,6 +2206,360 @@ For each field, look at all pages and pick the most detailed, legally relevant, 
     }
 });
 
+// Endpoint to start audit asynchronously (creates a background job)
+app.post('/api/audit-async', requireAuth, setExpensiveRateLimitKey, expensiveApiLimiter, async (req, res) => {
+    try {
+        const { leasePayload, estoppelPayload, transactionId } = req.body;
+        if (!leasePayload || !estoppelPayload || !transactionId) {
+            return res.status(400).json({ error: "Missing required payload fields." });
+        }
+
+        if (!supabaseAdmin) {
+            return res.status(500).json({ error: "Database admin client not configured." });
+        }
+
+        // Fetch user team
+        const { data: profile, error: profileErr } = await supabaseAdmin
+            .from('profiles')
+            .select('team_id')
+            .eq('id', req.user.id)
+            .single();
+
+        if (profileErr || !profile || !profile.team_id) {
+            return res.status(403).json({ error: "Forbidden: User team not found." });
+        }
+
+        // Create the audit job in public.audit_jobs
+        const { data: job, error: jobErr } = await supabaseAdmin
+            .from('audit_jobs')
+            .insert([{
+                user_id: req.user.id,
+                team_id: profile.team_id,
+                status: 'pending',
+                progress: 'Initializing background audit job...'
+            }])
+            .select()
+            .single();
+
+        if (jobErr || !job) {
+            console.error("[Async Audit] Failed to create job:", jobErr);
+            return res.status(500).json({ error: "Failed to initialize background job." });
+        }
+
+        // Trigger the background worker asynchronously by calling our own worker endpoint without awaiting
+        const host = req.get('host');
+        const protocol = req.protocol;
+        const workerUrl = `${protocol}://${host}/api/worker/run-audit`;
+
+        console.log(`[Async Audit] Triggering background worker for job ${job.id}...`);
+        
+        fetch(workerUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': req.headers['authorization']
+            },
+            body: JSON.stringify({
+                jobId: job.id,
+                leasePayload,
+                estoppelPayload,
+                transactionId
+            })
+        }).catch(err => {
+            console.error(`[Async Audit Worker Trigger Error] Job ${job.id}:`, err);
+        });
+
+        // Return immediately
+        return res.json({ success: true, jobId: job.id });
+    } catch (err) {
+        console.error("[Async Audit Error]", err);
+        return res.status(500).json({ error: "Failed to initiate asynchronous audit." });
+    }
+});
+
+// Background Worker to process async audit jobs
+app.post('/api/worker/run-audit', requireAuth, async (req, res) => {
+    const { jobId, leasePayload, estoppelPayload, transactionId } = req.body;
+    if (!jobId || !leasePayload || !estoppelPayload || !transactionId) {
+        return res.status(400).json({ error: "Missing worker payload fields." });
+    }
+
+    if (!supabaseAdmin) {
+        return res.status(500).json({ error: "Database admin client not configured." });
+    }
+
+    // Immediately return 200 OK to the trigger call to keep the connection short
+    res.json({ success: true, message: "Worker task started." });
+
+    // Process in background promise
+    (async () => {
+        try {
+            console.log(`[Worker Background] Processing Job ${jobId}...`);
+            
+            // 1. Update status to processing
+            await supabaseAdmin
+                .from('audit_jobs')
+                .update({ status: 'processing', progress: 'Extracting document text...' })
+                .eq('id', jobId);
+
+            // 2. Perform credit validation and deduction (equivalent to server-side check)
+            const { data: success, error: deductErr } = await supabaseAdmin
+                .rpc('deduct_user_credits', { 
+                    target_user_id: req.user.id, 
+                    credits_to_deduct: 1, 
+                    plan_mode: 'hosted',
+                    p_transaction_id: transactionId
+                });
+
+            if (deductErr || !success) {
+                throw new Error("Insufficient credits or transaction validation failed.");
+            }
+
+            // 3. Process Lease and Estoppel Page Extractions
+            const runExtractionForPage = async (text, docType, images) => {
+                const host = req.get('host');
+                const protocol = req.protocol;
+                const response = await fetch(`${protocol}://${host}/api/audit`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': req.headers['authorization'],
+                        'X-Transaction-ID': transactionId
+                    },
+                    body: JSON.stringify({
+                        text,
+                        docType,
+                        images,
+                        isRoutingRequest: false
+                    })
+                });
+
+                if (!response.ok) {
+                    const errJson = await response.json().catch(() => ({}));
+                    throw new Error(errJson.error || `Server extraction error: ${response.status}`);
+                }
+
+                const resData = await response.json();
+                return resData.data;
+            };
+
+            const getPagesListServer = (payload) => {
+                if (payload.images && Array.isArray(payload.images) && payload.images.length > 0) {
+                    return payload.images.map((img) => ({ images: [img], text: "" }));
+                } else {
+                    const text = payload.text || "";
+                    const pageBlocks = text.split(/---\s*(?:\[PAGE\s*\d+\]|PAGE\s*\d+)\s*---/i);
+                    const pageHeaders = text.match(/---\s*(?:\[PAGE\s*\d+\]|PAGE\s*\d+)\s*---/gi) || [];
+                    let textBlocks = pageBlocks;
+                    if (pageBlocks.length === pageHeaders.length + 1) {
+                        textBlocks = pageBlocks.slice(1);
+                    }
+                    return textBlocks.map((blockText, idx) => {
+                        const header = pageHeaders[idx] || `--- PAGE ${idx + 1} ---`;
+                        return { images: null, text: `${header}\n${blockText.trim()}` };
+                    });
+                }
+            };
+
+            const leasePages = getPagesListServer(leasePayload);
+            const estoppelPages = getPagesListServer(estoppelPayload);
+
+            const runWithConcurrencyLimitServer = async (tasks, limit) => {
+                const results = [];
+                const executing = new Set();
+                for (const task of tasks) {
+                    const p = Promise.resolve().then(() => task());
+                    results.push(p);
+                    executing.add(p);
+                    const clean = () => executing.delete(p);
+                    p.then(clean, clean);
+                    if (executing.size >= limit) {
+                        await Promise.race(executing);
+                    }
+                }
+                return Promise.all(results);
+            };
+
+            const leaseTasks = leasePages.map((page, idx) => {
+                return async () => {
+                    await supabaseAdmin
+                        .from('audit_jobs')
+                        .update({ progress: `Extracting Lease Page ${idx + 1} of ${leasePages.length}...` })
+                        .eq('id', jobId);
+                    return runExtractionForPage(page.text, 'lease', page.images);
+                };
+            });
+
+            const estoppelTasks = estoppelPages.map((page, idx) => {
+                return async () => {
+                    await supabaseAdmin
+                        .from('audit_jobs')
+                        .update({ progress: `Extracting Estoppel Page ${idx + 1} of ${estoppelPages.length}...` })
+                        .eq('id', jobId);
+                    return runExtractionForPage(page.text, 'estoppel', page.images);
+                };
+            });
+
+            const allTasks = [...leaseTasks, ...estoppelTasks];
+            const allResults = await runWithConcurrencyLimitServer(allTasks, 4);
+
+            const leaseResults = allResults.slice(0, leaseTasks.length);
+            const estoppelResults = allResults.slice(leaseTasks.length);
+
+            // 4. Merge page results
+            await supabaseAdmin
+                .from('audit_jobs')
+                .update({ progress: 'Merging extracted parameters...' })
+                .eq('id', jobId);
+
+            const mergeResultsServer = async (pageResults, docType) => {
+                const host = req.get('host');
+                const protocol = req.protocol;
+                const response = await fetch(`${protocol}://${host}/api/merge-extractions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': req.headers['authorization']
+                    },
+                    body: JSON.stringify({ pageResults, docType })
+                });
+
+                if (!response.ok) {
+                    const errJson = await response.json().catch(() => ({}));
+                    throw new Error(errJson.error || `Merge error: ${response.status}`);
+                }
+
+                const resData = await response.json();
+                return resData.data;
+            };
+
+            const leaseExtraction = leaseResults.length > 1
+                ? await mergeResultsServer(leaseResults, 'lease')
+                : leaseResults[0];
+
+            const estoppelExtraction = estoppelResults.length > 1
+                ? await mergeResultsServer(estoppelResults, 'estoppel')
+                : estoppelResults[0];
+
+            // 5. Compare lease vs estoppel
+            await supabaseAdmin
+                .from('audit_jobs')
+                .update({ progress: 'Comparing lease vs estoppel...' })
+                .eq('id', jobId);
+
+            const host = req.get('host');
+            const protocol = req.protocol;
+            const compareRes = await fetch(`${protocol}://${host}/api/compare`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': req.headers['authorization'],
+                    'X-Transaction-ID': transactionId
+                },
+                body: JSON.stringify({
+                    leaseJson: leaseExtraction,
+                    estoppelJson: estoppelExtraction
+                })
+            });
+
+            if (!compareRes.ok) {
+                const errJson = await compareRes.json().catch(() => ({}));
+                throw new Error(errJson.error || `Comparison error: ${compareRes.status}`);
+            }
+
+            const compareData = await compareRes.json();
+            const auditData = compareData.data;
+
+            // 6. Save final audit to database
+            await supabaseAdmin
+                .from('audit_jobs')
+                .update({ progress: 'Saving audit report...' })
+                .eq('id', jobId);
+
+            const customLeaseName = leasePayload.fileName || "Lease_Document.pdf";
+            const customEstoppelName = estoppelPayload.fileName || "Estoppel_Document.pdf";
+
+            const { data: savedAudit, error: saveErr } = await supabaseAdmin
+                .from('audits')
+                .insert([{
+                    tenant_name: leaseExtraction.tenantName?.value || "Not Mentioned",
+                    lease_file: customLeaseName,
+                    estoppel_file: customEstoppelName,
+                    match_score: auditData.summary?.matchScore || 0,
+                    red_flags: auditData.summary?.redFlags || 0,
+                    monthly_rent: auditData.summary?.monthlyRent || "Not Mentioned",
+                    premises_sf: auditData.summary?.premisesSf || "Not Mentioned",
+                    expiry_date: auditData.summary?.expiryDate || "Not Mentioned",
+                    records: auditData.records || [],
+                    user_id: req.user.id
+                }])
+                .select()
+                .single();
+
+            if (saveErr || !savedAudit) {
+                throw new Error(saveErr?.message || "Failed to save final audit to public.audits");
+            }
+
+            // 7. Mark job completed
+            await supabaseAdmin
+                .from('audit_jobs')
+                .update({
+                    status: 'completed',
+                    progress: 'Audit completed successfully!',
+                    result_audit_id: savedAudit.id
+                })
+                .eq('id', jobId);
+
+            console.log(`[Worker Background] Job ${jobId} completed successfully! Saved Audit ID: ${savedAudit.id}`);
+        } catch (jobErr) {
+            console.error(`[Worker Background Failure] Job ${jobId}:`, jobErr);
+            // Mark job failed
+            await supabaseAdmin
+                .from('audit_jobs')
+                .update({
+                    status: 'failed',
+                    progress: 'Audit failed.',
+                    error: jobErr.message || "Unknown error during background audit processing."
+                })
+                .eq('id', jobId);
+        }
+    })();
+});
+
+// Endpoint to check status of an audit job
+app.get('/api/audit-job/:id', requireAuth, async (req, res) => {
+    try {
+        if (!supabaseAdmin) {
+            return res.status(500).json({ error: "Database admin client not configured." });
+        }
+
+        const jobId = req.params.id;
+        const { data: job, error: jobErr } = await supabaseAdmin
+            .from('audit_jobs')
+            .select('*')
+            .eq('id', jobId)
+            .single();
+
+        if (jobErr || !job) {
+            return res.status(404).json({ error: "Audit job not found." });
+        }
+
+        if (job.user_id !== req.user.id) {
+            return res.status(403).json({ error: "Forbidden: You do not own this job." });
+        }
+
+        return res.json({
+            status: job.status,
+            progress: job.progress,
+            error: job.error,
+            result_audit_id: job.result_audit_id
+        });
+    } catch (err) {
+        console.error("[Check Audit Job Error]", err);
+        return res.status(500).json({ error: "Failed to retrieve job status." });
+    }
+});
+
 // Route to merge parallel page extractions
 app.post('/api/merge-extractions', requireAuth, setExpensiveRateLimitKey, expensiveApiLimiter, async (req, res) => {
     try {

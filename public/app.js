@@ -3763,23 +3763,31 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     leaseTxId
                 );
 
-                // 2. Now that transaction ID is registered, run all other extractions in parallel!
-                showLoader("Extracting remaining pages in parallel...");
-                
-                const leaseRemainingPromises = leasePages.slice(1).map(async (page, idx) => {
+                // 2. Now that transaction ID is registered, run all other extractions with bounded concurrency!
+                const leaseTasks = leasePages.slice(1).map((page, idx) => {
                     const pageNum = idx + 2;
-                    return callOpenAIToExtract(page.text, 'lease', page.images, null, null, false, leaseTxId);
+                    return () => {
+                        showLoader(`Analyzing Lease: Page ${pageNum} of ${totalLeasePages}...`);
+                        return callOpenAIToExtract(page.text, 'lease', page.images, null, null, false, leaseTxId);
+                    };
                 });
 
-                const estoppelPromises = estoppelPages.map(async (page, idx) => {
-                    return callOpenAIToExtract(page.text, 'estoppel', page.images, null, null, false, estoppelTxId);
+                const estoppelTasks = estoppelPages.map((page, idx) => {
+                    const pageNum = idx + 1;
+                    return () => {
+                        showLoader(`Analyzing Estoppel: Page ${pageNum} of ${totalEstoppelPages}...`);
+                        return callOpenAIToExtract(page.text, 'estoppel', page.images, null, null, false, estoppelTxId);
+                    };
                 });
 
-                // Wait for all parallel page extractions to finish
-                const [leaseRemainingResults, estoppelResults] = await Promise.all([
-                    Promise.all(leaseRemainingPromises),
-                    Promise.all(estoppelPromises)
-                ]);
+                const CONCURRENCY_LIMIT = 4;
+                showLoader("Processing extractions with bounded concurrency...");
+                
+                const allTasks = [...leaseTasks, ...estoppelTasks];
+                const allTaskResults = await runWithConcurrencyLimit(allTasks, CONCURRENCY_LIMIT);
+
+                const leaseRemainingResults = allTaskResults.slice(0, leaseTasks.length);
+                const estoppelResults = allTaskResults.slice(leaseTasks.length);
 
                 const allLeaseResults = [leaseFirstPageResult, ...leaseRemainingResults];
 
@@ -3923,6 +3931,23 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
             runLiveAudit();
         });
+    }
+
+    // Helper for bounded concurrency task execution
+    async function runWithConcurrencyLimit(tasks, limit) {
+        const results = [];
+        const executing = new Set();
+        for (const task of tasks) {
+            const p = Promise.resolve().then(() => task());
+            results.push(p);
+            executing.add(p);
+            const clean = () => executing.delete(p);
+            p.then(clean, clean);
+            if (executing.size >= limit) {
+                await Promise.race(executing);
+            }
+        }
+        return Promise.all(results);
     }
 
     // Helper to format extraction output by splitting concatenated raw text pages or images

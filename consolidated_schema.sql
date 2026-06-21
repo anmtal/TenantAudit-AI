@@ -114,6 +114,29 @@ CREATE POLICY "Allow users to view their own audits" ON public.audits FOR SELECT
 DROP POLICY IF EXISTS "Allow users to insert their own audits" ON public.audits;
 CREATE POLICY "Allow users to insert their own audits" ON public.audits FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+-- --------------------------------------------------------------------
+-- 3b. Audit Jobs Table (For Asynchronous Processing state tracking)
+-- --------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.audit_jobs (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    team_id UUID REFERENCES public.teams(id) ON DELETE CASCADE,
+    status VARCHAR(50) DEFAULT 'pending' NOT NULL, -- pending, processing, completed, failed
+    progress VARCHAR(255) DEFAULT 'Starting audit...' NOT NULL,
+    error TEXT,
+    result_audit_id UUID REFERENCES public.audits(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.audit_jobs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow users to view their own audit jobs" ON public.audit_jobs;
+CREATE POLICY "Allow users to view their own audit jobs" ON public.audit_jobs FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Allow users to insert/update their own audit jobs" ON public.audit_jobs;
+CREATE POLICY "Allow users to insert/update their own audit jobs" ON public.audit_jobs FOR ALL USING (auth.uid() = user_id);
+
 DROP POLICY IF EXISTS "Allow users to delete their own audits" ON public.audits;
 CREATE POLICY "Allow users to delete their own audits" ON public.audits FOR DELETE USING (auth.uid() = user_id);
 

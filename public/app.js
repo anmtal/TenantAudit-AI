@@ -3709,34 +3709,96 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             );
             window.estoppelRoutingFallback = estoppelResult.routingFallback || false;
 
-            // Step 3: Run final analyses
+            // Step 3: Run parallelized lease and estoppel parameter extractions
             if (!successfulTransactionIds.includes(leaseTxId)) {
                 successfulTransactionIds.push(leaseTxId);
             }
-            showLoader("Analyzing Lease terms with AI...");
-            const leaseExtraction = await callOpenAIToExtract(
-                leaseResult.text || "",
-                'lease',
-                leaseResult.images || null,
-                null,
-                null,
-                false,
-                leaseTxId
-            );
-            
             if (!successfulTransactionIds.includes(estoppelTxId)) {
                 successfulTransactionIds.push(estoppelTxId);
             }
-            showLoader("Analyzing Estoppel statements with AI...");
-            const estoppelExtraction = await callOpenAIToExtract(
-                estoppelResult.text || "",
-                'estoppel',
-                estoppelResult.images || null,
-                null,
-                null,
-                false,
-                estoppelTxId
-            );
+
+            let leaseExtraction;
+            let estoppelExtraction;
+
+            const isSample = filesState.lease?.name === 'sample_lease.pdf' && filesState.estoppel?.name === 'sample_estoppel.pdf';
+            if (isSample) {
+                showLoader("Analyzing Lease terms with AI...");
+                leaseExtraction = await callOpenAIToExtract(
+                    leaseResult.text || "",
+                    'lease',
+                    leaseResult.images || null,
+                    null,
+                    null,
+                    false,
+                    leaseTxId
+                );
+                showLoader("Analyzing Estoppel statements with AI...");
+                estoppelExtraction = await callOpenAIToExtract(
+                    estoppelResult.text || "",
+                    'estoppel',
+                    estoppelResult.images || null,
+                    null,
+                    null,
+                    false,
+                    estoppelTxId
+                );
+            } else {
+                // Real audit parallel orchestration:
+                const leasePages = getPagesList(leaseResult);
+                const estoppelPages = getPagesList(estoppelResult);
+
+                const totalLeasePages = leasePages.length;
+                const totalEstoppelPages = estoppelPages.length;
+
+                // 1. Execute Lease Page 1 synchronously first to register transaction ID and deduct credits safely
+                showLoader(`Analyzing Lease terms: Page 1 of ${totalLeasePages}...`);
+                const leaseFirstPage = leasePages[0];
+                const leaseFirstPageResult = await callOpenAIToExtract(
+                    leaseFirstPage.text,
+                    'lease',
+                    leaseFirstPage.images,
+                    null,
+                    null,
+                    false,
+                    leaseTxId
+                );
+
+                // 2. Now that transaction ID is registered, run all other extractions in parallel!
+                showLoader("Extracting remaining pages in parallel...");
+                
+                const leaseRemainingPromises = leasePages.slice(1).map(async (page, idx) => {
+                    const pageNum = idx + 2;
+                    return callOpenAIToExtract(page.text, 'lease', page.images, null, null, false, leaseTxId);
+                });
+
+                const estoppelPromises = estoppelPages.map(async (page, idx) => {
+                    return callOpenAIToExtract(page.text, 'estoppel', page.images, null, null, false, estoppelTxId);
+                });
+
+                // Wait for all parallel page extractions to finish
+                const [leaseRemainingResults, estoppelResults] = await Promise.all([
+                    Promise.all(leaseRemainingPromises),
+                    Promise.all(estoppelPromises)
+                ]);
+
+                const allLeaseResults = [leaseFirstPageResult, ...leaseRemainingResults];
+
+                // 3. Merge results if we have multiple pages
+                showLoader("Merging lease and estoppel extractions...");
+                
+                const leaseMergePromise = allLeaseResults.length > 1 
+                    ? mergeExtractionResults(allLeaseResults, 'lease')
+                    : Promise.resolve(allLeaseResults[0]);
+
+                const estoppelMergePromise = estoppelResults.length > 1
+                    ? mergeExtractionResults(estoppelResults, 'estoppel')
+                    : Promise.resolve(estoppelResults[0]);
+
+                [leaseExtraction, estoppelExtraction] = await Promise.all([
+                    leaseMergePromise,
+                    estoppelMergePromise
+                ]);
+            }
 
             if (!successfulTransactionIds.includes(compareTxId)) {
                 successfulTransactionIds.push(compareTxId);
@@ -3861,6 +3923,68 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             }
             runLiveAudit();
         });
+    }
+
+    // Helper to format extraction output by splitting concatenated raw text pages or images
+    function getPagesList(result) {
+        if (result.isScanned) {
+            return result.images.map((img, index) => ({
+                index: index,
+                images: [img],
+                text: ""
+            }));
+        } else {
+            const pageBlocks = result.text.split(/---\s*(?:\[PAGE\s*\d+\]|PAGE\s*\d+)\s*---/i);
+            const pageHeaders = result.text.match(/---\s*(?:\[PAGE\s*\d+\]|PAGE\s*\d+)\s*---/gi) || [];
+            
+            let textBlocks = pageBlocks;
+            if (pageBlocks.length === pageHeaders.length + 1) {
+                textBlocks = pageBlocks.slice(1);
+            }
+            
+            return textBlocks.map((blockText, index) => {
+                const header = pageHeaders[index] || `--- PAGE ${index + 1} ---`;
+                return {
+                    index: index,
+                    images: null,
+                    text: `${header}\n${blockText.trim()}`
+                };
+            });
+        }
+    }
+
+    // Helper to call backend /api/merge-extractions
+    async function mergeExtractionResults(pageResults, docType) {
+        const mergeHeaders = {
+            "Content-Type": "application/json"
+        };
+        if (supabase) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                mergeHeaders["Authorization"] = `Bearer ${session.access_token}`;
+            }
+        }
+        
+        const mergeRes = await fetch("/api/merge-extractions", {
+            method: "POST",
+            headers: mergeHeaders,
+            body: JSON.stringify({
+                pageResults: pageResults,
+                docType: docType
+            })
+        });
+
+        if (!mergeRes.ok) {
+            const errData = await mergeRes.json().catch(() => ({}));
+            throw new Error(errData.error || `Merge failed with status ${mergeRes.status}`);
+        }
+
+        const mergeData = await mergeRes.json();
+        if (mergeData.status === 'completed') {
+            return mergeData.data;
+        } else {
+            throw new Error(mergeData.error || "Merge failed.");
+        }
     }
 
     // --- API Calls Router (Secure CORS Proxy via Backend) ---

@@ -2206,6 +2206,111 @@ For each field, look at all pages and pick the most detailed, legally relevant, 
     }
 });
 
+// Route to merge parallel page extractions
+app.post('/api/merge-extractions', requireAuth, setExpensiveRateLimitKey, expensiveApiLimiter, async (req, res) => {
+    try {
+        const { pageResults, docType } = req.body;
+        if (!pageResults || !Array.isArray(pageResults) || !docType) {
+            return res.status(400).json({ error: "Missing required fields: pageResults and docType" });
+        }
+
+        // Determine which API key to use
+        let activeKey = process.env.ANTHROPIC_API_KEY;
+        let activeProvider = 'anthropic';
+        let activeModel = 'claude-sonnet-4-6';
+
+        if (!activeKey) {
+            return res.status(500).json({ 
+                error: "SaaS Anthropic API Key is not configured on the backend server." 
+            });
+        }
+
+        const mergeSystemPrompt = `You are an expert commercial real estate contract auditor. You are given a list of extracted lease fields from different pages of a document. Some pages might have incomplete, conflicting, or "Not Mentioned" values. Your task is to perform an aggregate merge, resolve any conflicts semantically, and return a single unified JSON object representing the most accurate and complete lease parameters.
+Return a JSON object with exactly these keys:
+{
+  "tenantName": { "value": "...", "quote": "...", "page": "..." },
+  "suiteNumber": { "value": "...", "quote": "...", "page": "..." },
+  "premisesSf": { "value": "...", "quote": "...", "page": "..." },
+  "monthlyRent": { "value": "...", "quote": "...", "page": "..." },
+  "expiryDate": { "value": "...", "quote": "...", "page": "..." },
+  "securityDeposit": { "value": "...", "quote": "...", "page": "..." },
+  "renewalOptions": { "value": "...", "quote": "...", "page": "..." },
+  "camShare": { "value": "...", "quote": "...", "page": "..." },
+  "guarantorName": { "value": "...", "quote": "...", "page": "..." },
+  "prepaidRent": { "value": "...", "quote": "...", "page": "..." },
+  "landlordDefault": { "value": "...", "quote": "...", "page": "..." },
+  "tiAllowance": { "value": "...", "quote": "...", "page": "..." },
+  "coTenancy": { "value": "...", "quote": "...", "page": "..." },
+  "terminationRight": { "value": "...", "quote": "...", "page": "..." },
+  "sndaStatus": { "value": "...", "quote": "...", "page": "..." },
+  "permittedUse": { "value": "...", "quote": "...", "page": "..." }
+}
+For each field, look at all pages and pick the most detailed, legally relevant, and correct value. Quote must be a verbatim snippet of the contract. Page must indicate the source page number (e.g. "Page 3"). If a field is not found anywhere, set value, quote, and page to "Not Mentioned".`;
+
+        const mergeUserPrompt = `Here are the parallel extraction results per page:\n${JSON.stringify(pageResults, null, 2)}`;
+
+        let mergeJson = null;
+        if (activeProvider === 'openai') {
+            const response = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${activeKey}`
+                },
+                body: JSON.stringify({
+                    model: activeModel,
+                    messages: [
+                        { role: "system", content: mergeSystemPrompt },
+                        { role: "user", content: mergeUserPrompt }
+                    ],
+                    response_format: { type: "json_object" },
+                    temperature: 0.1
+                })
+            });
+            if (response.ok) {
+                const resJson = await response.json();
+                mergeJson = await safeExtractAndParseJSON(resJson.choices[0].message.content, activeKey, activeProvider);
+            } else {
+                throw new Error(`OpenAI merge failed with status ${response.status}`);
+            }
+        } else {
+            // Anthropic
+            const response = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
+                method: "POST",
+                headers: {
+                    "x-api-key": activeKey,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json"
+                },
+                body: JSON.stringify({
+                    model: activeModel,
+                    max_tokens: 4000,
+                    system: mergeSystemPrompt,
+                    messages: [
+                        { role: "user", content: mergeUserPrompt }
+                    ],
+                    temperature: 0.1
+                })
+            });
+            if (response.ok) {
+                const resJson = await response.json();
+                mergeJson = await safeExtractAndParseJSON(resJson.content[0].text, activeKey, activeProvider);
+            } else {
+                throw new Error(`Anthropic merge failed with status ${response.status}`);
+            }
+        }
+
+        if (!mergeJson) {
+            throw new Error("Merge failed to produce valid JSON");
+        }
+
+        return res.json({ status: 'completed', data: mergeJson });
+    } catch (err) {
+        console.error("[Merge Route Error]", err);
+        return res.status(500).json({ error: err.message || "Failed to merge page results" });
+    }
+});
+
 // Route to handle AI-assisted compliance comparison of lease vs estoppel
 app.post('/api/compare', requireAuth, setExpensiveRateLimitKey, expensiveApiLimiter, async (req, res) => {
     try {

@@ -3709,19 +3709,147 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             );
             window.estoppelRoutingFallback = estoppelResult.routingFallback || false;
 
-            // Step 3: Run parallelized lease and estoppel parameter extractions
-            if (!successfulTransactionIds.includes(leaseTxId)) {
-                successfulTransactionIds.push(leaseTxId);
-            }
-            if (!successfulTransactionIds.includes(estoppelTxId)) {
-                successfulTransactionIds.push(estoppelTxId);
-            }
+            // Step 3: Execute audit via Async Background Queue (if logged in) or Fallback Direct Loop
+            let useAsyncQueue = supabase && (localStorage.getItem('ta_logged_in') === 'true');
 
-            let leaseExtraction;
-            let estoppelExtraction;
+            if (useAsyncQueue) {
+                showLoader("Submitting audit to background queue...");
+                
+                const leasePayload = {
+                    text: leaseResult.text || "",
+                    images: leaseResult.images || null,
+                    fileName: filesState.lease?.name || "Lease_Document.pdf"
+                };
 
-            const isSample = filesState.lease?.name === 'sample_lease.pdf' && filesState.estoppel?.name === 'sample_estoppel.pdf';
-            if (isSample) {
+                const estoppelPayload = {
+                    text: estoppelResult.text || "",
+                    images: estoppelResult.images || null,
+                    fileName: filesState.estoppel?.name || "Estoppel_Document.pdf"
+                };
+
+                const headers = {
+                    "Content-Type": "application/json",
+                    "X-Session-ID": getOrGenerateSessionId()
+                };
+
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                    headers["Authorization"] = `Bearer ${session.access_token}`;
+                }
+
+                const response = await fetch("/api/audit-async", {
+                    method: "POST",
+                    headers: headers,
+                    body: JSON.stringify({
+                        leasePayload,
+                        estoppelPayload,
+                        transactionId: auditTxId
+                    })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.error || `Async submission failed with status ${response.status}`);
+                }
+
+                const { jobId } = await response.json();
+                console.log(`[Async Audit] Job submitted successfully. Job ID: ${jobId}`);
+
+                // Polling loop
+                let jobStatus = 'pending';
+                let jobProgress = 'Initializing background audit...';
+                let jobError = null;
+                let resultAuditId = null;
+
+                while (jobStatus === 'pending' || jobStatus === 'processing') {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+
+                    const pollResponse = await fetch(`/api/audit-job/${jobId}`, {
+                        method: "GET",
+                        headers: headers
+                    });
+
+                    if (!pollResponse.ok) {
+                        const errData = await pollResponse.json().catch(() => ({}));
+                        throw new Error(errData.error || `Failed to check progress: ${pollResponse.status}`);
+                    }
+
+                    const jobData = await pollResponse.json();
+                    jobStatus = jobData.status;
+                    jobProgress = jobData.progress;
+                    jobError = jobData.error;
+                    resultAuditId = jobData.result_audit_id;
+
+                    showLoader(jobProgress);
+                }
+
+                if (jobStatus === 'failed') {
+                    throw new Error(jobError || "Background audit task failed.");
+                }
+
+                showLoader("Loading final audit results...");
+
+                // Retrieve saved audit record
+                const { data: audit, error: auditErr } = await supabase
+                    .from('audits')
+                    .select('*')
+                    .eq('id', resultAuditId)
+                    .single();
+
+                if (auditErr || !audit) {
+                    throw new Error(auditErr?.message || "Failed to retrieve completed audit record.");
+                }
+
+                // Format auditData
+                auditData = {
+                    metadata: {
+                        tenantName: audit.tenant_name,
+                        leaseFile: audit.lease_file,
+                        estoppelFile: audit.estoppel_file,
+                        auditModel: "Claude Sonnet (Hosted)"
+                    },
+                    summary: {
+                        matchScore: audit.match_score,
+                        redFlags: audit.red_flags,
+                        monthlyRent: audit.monthly_rent,
+                        premisesSf: audit.premises_sf,
+                        expiryDate: audit.expiry_date
+                    },
+                    records: audit.records
+                };
+
+                // Re-render UI with verified badges
+                renderAuditResults();
+
+                const auditStatusBadge = document.getElementById('audit-status-badge');
+                const gaugeSummaryText = document.getElementById('gauge-summary-text');
+                if (auditStatusBadge) {
+                    auditStatusBadge.textContent = 'AI Verified';
+                    auditStatusBadge.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+                    auditStatusBadge.style.color = 'var(--color-emerald)';
+                    auditStatusBadge.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+                }
+                if (gaugeSummaryText) {
+                    gaugeSummaryText.textContent = 'Audit results verified by AI';
+                    gaugeSummaryText.style.color = 'var(--color-emerald)';
+                }
+
+                await loadUserProfileAndCredits();
+                await loadAuditHistory(); // Refresh history panel
+                hideLoader();
+                showToast("🎉 Audit completed successfully!", "success");
+
+                success = true;
+                break; // Break out of retry loop
+            } else {
+                // FALLBACK PATH: Guest/Offline mode (runs sequential/parallel extraction locally)
+                if (!successfulTransactionIds.includes(leaseTxId)) {
+                    successfulTransactionIds.push(leaseTxId);
+                }
+                if (!successfulTransactionIds.includes(estoppelTxId)) {
+                    successfulTransactionIds.push(estoppelTxId);
+                }
+
                 showLoader("Analyzing Lease terms with AI...");
                 leaseExtraction = await callOpenAIToExtract(
                     leaseResult.text || "",
@@ -3732,6 +3860,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     false,
                     leaseTxId
                 );
+                
                 showLoader("Analyzing Estoppel statements with AI...");
                 estoppelExtraction = await callOpenAIToExtract(
                     estoppelResult.text || "",
@@ -3742,99 +3871,29 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                     false,
                     estoppelTxId
                 );
-            } else {
-                // Real audit parallel orchestration:
-                const leasePages = getPagesList(leaseResult);
-                const estoppelPages = getPagesList(estoppelResult);
 
-                const totalLeasePages = leasePages.length;
-                const totalEstoppelPages = estoppelPages.length;
-
-                // 1. Execute Lease Page 1 synchronously first to register transaction ID and deduct credits safely
-                showLoader(`Analyzing Lease terms: Page 1 of ${totalLeasePages}...`);
-                const leaseFirstPage = leasePages[0];
-                const leaseFirstPageResult = await callOpenAIToExtract(
-                    leaseFirstPage.text,
-                    'lease',
-                    leaseFirstPage.images,
-                    null,
-                    null,
-                    false,
-                    leaseTxId
-                );
-
-                // 2. Now that transaction ID is registered, run all other extractions with bounded concurrency!
-                const leaseTasks = leasePages.slice(1).map((page, idx) => {
-                    const pageNum = idx + 2;
-                    return () => {
-                        showLoader(`Analyzing Lease: Page ${pageNum} of ${totalLeasePages}...`);
-                        return callOpenAIToExtract(page.text, 'lease', page.images, null, null, false, leaseTxId);
-                    };
-                });
-
-                const estoppelTasks = estoppelPages.map((page, idx) => {
-                    const pageNum = idx + 1;
-                    return () => {
-                        showLoader(`Analyzing Estoppel: Page ${pageNum} of ${totalEstoppelPages}...`);
-                        return callOpenAIToExtract(page.text, 'estoppel', page.images, null, null, false, estoppelTxId);
-                    };
-                });
-
-                const CONCURRENCY_LIMIT = 4;
-                showLoader("Processing extractions with bounded concurrency...");
-                
-                const allTasks = [...leaseTasks, ...estoppelTasks];
-                const allTaskResults = await runWithConcurrencyLimit(allTasks, CONCURRENCY_LIMIT);
-
-                const leaseRemainingResults = allTaskResults.slice(0, leaseTasks.length);
-                const estoppelResults = allTaskResults.slice(leaseTasks.length);
-
-                const allLeaseResults = [leaseFirstPageResult, ...leaseRemainingResults];
-
-                // 3. Merge results if we have multiple pages
-                showLoader("Merging lease and estoppel extractions...");
-                
-                const leaseMergePromise = allLeaseResults.length > 1 
-                    ? mergeExtractionResults(allLeaseResults, 'lease')
-                    : Promise.resolve(allLeaseResults[0]);
-
-                const estoppelMergePromise = estoppelResults.length > 1
-                    ? mergeExtractionResults(estoppelResults, 'estoppel')
-                    : Promise.resolve(estoppelResults[0]);
-
-                [leaseExtraction, estoppelExtraction] = await Promise.all([
-                    leaseMergePromise,
-                    estoppelMergePromise
-                ]);
-            }
-
-            if (!successfulTransactionIds.includes(compareTxId)) {
-                successfulTransactionIds.push(compareTxId);
-            }
-            showLoader("Auditing discrepancies...");
-            await performAILinkedAudit(leaseExtraction, estoppelExtraction, compareTxId);
-            
-            // Reload profile
-            if (supabase) {
-                    await loadUserProfileAndCredits();
-                    await loadAuditHistory();
-                } else {
-                    // Fallback mock mode
-                    if (!isSample && hostedCredits < 900000) {
-                        hostedCredits -= 1;
-                        if (hostedCredits < 0) hostedCredits = 0;
-                        localStorage.setItem('ta_hosted_credits', hostedCredits);
-                    }
-                    updateCreditsDisplay();
+                if (!successfulTransactionIds.includes(compareTxId)) {
+                    successfulTransactionIds.push(compareTxId);
                 }
-                
+
+                showLoader("Auditing discrepancies...");
+                await performAILinkedAudit(leaseExtraction, estoppelExtraction, compareTxId);
+
+                // Fallback local credit logic
+                if (!isSample && hostedCredits < 900000) {
+                    hostedCredits -= 1;
+                    if (hostedCredits < 0) hostedCredits = 0;
+                    localStorage.setItem('ta_hosted_credits', hostedCredits);
+                }
+                updateCreditsDisplay();
+
                 hideLoader();
-                const isUnlimited = hostedCredits >= 900000;
-                const deductMsg = isSample ? "" : (isUnlimited ? "" : ` Deducted 1 audit.`);
+                const deductMsg = isSample ? "" : " Deducted 1 audit.";
                 showToast(`🎉 Audit completed successfully!${deductMsg}`, 'success');
-    
+
                 success = true;
-                break; // Break out of retry loop if successful
+                break; // Break out of retry loop
+            }
             } catch (err) {
                 lastError = err;
                 console.error(`[Audit Error] Attempt ${attempt} failed:`, err);

@@ -10,6 +10,9 @@ const dotenv = require('dotenv');
 // Load environment variables
 dotenv.config();
 
+// Vercel Serverless Function background task support
+const { waitUntil } = require('@vercel/functions');
+
 // Fix for Supabase Realtime in Node.js < 22 where WebSocket is not globally available
 global.WebSocket = require('ws');
 
@@ -2291,8 +2294,8 @@ app.post('/api/worker/run-audit', requireAuth, async (req, res) => {
     // Immediately return 200 OK to the trigger call to keep the connection short
     res.json({ success: true, message: "Worker task started." });
 
-    // Process in background promise
-    (async () => {
+    // Wrap the background process in Vercel's waitUntil to prevent container freeze
+    waitUntil((async () => {
         try {
             console.log(`[Worker Background] Processing Job ${jobId}...`);
             
@@ -2523,7 +2526,7 @@ app.post('/api/worker/run-audit', requireAuth, async (req, res) => {
                 })
                 .eq('id', jobId);
         }
-    })();
+    })());
 });
 
 // Endpoint to check status of an audit job

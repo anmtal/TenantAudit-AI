@@ -1002,12 +1002,20 @@ app.get('/api/config', (req, res) => {
 // Test Helper Endpoint for seeding mock registered phone numbers
 if (process.env.NODE_ENV === 'test') {
     app.post('/api/test/mock-phone', (req, res) => {
-        const { phoneNumber, registered } = req.body;
+        const { phoneNumber, registered, historicalUser } = req.body;
         global.__mockRegisteredPhones = global.__mockRegisteredPhones || {};
+        global.__mockPhoneHistory = global.__mockPhoneHistory || {};
         if (registered) {
             global.__mockRegisteredPhones[phoneNumber] = true;
         } else {
             delete global.__mockRegisteredPhones[phoneNumber];
+        }
+        if (historicalUser !== undefined) {
+            if (historicalUser === null) {
+                delete global.__mockPhoneHistory[phoneNumber];
+            } else {
+                global.__mockPhoneHistory[phoneNumber] = historicalUser;
+            }
         }
         res.json({ success: true });
     });
@@ -1021,6 +1029,18 @@ app.post('/api/send-otp', smsLimiter, async (req, res) => {
             return res.status(400).json({ error: "Invalid phone number format. Must be in E.164 format (e.g. +14155552671)." });
         }
 
+        let userId = null;
+        const authHeader = req.headers['authorization'];
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            if (supabaseAdmin) {
+                const { data: { user } } = await supabaseAdmin.auth.getUser(token);
+                if (user) {
+                    userId = user.id;
+                }
+            }
+        }
+
         // Check if phone number is already registered in Profiles table
         let existingProfile = null;
         if (supabaseAdmin) {
@@ -1030,13 +1050,35 @@ app.post('/api/send-otp', smsLimiter, async (req, res) => {
                 .eq('phone', phoneNumber)
                 .maybeSingle();
             existingProfile = data;
+
+            // Historical phone usage check (Sybil check)
+            const { data: historyData, error: historyErr } = await supabaseAdmin
+                .from('phone_use_history')
+                .select('user_id')
+                .eq('phone', phoneNumber);
+
+            if (!historyErr && historyData && historyData.length > 0) {
+                const usedByOther = historyData.some(row => row.user_id !== userId);
+                if (usedByOther) {
+                    console.log(`[Send OTP Sybil Block] Phone ${phoneNumber} is historically registered to another account.`);
+                    return res.status(400).json({ error: "This phone number has already been used on another account." });
+                }
+            }
         } else if (process.env.NODE_ENV === 'test') {
             if (global.__mockRegisteredPhones && global.__mockRegisteredPhones[phoneNumber]) {
                 existingProfile = { id: 'mock-existing-user-id' };
             }
+            if (global.__mockPhoneHistory && global.__mockPhoneHistory[phoneNumber]) {
+                const mockHistUser = global.__mockPhoneHistory[phoneNumber];
+                const usedByOther = mockHistUser !== userId;
+                if (usedByOther) {
+                    console.log(`[Send OTP Sybil Block Mock] Phone ${phoneNumber} is historically registered to another account.`);
+                    return res.status(400).json({ error: "This phone number has already been used on another account." });
+                }
+            }
         }
 
-        if (existingProfile) {
+        if (existingProfile && existingProfile.id !== userId) {
             console.log(`[Send OTP] Phone number ${phoneNumber} already registered.`);
             return res.status(400).json({ error: "This phone number is already associated with another account." });
         }
@@ -1069,6 +1111,18 @@ app.post('/api/verify-otp', verifyOtpLimiter, async (req, res) => {
             return res.status(400).json({ error: "Missing phoneNumber or code." });
         }
 
+        let userId = null;
+        const authHeader = req.headers['authorization'];
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.split(' ')[1];
+            if (supabaseAdmin) {
+                const { data: { user } } = await supabaseAdmin.auth.getUser(token);
+                if (user) {
+                    userId = user.id;
+                }
+            }
+        }
+
         // Check if phone number is already registered in Profiles table
         let existingProfile = null;
         if (supabaseAdmin) {
@@ -1078,13 +1132,35 @@ app.post('/api/verify-otp', verifyOtpLimiter, async (req, res) => {
                 .eq('phone', phoneNumber)
                 .maybeSingle();
             existingProfile = existingProfileData;
+
+            // Historical phone usage check (Sybil check)
+            const { data: historyData, error: historyErr } = await supabaseAdmin
+                .from('phone_use_history')
+                .select('user_id')
+                .eq('phone', phoneNumber);
+
+            if (!historyErr && historyData && historyData.length > 0) {
+                const usedByOther = historyData.some(row => row.user_id !== userId);
+                if (usedByOther) {
+                    console.log(`[Verify OTP Sybil Block] Phone ${phoneNumber} is historically registered to another account.`);
+                    return res.status(400).json({ error: "This phone number has already been used on another account." });
+                }
+            }
         } else if (process.env.NODE_ENV === 'test') {
             if (global.__mockRegisteredPhones && global.__mockRegisteredPhones[phoneNumber]) {
                 existingProfile = { id: 'mock-existing-user-id' };
             }
+            if (global.__mockPhoneHistory && global.__mockPhoneHistory[phoneNumber]) {
+                const mockHistUser = global.__mockPhoneHistory[phoneNumber];
+                const usedByOther = mockHistUser !== userId;
+                if (usedByOther) {
+                    console.log(`[Verify OTP Sybil Block Mock] Phone ${phoneNumber} is historically registered to another account.`);
+                    return res.status(400).json({ error: "This phone number has already been used on another account." });
+                }
+            }
         }
 
-        if (existingProfile) {
+        if (existingProfile && existingProfile.id !== userId) {
             console.log(`[Verify OTP] Phone number ${phoneNumber} already registered.`);
             return res.status(400).json({ error: "This phone number is already associated with another account." });
         }

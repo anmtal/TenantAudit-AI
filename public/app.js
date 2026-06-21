@@ -2365,9 +2365,13 @@ function initializeApp() {
             setupPhoneErrorMsg.style.display = 'none';
             
             try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (window.currentAccessToken) {
+                    headers['Authorization'] = `Bearer ${window.currentAccessToken}`;
+                }
                 const sendOtpRes = await fetch('/api/send-otp', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: headers,
                     body: JSON.stringify({ phoneNumber: phone })
                 });
                 const sendOtpData = await sendOtpRes.json();
@@ -2458,9 +2462,13 @@ function initializeApp() {
             btnOtpResend.textContent = "Sending...";
             
             try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (window.currentAccessToken) {
+                    headers['Authorization'] = `Bearer ${window.currentAccessToken}`;
+                }
                 const sendOtpRes = await fetch('/api/send-otp', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: headers,
                     body: JSON.stringify({ phoneNumber: pending.phone })
                 });
                 const sendOtpData = await sendOtpRes.json();
@@ -2498,9 +2506,13 @@ function initializeApp() {
             otpErrorMsg.style.display = 'none';
 
             try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (window.currentAccessToken) {
+                    headers['Authorization'] = `Bearer ${window.currentAccessToken}`;
+                }
                 const verifyRes = await fetch('/api/verify-otp', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: headers,
                     body: JSON.stringify({ phoneNumber: pending.phone, code })
                 });
                 const verifyData = await verifyRes.json();

@@ -172,6 +172,19 @@ ALTER TABLE public.verified_phones ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "No direct access" ON public.verified_phones;
 CREATE POLICY "No direct access" ON public.verified_phones FOR ALL USING (false);
 
+CREATE TABLE IF NOT EXISTS public.phone_use_history (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  phone TEXT NOT NULL,
+  user_id UUID NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS phone_use_history_phone_uid_idx ON public.phone_use_history(phone, user_id);
+
+ALTER TABLE public.phone_use_history ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "No direct access" ON public.phone_use_history;
+CREATE POLICY "No direct access" ON public.phone_use_history FOR ALL USING (false);
+
 -- --------------------------------------------------------------------
 -- 5. User Signup Trigger (Auto-Profile & Team Creation) & Twilio Welcome Gift
 -- --------------------------------------------------------------------
@@ -180,13 +193,29 @@ RETURNS VOID AS $$
 DECLARE
   v_team_id UUID;
   v_already_granted BOOLEAN;
+  v_phone TEXT;
 BEGIN
   -- Check if already granted
-  SELECT free_credit_granted, team_id INTO v_already_granted, v_team_id
+  SELECT free_credit_granted, team_id, phone INTO v_already_granted, v_team_id, v_phone
   FROM public.profiles
   WHERE id = p_user_id;
 
+  -- Sybil check: verify phone has not been historically used by another account
+  IF v_phone IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.phone_use_history
+    WHERE phone = v_phone AND user_id <> p_user_id
+  ) THEN
+    RAISE EXCEPTION 'This phone number has already been used to claim a welcome credit on another account.';
+  END IF;
+
   IF v_team_id IS NOT NULL AND (v_already_granted IS NULL OR v_already_granted = FALSE) THEN
+    -- Log the phone usage historically if phone is set
+    IF v_phone IS NOT NULL THEN
+      INSERT INTO public.phone_use_history (phone, user_id)
+      VALUES (v_phone, p_user_id)
+      ON CONFLICT DO NOTHING;
+    END IF;
+
     -- Grant 1 audit credit (never expiring)
     INSERT INTO public.team_credit_grants (team_id, amount_granted, amount_remaining, expires_at)
     VALUES (v_team_id, 1, 1, NULL);

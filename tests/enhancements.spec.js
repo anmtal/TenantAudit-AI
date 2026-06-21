@@ -500,6 +500,50 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     expect(sendOtpRetryRes.status()).toBe(200);
   });
 
+  test('should enforce that a phone number cannot be reused even after being cleared (historical reuse prevention)', async ({ request }) => {
+    const testPhone = '+19999999999';
+
+    // 1. Mark phone number as historically registered under a different user
+    const mockRes = await request.post('/api/test/mock-phone', {
+      data: {
+        phoneNumber: testPhone,
+        registered: false,
+        historicalUser: 'other-user-uuid'
+      }
+    });
+    expect(mockRes.status()).toBe(200);
+
+    // 2. Try to send OTP to this phone number as an unauthenticated user, should fail with 400 Bad Request
+    const sendOtpRes = await request.post('/api/send-otp', {
+      data: {
+        phoneNumber: testPhone
+      }
+    });
+    expect(sendOtpRes.status()).toBe(400);
+    const sendOtpJson = await sendOtpRes.json();
+    expect(sendOtpJson.error).toBe('This phone number has already been used on another account.');
+
+    // 3. Try to verify OTP, should fail with 400 Bad Request
+    const verifyOtpRes = await request.post('/api/verify-otp', {
+      data: {
+        phoneNumber: testPhone,
+        code: '123456'
+      }
+    });
+    expect(verifyOtpRes.status()).toBe(400);
+    const verifyOtpJson = await verifyOtpRes.json();
+    expect(verifyOtpJson.error).toBe('This phone number has already been used on another account.');
+
+    // 4. Clean up mock history
+    await request.post('/api/test/mock-phone', {
+      data: {
+        phoneNumber: testPhone,
+        registered: false,
+        historicalUser: null
+      }
+    });
+  });
+
   test('should verify no account found error and password clearing on toggle', async ({ page }) => {
     // Mock config to force offline mode (empty Supabase keys)
     await page.route('**/api/config**', async route => {

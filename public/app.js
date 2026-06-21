@@ -398,7 +398,7 @@ function initializeApp() {
 
     let auditData = null;
 
-    let isLoggedIn = false;
+    let isLoggedIn = localStorage.getItem('ta_logged_in') === 'true';
     let isDemoMode = false;
     let hostedCredits = 0;
     let userEmail = '';
@@ -1100,8 +1100,9 @@ function initializeApp() {
             } else {
                 profileData = data;
 
-                // Mandate phone verification setup if missing on a logged-in user
-                if ((!profileData || !profileData.phone) && isLoggedIn && !isDemoMode) {
+                // Mandate phone verification setup if missing on a logged-in user (except Google users)
+                const isGoogleUser = (profileData?.raw_app_meta_data?.provider === 'google' || profileData?.raw_app_meta_data?.providers?.includes('google') || (supabase && session && session.user?.app_metadata?.provider === 'google'));
+                if ((!profileData || !profileData.phone) && isLoggedIn && !isDemoMode && !isGoogleUser) {
                     console.log("[Phone Setup Required] Displaying setup phone number modal.");
                     const setupModal = document.getElementById('phone-setup-modal');
                     if (setupModal) {
@@ -1843,12 +1844,12 @@ function initializeApp() {
     // Navigation triggers
     if (homeLoginBtn) {
         homeLoginBtn.addEventListener('click', () => {
-            window.location.hash = isLoggedIn ? '#dashboard' : '#login';
+            window.location.hash = (isLoggedIn || isDemoMode) ? '#dashboard' : '#login';
         });
     }
     if (heroGetStartedBtn) {
         heroGetStartedBtn.addEventListener('click', () => {
-            window.location.hash = isLoggedIn ? '#dashboard' : '#login';
+            window.location.hash = (isLoggedIn || isDemoMode) ? '#dashboard' : '#login';
         });
     }
     const heroViewDemoBtn = document.getElementById('hero-view-demo-btn');

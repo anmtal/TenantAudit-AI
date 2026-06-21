@@ -135,7 +135,13 @@ DROP POLICY IF EXISTS "Allow users to view their own audit jobs" ON public.audit
 CREATE POLICY "Allow users to view their own audit jobs" ON public.audit_jobs FOR SELECT USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Allow users to insert/update their own audit jobs" ON public.audit_jobs;
-CREATE POLICY "Allow users to insert/update their own audit jobs" ON public.audit_jobs FOR ALL USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Allow users to insert their own audit jobs" ON public.audit_jobs;
+DROP POLICY IF EXISTS "Allow users to update their own audit jobs" ON public.audit_jobs;
+DROP POLICY IF EXISTS "Allow users to delete their own audit jobs" ON public.audit_jobs;
+
+CREATE POLICY "Allow users to insert their own audit jobs" ON public.audit_jobs FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Allow users to update their own audit jobs" ON public.audit_jobs FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Allow users to delete their own audit jobs" ON public.audit_jobs FOR DELETE USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Allow users to delete their own audits" ON public.audits;
 CREATE POLICY "Allow users to delete their own audits" ON public.audits FOR DELETE USING (auth.uid() = user_id);
@@ -259,10 +265,10 @@ BEGIN
         team_id = COALESCE(profiles.team_id, EXCLUDED.team_id);
   END IF;
 
-  -- Grant welcome credit if both email and phone are verified immediately on insertion
+  -- Grant welcome credit if both email and phone are verified immediately on insertion (or if it is a Google OAuth user)
   BEGIN
-    IF new.email_confirmed_at IS NOT NULL AND new.raw_user_meta_data IS NOT NULL THEN
-      IF EXISTS (SELECT 1 FROM public.verified_phones WHERE phone = new.raw_user_meta_data->>'phone') THEN
+    IF new.email_confirmed_at IS NOT NULL THEN
+      IF (new.raw_app_meta_data->>'provider' = 'google') OR (new.raw_user_meta_data IS NOT NULL AND EXISTS (SELECT 1 FROM public.verified_phones WHERE phone = new.raw_user_meta_data->>'phone')) THEN
         PERFORM public.grant_welcome_credit(new.id);
       END IF;
     END IF;
@@ -284,8 +290,8 @@ CREATE OR REPLACE FUNCTION public.handle_user_update()
 RETURNS trigger AS $$
 BEGIN
   BEGIN
-    IF NEW.email_confirmed_at IS NOT NULL AND OLD.email_confirmed_at IS NULL AND NEW.raw_user_meta_data IS NOT NULL THEN
-      IF EXISTS (SELECT 1 FROM public.verified_phones WHERE phone = NEW.raw_user_meta_data->>'phone') THEN
+    IF NEW.email_confirmed_at IS NOT NULL AND OLD.email_confirmed_at IS NULL THEN
+      IF (NEW.raw_app_meta_data->>'provider' = 'google') OR (NEW.raw_user_meta_data IS NOT NULL AND EXISTS (SELECT 1 FROM public.verified_phones WHERE phone = NEW.raw_user_meta_data->>'phone')) THEN
         PERFORM public.grant_welcome_credit(NEW.id);
       END IF;
     END IF;

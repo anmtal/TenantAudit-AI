@@ -306,7 +306,7 @@ async function requireAuth(req, res, next) {
                     const now = new Date();
 
                     if (seatLimit === 1) {
-                        const expiryLimit = new Date(now.getTime() - 5 * 60 * 1000); // 5 minutes inactivity window
+                        const expiryLimit = new Date(now.getTime() - 30 * 1000); // 30 seconds inactivity window
                         
                         // Atomic conditional update to claim the session seat
                         const { data: updatedProfile, error: updateErr } = await supabaseAdmin
@@ -1175,6 +1175,19 @@ app.post('/api/grant-welcome-credit', requireAuth, async (req, res) => {
                 return res.json({ success: true, granted: false, message: "Welcome credit already granted." });
             }
             console.log(`[Grant Welcome Credit] User ${userId} was marked as granted but has no credit grants in table. Self-healing...`);
+        }
+
+        // Check if the user is a Google OAuth user
+        const isGoogleUser = req.user.app_metadata?.provider === 'google' || req.user.app_metadata?.providers?.includes('google');
+        
+        if (isGoogleUser) {
+            console.log(`[Grant Welcome Credit Google] Instantly granting welcome credit to Google user ${userId}`);
+            const { error: grantErr } = await supabaseAdmin.rpc('grant_welcome_credit', { p_user_id: userId });
+            if (grantErr) {
+                console.error("[Grant Welcome Credit Google] Error calling RPC:", grantErr);
+                return res.status(500).json({ error: "Failed to grant welcome credit." });
+            }
+            return res.json({ success: true, granted: true, message: "Welcome credit granted to Google user." });
         }
 
         // Auto-heal profile phone number if missing using auth metadata
@@ -2256,11 +2269,13 @@ app.post('/api/audit-async', requireAuth, setExpensiveRateLimitKey, expensiveApi
 
         console.log(`[Async Audit] Triggering background worker for job ${job.id}...`);
         
+        const workerSecret = process.env.INTERNAL_WORKER_SECRET || "internal-super-secret-key-12345";
         fetch(workerUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': req.headers['authorization']
+                'Authorization': req.headers['authorization'],
+                'X-Worker-Secret': workerSecret
             },
             body: JSON.stringify({
                 jobId: job.id,
@@ -2282,6 +2297,12 @@ app.post('/api/audit-async', requireAuth, setExpensiveRateLimitKey, expensiveApi
 
 // Background Worker to process async audit jobs
 app.post('/api/worker/run-audit', requireAuth, async (req, res) => {
+    const providedSecret = req.headers['x-worker-secret'];
+    const expectedSecret = process.env.INTERNAL_WORKER_SECRET || "internal-super-secret-key-12345";
+    if (providedSecret !== expectedSecret) {
+        return res.status(401).json({ error: "Unauthorized: Worker access only." });
+    }
+
     const { jobId, leasePayload, estoppelPayload, transactionId } = req.body;
     if (!jobId || !leasePayload || !estoppelPayload || !transactionId) {
         return res.status(400).json({ error: "Missing worker payload fields." });

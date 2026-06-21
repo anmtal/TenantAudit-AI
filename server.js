@@ -2796,6 +2796,48 @@ app.post('/api/cancel-subscription', requireAuth, async (req, res) => {
                 // Parse current manual plans
                 const currentPlans = team.plan_tier.split(' + ').map(p => p.trim());
                 
+                // Calculate credits to deduct
+                let creditsToDeduct = 0;
+                for (const plan of plansToCancel) {
+                    const planConfig = PLANS_CATALOG[plan];
+                    creditsToDeduct += planConfig ? planConfig.amount : 0;
+                }
+
+                if (creditsToDeduct > 0) {
+                    try {
+                        const { data: grants, error: fetchErr } = await supabaseAdmin
+                            .from('team_credit_grants')
+                            .select('id, amount_remaining')
+                            .eq('team_id', profile.team_id)
+                            .or('expires_at.gt.now(),expires_at.is.null')
+                            .gt('amount_remaining', 0)
+                            .order('expires_at', { ascending: true, nullsFirst: false }); // NULLS LAST
+
+                        if (!fetchErr && grants && grants.length > 0) {
+                            let remainingToDeduct = creditsToDeduct;
+                            for (const grant of grants) {
+                                if (remainingToDeduct <= 0) break;
+                                if (grant.amount_remaining >= remainingToDeduct) {
+                                    const newAmt = grant.amount_remaining - remainingToDeduct;
+                                    await supabaseAdmin
+                                        .from('team_credit_grants')
+                                        .update({ amount_remaining: newAmt })
+                                        .eq('id', grant.id);
+                                    remainingToDeduct = 0;
+                                } else {
+                                    await supabaseAdmin
+                                        .from('team_credit_grants')
+                                        .update({ amount_remaining: 0 })
+                                        .eq('id', grant.id);
+                                    remainingToDeduct -= grant.amount_remaining;
+                                }
+                            }
+                        }
+                    } catch (grantErr) {
+                        console.warn("[Cancel Subscription] Error during manual credits deduction:", grantErr);
+                    }
+                }
+
                 // Filter out plans to cancel
                 const remainingPlans = currentPlans.filter(p => !plansToCancel.includes(p));
 
@@ -2822,6 +2864,9 @@ app.post('/api/cancel-subscription', requireAuth, async (req, res) => {
                         console.error("[Cancel Subscription] Error updating team remaining plans:", updateError);
                         return res.status(500).json({ error: "Failed to cancel subscription package." });
                     }
+
+                    // Recalculate team active credits cache
+                    await supabaseAdmin.rpc('recalculate_team_credits', { p_team_id: profile.team_id });
 
                     console.log(`[Subscription Cancellation] Updated manual plans for team ${profile.team_id}: ${newPlanTier} (seats: ${totalSeats})`);
                     return res.json({
@@ -2856,6 +2901,9 @@ app.post('/api/cancel-subscription', requireAuth, async (req, res) => {
                         console.warn("[Cancel Subscription] Error updating credit grants:", updateGrantsErr);
                     }
                     
+                    // Recalculate team active credits cache
+                    await supabaseAdmin.rpc('recalculate_team_credits', { p_team_id: profile.team_id });
+
                     console.log(`[Subscription Cancellation] Directly downgraded manual subscription to free for team ${profile.team_id} (User: ${req.user.email})`);
                     return res.json({
                         success: true,

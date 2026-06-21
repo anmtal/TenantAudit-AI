@@ -10,6 +10,11 @@ const dotenv = require('dotenv');
 // Load environment variables
 dotenv.config();
 
+// Set a fallback worker secret for local development/test environments
+if (!process.env.INTERNAL_WORKER_SECRET && (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development' || !process.env.NODE_ENV)) {
+    process.env.INTERNAL_WORKER_SECRET = "local-testing-secret-key-998877";
+}
+
 // Vercel Serverless Function background task support
 const { waitUntil } = require('@vercel/functions');
 
@@ -2345,7 +2350,11 @@ app.post('/api/audit-async', requireAuth, setExpensiveRateLimitKey, expensiveApi
 
         console.log(`[Async Audit] Triggering background worker for job ${job.id}...`);
         
-        const workerSecret = process.env.INTERNAL_WORKER_SECRET || "internal-super-secret-key-12345";
+        const workerSecret = process.env.INTERNAL_WORKER_SECRET;
+        if (!workerSecret) {
+            console.error("[Async Audit Error] INTERNAL_WORKER_SECRET is not configured in the environment.");
+            return res.status(500).json({ error: "Background worker authentication is not configured." });
+        }
         fetch(workerUrl, {
             method: 'POST',
             headers: {
@@ -2371,11 +2380,11 @@ app.post('/api/audit-async', requireAuth, setExpensiveRateLimitKey, expensiveApi
     }
 });
 
-// Background Worker to process async audit jobs
 app.post('/api/worker/run-audit', requireAuth, async (req, res) => {
     const providedSecret = req.headers['x-worker-secret'];
-    const expectedSecret = process.env.INTERNAL_WORKER_SECRET || "internal-super-secret-key-12345";
-    if (providedSecret !== expectedSecret) {
+    const expectedSecret = process.env.INTERNAL_WORKER_SECRET;
+    if (!expectedSecret || providedSecret !== expectedSecret) {
+        console.error("[Worker Auth Error] Missing or mismatched worker secret token.");
         return res.status(401).json({ error: "Unauthorized: Worker access only." });
     }
 

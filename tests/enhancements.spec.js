@@ -544,6 +544,39 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     });
   });
 
+  test('should require correct x-worker-secret header on background worker run-audit endpoint', async ({ request }) => {
+    const resNoSecret = await request.post('/api/worker/run-audit', {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer mock-user-token'
+      },
+      data: {
+        jobId: 'some-job-id',
+        leasePayload: {},
+        estoppelPayload: {},
+        transactionId: 'some-tx-id'
+      }
+    });
+    expect(resNoSecret.status()).toBe(401);
+    const jsonNoSecret = await resNoSecret.json();
+    expect(jsonNoSecret.error).toBe('Unauthorized: Worker access only.');
+
+    const resWrongSecret = await request.post('/api/worker/run-audit', {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer mock-user-token',
+        'X-Worker-Secret': 'wrong-secret-key-xyz'
+      },
+      data: {
+        jobId: 'some-job-id',
+        leasePayload: {},
+        estoppelPayload: {},
+        transactionId: 'some-tx-id'
+      }
+    });
+    expect(resWrongSecret.status()).toBe(401);
+  });
+
   test('should verify no account found error and password clearing on toggle', async ({ page }) => {
     // Mock config to force offline mode (empty Supabase keys)
     await page.route('**/api/config**', async route => {

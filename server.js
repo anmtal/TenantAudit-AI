@@ -2819,7 +2819,7 @@ You are an expert commercial real estate due-diligence legal auditor.
 Your job is to compare extracted Lease terms and Estoppel terms for compliance.
 For each of the 16 terms, determine if the values represent a 'match', a 'warning', or a 'mismatch':
 - 'match': The values are semantically identical or fully compliant (e.g. "14,500 rentable square feet" and "14,500 SF" match; "$12,000" and "$12,000.00 / month" match; "Starbucks Corporation" and "Starbucks Corp." match).
-- 'warning': A value is missing in one document (e.g. "Not Mentioned" or "Not Found"), or there is a minor omission but not a direct contradiction.
+- 'warning': A value is missing in one or both documents (e.g. "Not Mentioned" or "Not Found"), or there is a minor omission but not a direct contradiction. If a term is omitted or "Not Mentioned" in both documents, you MUST classify it as 'warning' with a reason stating that the clause is not mentioned in either document (since the absence of these clauses represents an audit risk).
 - 'mismatch': There is a clear contradiction or discrepancy (e.g. different rent amounts, different dates, different renewal terms).
 
 CRITICAL GUIDELINES FOR SPECIFIC FIELDS:

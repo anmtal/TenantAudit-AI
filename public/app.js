@@ -203,6 +203,101 @@ function initializeApp() {
         }
     };
 
+    // --- Custom Confirm Modal (Theme-Aligned Popup) ---
+    window.showCustomConfirm = function(message, title = "Confirm Action") {
+        return new Promise((resolve) => {
+            // Create modal overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay active';
+            overlay.id = 'custom-confirm-modal';
+            overlay.style.zIndex = '9999';
+
+            // Create modal card with glassmorphism styling matching the theme
+            const card = document.createElement('div');
+            card.className = 'modal-card';
+            card.style.maxWidth = '400px';
+            card.style.padding = '28px';
+            card.style.transform = 'translateY(0)';
+            card.style.opacity = '1';
+            card.style.display = 'flex';
+            card.style.flexDirection = 'column';
+
+            // Title Wrapper
+            const titleWrapper = document.createElement('div');
+            titleWrapper.className = 'modal-title-wrapper';
+            titleWrapper.style.marginBottom = '20px';
+
+            const titleEl = document.createElement('h3');
+            titleEl.textContent = title;
+            titleEl.style.fontSize = '20px';
+            titleEl.style.fontWeight = '700';
+            titleEl.style.color = 'var(--text-primary)';
+            titleEl.style.margin = '0';
+            
+            const messageEl = document.createElement('p');
+            messageEl.textContent = message;
+            messageEl.style.fontSize = '14px';
+            messageEl.style.color = 'var(--text-muted)';
+            messageEl.style.marginTop = '12px';
+            messageEl.style.margin = '12px 0 0 0';
+            messageEl.style.lineHeight = '1.6';
+
+            titleWrapper.appendChild(titleEl);
+            titleWrapper.appendChild(messageEl);
+            card.appendChild(titleWrapper);
+
+            // Actions Buttons Wrapper
+            const actionsWrapper = document.createElement('div');
+            actionsWrapper.style.display = 'flex';
+            actionsWrapper.style.gap = '12px';
+            actionsWrapper.style.justifyContent = 'flex-end';
+            actionsWrapper.style.width = '100%';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.className = 'btn btn-secondary';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.style.padding = '10px 20px';
+            cancelBtn.style.fontSize = '14px';
+            cancelBtn.style.borderRadius = 'var(--border-radius-lg)';
+            cancelBtn.style.cursor = 'pointer';
+
+            const okBtn = document.createElement('button');
+            okBtn.type = 'button';
+            okBtn.className = 'primary-btn';
+            okBtn.textContent = 'Confirm';
+            okBtn.style.padding = '10px 20px';
+            okBtn.style.fontSize = '14px';
+            okBtn.style.borderRadius = 'var(--border-radius-lg)';
+            okBtn.style.cursor = 'pointer';
+
+            actionsWrapper.appendChild(cancelBtn);
+            actionsWrapper.appendChild(okBtn);
+            card.appendChild(actionsWrapper);
+
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+
+            // Cleanup & Resolve Helper
+            function cleanup(result) {
+                overlay.style.opacity = '0';
+                card.style.transform = 'translateY(15px)';
+                setTimeout(() => {
+                    overlay.remove();
+                }, 300);
+                resolve(result);
+            }
+
+            cancelBtn.addEventListener('click', () => cleanup(false));
+            okBtn.addEventListener('click', () => cleanup(true));
+            
+            // Allow overlay click backdrops to cancel
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) cleanup(false);
+            });
+        });
+    };
+
     // Helper to generate or retrieve a unique session ID for single-seat login enforcement
     function getOrGenerateSessionId(forceNew = false) {
         let sid = sessionStorage.getItem('ta_session_id');
@@ -5379,7 +5474,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             teamMemberList.querySelectorAll('.cancel-invite-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     const email = btn.getAttribute('data-email');
-                    if (!confirm(`Are you sure you want to cancel the invitation for ${email}?`)) return;
+                    if (!(await showCustomConfirm(`Are you sure you want to cancel the invitation for ${email}?`, "Cancel Invitation"))) return;
                     
                     btn.disabled = true;
                     btn.textContent = 'Cancelling...';
@@ -5409,7 +5504,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 btn.addEventListener('click', async (e) => {
                     const memberId = btn.getAttribute('data-member-id');
                     const email = btn.getAttribute('data-email');
-                    if (!confirm(`Are you sure you want to remove ${email} from your team?`)) return;
+                    if (!(await showCustomConfirm(`Are you sure you want to remove ${email} from your team?`, "Remove Team Member"))) return;
                     
                     btn.disabled = true;
                     btn.textContent = 'Removing...';

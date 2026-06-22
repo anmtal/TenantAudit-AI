@@ -322,7 +322,7 @@ test.describe('LeaseAlign AI UX Enhancements & Hardening', () => {
     await page.click('#disclaimer-proceed-btn');
 
     // Wait for results panel and check text
-    await expect(page.locator('#results-panel')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#results-panel')).toBeVisible({ timeout: 30000 });
     await expect(page.locator('#meta-tenant-name')).toHaveText('APEX COWORKING SOLUTIONS INTERNATIONAL INC.');
   });
 

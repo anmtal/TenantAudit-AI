@@ -235,64 +235,27 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 DECLARE
   new_team_id UUID;
-  pending_team_id UUID;
-  v_seat_limit INTEGER;
-  v_member_count INTEGER;
-  v_can_join BOOLEAN := FALSE;
 BEGIN
-  -- Check if there is a pending invitation for this email
-  SELECT team_id INTO pending_team_id 
-  FROM public.team_invitations 
-  WHERE LOWER(email) = LOWER(new.email)
-  LIMIT 1;
+  -- No auto-joining on signup: always create a new personal team.
+  -- This allows the user to accept or decline pending invitations via the dashboard banner.
+  INSERT INTO public.teams (name, owner_id, audit_credits, seat_limit)
+  VALUES (COALESCE(new.raw_user_meta_data->>'first_name', 'Personal') || '''s Team', new.id, 0, 1)
+  RETURNING id INTO new_team_id;
 
-  IF pending_team_id IS NOT NULL THEN
-    SELECT seat_limit INTO v_seat_limit FROM public.teams WHERE id = pending_team_id;
-    SELECT COUNT(*) INTO v_member_count FROM public.profiles WHERE team_id = pending_team_id;
-    IF v_seat_limit IS NULL OR v_seat_limit >= 9999 OR v_member_count < v_seat_limit THEN
-      v_can_join := TRUE;
-    END IF;
-  END IF;
-
-  IF pending_team_id IS NOT NULL AND v_can_join THEN
-    -- Assign to the invited team, delete the invitation
-    DELETE FROM public.team_invitations WHERE LOWER(email) = LOWER(new.email);
-    
-    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id, phone)
-    VALUES (
-      new.id, new.email, 0,
-      COALESCE(new.raw_user_meta_data->>'first_name', ''),
-      COALESCE(new.raw_user_meta_data->>'last_name', ''),
-      pending_team_id,
-      new.raw_user_meta_data->>'phone'
-    )
-    ON CONFLICT (id) DO UPDATE 
-    SET email = EXCLUDED.email,
-        first_name = COALESCE(EXCLUDED.first_name, profiles.first_name),
-        last_name = COALESCE(EXCLUDED.last_name, profiles.last_name),
-        phone = COALESCE(EXCLUDED.phone, profiles.phone),
-        team_id = pending_team_id;
-  ELSE
-    -- No pending invitation (or seat limit reached): create a new personal team
-    INSERT INTO public.teams (name, owner_id, audit_credits, seat_limit)
-    VALUES (COALESCE(new.raw_user_meta_data->>'first_name', 'Personal') || '''s Team', new.id, 0, 1)
-    RETURNING id INTO new_team_id;
-
-    INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id, phone)
-    VALUES (
-      new.id, new.email, 0,
-      COALESCE(new.raw_user_meta_data->>'first_name', ''),
-      COALESCE(new.raw_user_meta_data->>'last_name', ''),
-      new_team_id,
-      new.raw_user_meta_data->>'phone'
-    )
-    ON CONFLICT (id) DO UPDATE 
-    SET email = EXCLUDED.email,
-        first_name = COALESCE(EXCLUDED.first_name, profiles.first_name),
-        last_name = COALESCE(EXCLUDED.last_name, profiles.last_name),
-        phone = COALESCE(EXCLUDED.phone, profiles.phone),
-        team_id = COALESCE(profiles.team_id, EXCLUDED.team_id);
-  END IF;
+  INSERT INTO public.profiles (id, email, credits, first_name, last_name, team_id, phone)
+  VALUES (
+    new.id, new.email, 0,
+    COALESCE(new.raw_user_meta_data->>'first_name', ''),
+    COALESCE(new.raw_user_meta_data->>'last_name', ''),
+    new_team_id,
+    new.raw_user_meta_data->>'phone'
+  )
+  ON CONFLICT (id) DO UPDATE 
+  SET email = EXCLUDED.email,
+      first_name = COALESCE(EXCLUDED.first_name, profiles.first_name),
+      last_name = COALESCE(EXCLUDED.last_name, profiles.last_name),
+      phone = COALESCE(EXCLUDED.phone, profiles.phone),
+      team_id = COALESCE(profiles.team_id, EXCLUDED.team_id);
 
   -- Grant welcome credit if both email and phone are verified immediately on insertion (or if it is a Google OAuth user)
   BEGIN

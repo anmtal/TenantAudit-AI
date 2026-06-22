@@ -1100,9 +1100,8 @@ function initializeApp() {
             } else {
                 profileData = data;
 
-                // Mandate phone verification setup if missing on a logged-in user (except Google users)
-                const isGoogleUser = (profileData?.raw_app_meta_data?.provider === 'google' || profileData?.raw_app_meta_data?.providers?.includes('google') || (supabase && session && session.user?.app_metadata?.provider === 'google'));
-                if ((!profileData || !profileData.phone) && isLoggedIn && !isDemoMode && !isGoogleUser) {
+                // Mandate phone verification setup if missing on a logged-in user
+                if ((!profileData || !profileData.phone) && isLoggedIn && !isDemoMode) {
                     console.log("[Phone Setup Required] Displaying setup phone number modal.");
                     const setupModal = document.getElementById('phone-setup-modal');
                     if (setupModal) {

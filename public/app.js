@@ -3773,8 +3773,14 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
                 let jobProgress = 'Initializing background audit...';
                 let jobError = null;
                 let resultAuditId = null;
+                let pollAttempts = 0;
+                const maxPollAttempts = 90; // 90 attempts * 2000ms = 180 seconds (3 minutes)
 
                 while (jobStatus === 'pending' || jobStatus === 'processing') {
+                    if (pollAttempts >= maxPollAttempts) {
+                        throw new Error("This audit is taking longer than expected. Please check your Dashboard history shortly or refresh the page to view progress.");
+                    }
+                    pollAttempts++;
                     await new Promise(resolve => setTimeout(resolve, 2000));
 
                     const pollResponse = await fetch(`/api/audit-job/${jobId}`, {

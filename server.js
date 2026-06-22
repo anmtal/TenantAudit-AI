@@ -3377,11 +3377,13 @@ app.post('/api/cancel-subscription', requireAuth, async (req, res) => {
                             .from('team_credit_grants')
                             .select('id, amount_remaining')
                             .eq('team_id', profile.team_id)
-                            .or('expires_at.gt.now(),expires_at.is.null')
+                            .or(`expires_at.gt.${new Date().toISOString()},expires_at.is.null`)
                             .gt('amount_remaining', 0)
                             .order('expires_at', { ascending: true, nullsFirst: false }); // NULLS LAST
 
-                        if (!fetchErr && grants && grants.length > 0) {
+                        if (fetchErr) {
+                            console.error("[Cancel Subscription] Error fetching active grants:", fetchErr);
+                        } else if (grants && grants.length > 0) {
                             let remainingToDeduct = creditsToDeduct;
                             for (const grant of grants) {
                                 if (remainingToDeduct <= 0) break;

@@ -212,6 +212,14 @@ const verifyOtpLimiter = rateLimit({
     validate: { keyGeneratorIpFallback: false }
 });
 
+const emailCheckLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20, // Limit each IP to 20 checks per 15 minutes
+    message: { error: "Too many verification requests from this IP. Please try again later." },
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
 
 // Disable caching on API endpoints and add Security Headers to prevent XSS and clickjacking
 app.use((req, res, next) => {
@@ -1415,7 +1423,7 @@ app.post('/api/grant-welcome-credit', requireAuth, async (req, res) => {
 
 
 // Endpoint to check if a user's email is verified (supports polling on cross-device auth flow)
-app.post('/api/check-email-verified', async (req, res) => {
+app.post('/api/check-email-verified', emailCheckLimiter, async (req, res) => {
     try {
         const { email } = req.body;
         if (!email) {
@@ -3701,8 +3709,6 @@ app.get('/api/debug-user-profile', requireAuth, async (req, res) => {
         return res.json({ error: err.message });
     }
 });
-
-
 
 // Start Server
 app.listen(PORT, () => {

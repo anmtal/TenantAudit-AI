@@ -195,10 +195,11 @@ DECLARE
   v_already_granted BOOLEAN;
   v_phone TEXT;
 BEGIN
-  -- Check if already granted
+  -- Check if already granted (locks row to prevent concurrent race condition exploitation)
   SELECT free_credit_granted, team_id, phone INTO v_already_granted, v_team_id, v_phone
   FROM public.profiles
-  WHERE id = p_user_id;
+  WHERE id = p_user_id
+  FOR UPDATE;
 
   -- Sybil check: verify phone has not been historically used by another account
   IF v_phone IS NOT NULL AND EXISTS (
@@ -775,15 +776,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- RPC: Check Email Confirmed Status (Supports cross-device polling)
 CREATE OR REPLACE FUNCTION public.check_email_confirmed(p_email TEXT)
 RETURNS BOOLEAN AS $$
 DECLARE
   v_confirmed TIMESTAMP;
 BEGIN
+  -- Restrict lookup window to 2 hours to prevent unauthenticated email enumeration harvesting
   SELECT email_confirmed_at INTO v_confirmed
   FROM auth.users
   WHERE LOWER(email) = LOWER(p_email)
+    AND created_at >= NOW() - INTERVAL '2 hours'
   LIMIT 1;
   
   RETURN v_confirmed IS NOT NULL;

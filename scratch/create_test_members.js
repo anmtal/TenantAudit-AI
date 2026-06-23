@@ -1,6 +1,9 @@
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 
+// Fix for Node.js < 22 WebSocket support
+global.WebSocket = require('ws');
+
 // Load environment variables from .env.local in the current folder
 require('dotenv').config({ path: path.resolve(__dirname, '../.env.local') });
 
@@ -15,7 +18,7 @@ if (!supabaseUrl || !supabaseServiceKey) {
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 async function createTestMembers() {
-    const ownerEmails = ['contact@leasealign.io', 'contact@leasealign.ai'];
+    const ownerEmails = ['anmtal@gmail.com', 'contact@leasealign.io', 'contact@leasealign.ai'];
     console.log(`Starting process to create 6 test members for team owner: ${ownerEmails.join(' or ')}`);
 
     try {

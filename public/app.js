@@ -5530,7 +5530,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             
         } catch (err) {
             console.error("Error loading team members:", err);
-            teamMemberList.innerHTML = `<div class="team-error">Error loading team: ${err.message}</div>`;
+            teamMemberList.innerHTML = `<div class="team-error">Error loading team: ${escapeHtml(err.message)}</div>`;
         }
     }
 
@@ -5737,8 +5737,8 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             
             const isCancelled = plan.cancelAtPeriodEnd;
             const checkboxHtml = isCancelled 
-                ? `<input type="checkbox" name="cancel-plan" value="${plan.name}" checked disabled>`
-                : `<input type="checkbox" name="cancel-plan" value="${plan.name}">`;
+                ? `<input type="checkbox" name="cancel-plan" value="${escapeHtml(plan.name)}" checked disabled>`
+                : `<input type="checkbox" name="cancel-plan" value="${escapeHtml(plan.name)}">`;
                 
             const detailsText = isCancelled 
                 ? `<span class="cancel-plan-option-details color-red">Scheduled to cancel</span>`
@@ -5747,7 +5747,7 @@ Return ONLY a valid JSON object in this format: {"pageNumbers": [1, 2, 5, 8]}. D
             div.innerHTML = `
                 ${checkboxHtml}
                 <div class="cancel-plan-option-content">
-                    <span class="cancel-plan-option-label">${plan.name}</span>
+                    <span class="cancel-plan-option-label">${escapeHtml(plan.name)}</span>
                     ${detailsText}
                 </div>
             `;
